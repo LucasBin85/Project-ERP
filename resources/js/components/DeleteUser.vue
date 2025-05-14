@@ -19,6 +19,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+import { route } from 'ziggy-js'
+
 const passwordInput = ref<HTMLInputElement | null>(null);
 
 const form = useForm({

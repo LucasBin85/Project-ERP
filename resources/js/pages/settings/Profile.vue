@@ -11,6 +11,8 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { type BreadcrumbItem, type SharedData, type User } from '@/types';
 
+import { route } from 'ziggy-js'
+
 interface Props {
     mustVerifyEmail: boolean;
     status?: string;
