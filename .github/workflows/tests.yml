@@ -50,7 +50,7 @@ jobs:
 
       - name: Build Assets
         #run: npm run build
-        run: vite build --config vite.config.ts # ✅ força leitura correta do app.ts
+        run: npx vite build --config vite.config.ts # ✅ força leitura correta do app.ts
         
       # - name: Tests Evita erro até que o Pest ou PHPUnit esteja pronto
       #  run: ./vendor/bin/pest
