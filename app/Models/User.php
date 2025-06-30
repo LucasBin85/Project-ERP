@@ -45,4 +45,23 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    protected static function booted()
+    {
+        static::created(function (User $user) {
+            $user->wallets()->create([
+                'name'     => 'Carteira Padrão',
+                'type'     => 'pf',
+                'currency' => 'BRL',
+            ]);
+        });
+    }
+
+    /**
+     * Carteiras do usuário.
+     */
+    public function wallets()
+    {
+        return $this->hasMany(\App\Models\Wallet::class);
+    }
 }

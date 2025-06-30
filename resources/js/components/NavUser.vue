@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import UserInfo from '@/components/UserInfo.vue';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar';
+import { 
+    DropdownMenu, 
+    DropdownMenuContent, 
+    DropdownMenuTrigger } 
+    from '@/components/ui/dropdown-menu';
+import { 
+    SidebarMenu, 
+    SidebarMenuButton, 
+    SidebarMenuItem, 
+    useSidebar } 
+    from '@/components/ui/sidebar';
 import { type SharedData, type User } from '@/types';
 import { usePage } from '@inertiajs/vue3';
 import { ChevronsUpDown } from 'lucide-vue-next';
