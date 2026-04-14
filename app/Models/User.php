@@ -51,8 +51,6 @@ class User extends Authenticatable
         static::created(function (User $user) {
             $user->wallets()->create([
                 'name'     => 'Carteira Padrão',
-                'type'     => 'pf',
-                'currency' => 'BRL',
             ]);
         });
     }

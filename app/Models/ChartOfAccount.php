@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class ChartOfAccount extends Model
 {
-    //
     use HasFactory;
 
     protected $fillable = [
@@ -16,11 +15,15 @@ class ChartOfAccount extends Model
         'code',
         'name',
         'type',
-        'is_protected',
+        'normal_balance',
+        'is_system',
+        'allows_posting',
+        'financial_group',
     ];
 
     protected $casts = [
-        'is_protected' => 'boolean',
+        'is_system' => 'boolean',
+        'allows_posting' => 'boolean',
     ];
 
     public function wallet()
@@ -36,5 +39,27 @@ class ChartOfAccount extends Model
     public function children()
     {
         return $this->hasMany(self::class, 'parent_id');
+    }
+
+    public function journalLines()
+    {
+        return $this->hasMany(JournalLine::class, 'chart_of_account_id');
+    }
+
+    public static function financialGroups(): array
+    {
+        return [
+            'available',
+            'investments',
+            'accounts_receivable',
+            'accounts_payable',
+        ];
+    }
+
+    public static function normalBalanceByType(string $type): string
+    {
+        return in_array($type, ['ativo', 'despesa'], true)
+            ? 'debit'
+            : 'credit';
     }
 }
