@@ -13,22 +13,39 @@ import {
     from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid } from 'lucide-vue-next';
+import { BookOpen, Folder, LayoutGrid, Scale } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 import { route } from 'ziggy-js'
 
 const mainNavItems: NavItem[] = [
     {
         title: 'Dashboard',
-        href: '/dashboard',
+        href: route('dashboard'),
         icon: LayoutGrid,
     },
     {
         title: 'Plano de Contas',
-        //href: '/chart-of-accounts.index',
+        //href: '/chart-of-accounts',
         href: route('chart-of-accounts.index'),
         icon: Folder,
     },
+    {
+        title: 'Livro Diário',
+        href: route('general-journal.index'),
+        icon: BookOpen,
+    },
+    {
+        title: 'Livro Razão',
+        href: '/ledger',
+        icon: Scale,
+    },
+    {
+        title: 'Lançamentos',
+        href: route('journal-entries.index'),
+        //href: '/journal-entries',
+        icon: Folder,
+    },
+
 ];
 
 const footerNavItems: NavItem[] = [

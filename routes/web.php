@@ -5,8 +5,14 @@ use Inertia\Inertia;
 
 use App\Http\Controllers\WalletController;
 use App\Http\Controllers\ChartOfAccountController;
+use App\Http\Controllers\JournalEntryController;
+use App\Http\Controllers\GeneralJournalController;
+use App\Http\Controllers\LedgerController;
+use App\Http\Controllers\DashboardController;
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->name('dashboard');
     // CRUD de carteiras
     Route::resource('wallets', WalletController::class)
         ->only(['index','create','store', 'show','edit','update','destroy'])
@@ -19,16 +25,43 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('chart-of-accounts', ChartOfAccountController::class)
         ->only(['index','create','store', 'show','edit','update','destroy'])
         ->names('chart-of-accounts');
+
+    
+
+    Route::get('/journal-entries', [JournalEntryController::class, 'index'])
+        ->name('journal-entries.index');
+
+    Route::get('/journal-entries/{journalEntry}', [JournalEntryController::class, 'show'])
+        ->name('journal-entries.show');
+
+    Route::post('/journal-entries/{journalEntry}/reclassify', [JournalEntryController::class, 'reclassify'])
+        ->name('journal-entries.reclassify');
+
+    Route::post('/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])
+        ->name('journal-entries.post');
+
+
+    
+    Route::get('/general-journal', [GeneralJournalController::class, 'index'])
+        ->name('general-journal.index');
+
+
+
+    Route::get('/ledger', [LedgerController::class, 'index'])
+    ->name('ledger.index');
+
+
+
 });
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
 })->name('home');
-
+/*
 Route::get('dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
-
+*/
 
 Route::get('/check-auth', function () {
     return Auth::user();
