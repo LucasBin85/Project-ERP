@@ -13,11 +13,16 @@ import {
     from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid, Scale } from 'lucide-vue-next';
+import { Home, BookOpen, Folder, LayoutGrid, Scale } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 import { route } from 'ziggy-js'
 
 const mainNavItems: NavItem[] = [
+    {
+        title: 'Home',
+        href: route('financial-position.index'),
+        icon: Home,
+    },
     {
         title: 'Dashboard',
         href: route('dashboard'),

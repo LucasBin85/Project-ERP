@@ -1,7 +1,7 @@
 <script setup>
 import AppLayout from '@/layouts/AppLayout.vue'
 import { Link, router } from '@inertiajs/vue3'
-import { reactive, watch } from 'vue'
+import { reactive, watch, onMounted } from 'vue'
 import { route } from 'ziggy-js'
 
 const props = defineProps({
@@ -15,11 +15,28 @@ const props = defineProps({
   ledgerReady: Boolean,
 })
 
+function formatInputDate(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+
+  return `${y}-${m}-${d}`
+}
+
+function getDefaultStartDate() {
+  const now = new Date()
+  return formatInputDate(new Date(now.getFullYear(), now.getMonth(), 1))
+}
+
+function getDefaultEndDate() {
+  return formatInputDate(new Date())
+}
+
 const form = reactive({
-  chart_of_account_id: props.filters.chart_of_account_id || '',
-  start_date: props.filters.start_date || '',
-  end_date: props.filters.end_date || '',
-  status: props.filters.status || '',
+  chart_of_account_id: props.filters?.chart_of_account_id || '',
+  start_date: props.filters?.start_date || getDefaultStartDate(),
+  end_date: props.filters?.end_date || getDefaultEndDate(),
+  status: props.filters?.status || '',
 })
 
 function canAutoFilter() {
@@ -31,24 +48,47 @@ function canAutoFilter() {
   )
 }
 
+function submitFilters() {
+  router.get(
+    route('ledger.index'),
+    {
+      chart_of_account_id: form.chart_of_account_id || undefined,
+      start_date: form.start_date || undefined,
+      end_date: form.end_date || undefined,
+      status: form.status || undefined,
+    },
+    {
+      preserveState: true,
+      preserveScroll: true,
+      replace: true,
+    }
+  )
+}
+
 watch(
   form,
   () => {
     if (!canAutoFilter()) return
-
-    router.get(route('ledger.index'), form, {
-      preserveState: true,
-      preserveScroll: true,
-      replace: true,
-    })
+    submitFilters()
   },
   { deep: true }
 )
 
+onMounted(() => {
+  const cameWithAccountOnly =
+    !!props.filters?.chart_of_account_id &&
+    !props.filters?.start_date &&
+    !props.filters?.end_date
+
+  if (cameWithAccountOnly) {
+    submitFilters()
+  }
+})
+
 function clearFilters() {
   form.chart_of_account_id = ''
-  form.start_date = ''
-  form.end_date = ''
+  form.start_date = getDefaultStartDate()
+  form.end_date = getDefaultEndDate()
   form.status = ''
 }
 
