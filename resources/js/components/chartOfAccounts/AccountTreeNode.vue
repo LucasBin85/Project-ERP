@@ -1,4 +1,3 @@
-<!-- components/chartOfAccounts/AccountTreeNode.vue -->
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Plus, Pencil, Trash } from 'lucide-vue-next'
@@ -14,87 +13,59 @@ const emit = defineEmits<{
   (e: 'delete', node: TreeNode): void
 }>()
 
-/* --------------------------------------------------------------
-  REGRAS DE NEGÓCIO
-----------------------------------------------------------------*/
-
-// 1) Não-circulante → não pode ter filhos criados pelo usuário
-//    1.2.*  ou  2.2.*
-const isNonCirculante = computed(() =>
-  props.node.code.startsWith('1.2') ||
-  props.node.code.startsWith('2.2')
-)
-
-// 2) “Banho frio” no usuário criar coisa diretamente em Ativo (1) ou Passivo (2)
-//    Esses grupos são apenas estruturais
 const isRootStructure = computed(() =>
-  props.node.code.startsWith('1.1.1.2.') ||
   (props.node.code === '1' && props.node.name === 'Ativo') ||
-  (props.node.code === '2' && props.node.name === 'Passivo')
+  (props.node.code === '2' && props.node.name === 'Passivo') ||
+  (props.node.code === '3' && props.node.name === 'Patrimônio Líquido') ||
+  (props.node.code === '4' && props.node.name === 'Receitas') ||
+  (props.node.code === '5' && props.node.name === 'Despesas')
 )
 
-// 3) Conta proibida para criação de filhos
-const isBlockedForCreation = computed(() =>
-  isNonCirculante.value || isRootStructure.value
-)
-
-// 4) Pode criar subconta?
-const canCreate = computed(() => !isBlockedForCreation.value)
-
-// 5) Pode editar/excluir? Somente se NÃO for protegido
-const canEditOrDelete = computed(() => !props.node.is_protected)
+const canCreate = computed(() => !isRootStructure.value)
+const canEdit = computed(() => !props.node.is_system)
+const canDelete = computed(() => !props.node.is_system)
 </script>
 
 <template>
   <li>
     <div
-      class="group flex items-center justify-between px-2 py-1 rounded
-             hover:bg-gray-50 dark:hover:bg-gray-800"
+      class="group flex items-center justify-between rounded px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-800"
     >
-      <!-- CÓDIGO + NOME -->
       <div class="flex items-center space-x-2">
         <span class="font-mono text-sm">{{ node.code }}</span>
         <span>{{ node.name }}</span>
       </div>
 
-      <!-- AÇÕES -->
-      <div
-        class="flex items-center space-x-1 opacity-0
-               group-hover:opacity-100 transition-opacity duration-200"
-      >
-        <!-- [+] criar sub-conta -->
+      <div class="flex items-center space-x-1">
         <button
           v-if="canCreate"
           @click.stop="emit('create-child', node)"
           class="text-green-500 hover:text-green-700"
-          title="Criar sub-conta"
+          title="Criar subconta"
         >
-          <Plus class="w-4 h-4" />
+          <Plus class="h-4 w-4" />
         </button>
 
-        <!-- [✏️] editar -->
         <button
-          v-if="canEditOrDelete"
+          v-if="canEdit"
           @click.stop="emit('edit', node)"
           class="text-blue-500 hover:text-blue-700"
           title="Editar conta"
         >
-          <Pencil class="w-4 h-4" />
+          <Pencil class="h-4 w-4" />
         </button>
 
-        <!-- [🗑️] excluir -->
         <button
-          v-if="canEditOrDelete"
+          v-if="canDelete"
           @click.stop="emit('delete', node)"
           class="text-red-500 hover:text-red-700"
           title="Excluir conta"
         >
-          <Trash class="w-4 h-4" />
+          <Trash class="h-4 w-4" />
         </button>
       </div>
     </div>
 
-    <!-- FILHOS (recursivo) -->
     <ul v-if="node.children?.length" class="pl-4">
       <AccountTreeNode
         v-for="child in node.children"

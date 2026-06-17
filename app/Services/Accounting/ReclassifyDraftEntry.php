@@ -5,7 +5,7 @@ namespace App\Services\Accounting;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\ChartOfAccount;
-use App\Services\ChartOfAccountService;
+//use App\Services\ChartOfAccountService;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -26,6 +26,11 @@ class ReclassifyDraftEntry
 
     public function handle(JournalEntry $entry, array $splits): JournalEntry
     {
+        if ($entry->status === 'posted') {
+            throw new RuntimeException(
+                'Lançamentos postados não podem ser reclassificados.'
+            );
+        }
         return DB::transaction(function () use ($entry, $splits) {
 
             $entry->load('wallet', 'lines');
@@ -55,7 +60,7 @@ class ReclassifyDraftEntry
                 throw new RuntimeException('A soma dos splits deve ser igual ao valor da linha "A classificar".');
             }
 
-            $accountService = app(ChartOfAccountService::class);
+            //$accountService = app(ChartOfAccountService::class);
 
             // 🔥 NOVA VALIDAÇÃO AQUI
             foreach ($splits as $split) {
@@ -63,7 +68,12 @@ class ReclassifyDraftEntry
                 $account = ChartOfAccount::where('wallet_id', $wallet->id)
                     ->findOrFail((int) $split['chart_of_account_id']);
 
-                $accountService->validateForPosting($account);
+                //$accountService->validateForPosting($account);
+                if (! $account->allows_posting) {
+                    throw new RuntimeException(
+                        "A conta {$account->code} - {$account->name} não permite lançamentos."
+                    );
+                }
             }
 
             // Remove suspense

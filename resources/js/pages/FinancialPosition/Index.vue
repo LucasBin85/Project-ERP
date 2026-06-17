@@ -7,6 +7,16 @@ defineProps({
     position: Object,
 })
 
+const formatDate = (date) => {
+    if (!date) return '-'
+
+    return new Date(date).toLocaleDateString('pt-BR')
+}
+
+const positionDate = () => {
+    return new Date().toISOString().slice(0, 10)
+}
+
 const formatCurrency = (value) => {
     return (value / 100).toLocaleString('pt-BR', {
         style: 'currency',
@@ -15,6 +25,16 @@ const formatCurrency = (value) => {
 }
 
 const isNegative = (value) => value < 0
+
+const projectedBalance = (position) => {
+    const available = position.summary.available_cents || 0
+    const investments = position.summary.investments_cents || 0
+    const receivable = position.summary.accounts_receivable_cents || 0
+    const payable = position.summary.accounts_payable_cents || 0
+
+    return available + investments + receivable - payable
+}
+
 </script>
 
 <template>
@@ -27,9 +47,12 @@ const isNegative = (value) => value < 0
                 <p class="text-sm text-gray-400">
                     {{ wallet.name }}
                 </p>
+                <p class="mt-1 text-sm text-gray-500">
+                    Posição em: {{ formatDate(positionDate()) }}
+                </p>
             </div>
 
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-5">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-6">
                 <div class="rounded-xl border border-white/10 bg-[#152238] p-4 shadow">
                     <p class="text-sm text-gray-400">Disponível</p>
                     <p class="text-lg font-semibold text-white">
@@ -65,6 +88,16 @@ const isNegative = (value) => value < 0
                         :class="isNegative(position.summary.net_position_cents) ? 'text-red-400' : 'text-green-400'"
                     >
                         {{ formatCurrency(position.summary.net_position_cents) }}
+                    </p>
+                </div>
+
+                <div class="rounded-xl border border-blue-500/30 bg-[#1b2b46] p-4 shadow">
+                    <p class="text-sm font-semibold text-gray-300">Saldo Projetado</p>
+                    <p
+                        class="text-lg font-bold"
+                        :class="isNegative(projectedBalance(position)) ? 'text-red-400' : 'text-blue-300'"
+                    >
+                        {{ formatCurrency(projectedBalance(position)) }}
                     </p>
                 </div>
             </div>

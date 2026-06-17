@@ -33,6 +33,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/journal-entries', [JournalEntryController::class, 'index'])
         ->name('journal-entries.index');
 
+    Route::get('/journal-entries/create', [JournalEntryController::class, 'create'])
+        ->name('journal-entries.create');
+
+    Route::post('/journal-entries', [JournalEntryController::class, 'store'])
+        ->name('journal-entries.store');
+
     Route::get('/journal-entries/{journalEntry}', [JournalEntryController::class, 'show'])
         ->name('journal-entries.show');
 
@@ -41,6 +47,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])
         ->name('journal-entries.post');
+
 
 
     
