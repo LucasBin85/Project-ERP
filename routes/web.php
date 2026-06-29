@@ -10,6 +10,7 @@ use App\Http\Controllers\GeneralJournalController;
 use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinancialPositionController;
+use App\Http\Controllers\TrialBalanceController;
 
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -62,6 +63,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/financial-position', [FinancialPositionController::class, 'index'])
         ->name('financial-position.index');
+
+
+    Route::get('/trial-balance', [TrialBalanceController::class, 'index'])
+    ->name('trial-balance.index');
 
 });
 

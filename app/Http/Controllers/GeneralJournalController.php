@@ -15,13 +15,14 @@ class GeneralJournalController extends Controller
     public function index(Request $request): Response
     {
         $wallet = $this->resolveActiveWallet($request);
+        $startDate = $request->query('start_date') ?: now()->startOfYear()->toDateString();
+        $endDate = $request->query('end_date') ?: now()->toDateString();
 
         $filters = [
-            'start_date' => $request->string('start_date')->toString(),
-            'end_date' => $request->string('end_date')->toString(),
-            'source' => $request->string('source')->toString(),
-            'status' => $request->string('status')->toString(),
-            'search' => $request->string('search')->toString(),
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'source' => $request->query('source'),
+            'status' => $request->query('status'),
         ];
 
         $entries = JournalEntry::query()
@@ -33,42 +34,38 @@ class GeneralJournalController extends Controller
             ->when($filters['end_date'], fn ($q, $v) => $q->whereDate('entry_date', '<=', $v))
             ->when($filters['source'], fn ($q, $v) => $q->where('source', $v))
             ->when($filters['status'], fn ($q, $v) => $q->where('status', $v))
-            ->when($filters['search'], function ($q, $search) {
-                $q->where(function ($sub) use ($search) {
-                    $sub->where('description', 'like', "%{$search}%")
-                        ->orWhereHas('lines', function ($lq) use ($search) {
-                            $lq->where('memo', 'like', "%{$search}%")
-                                ->orWhereHas('chartOfAccount', function ($aq) use ($search) {
-                                    $aq->where('code', 'like', "%{$search}%")
-                                        ->orWhere('name', 'like', "%{$search}%");
-                                });
-                        });
-                });
-            })
+            
             ->orderByDesc('entry_date')
             ->orderByDesc('id')
             ->paginate(25)
             ->withQueryString()
             ->through(function (JournalEntry $entry) {
+                $lines = $entry->lines
+                    ->sortBy('id')
+                    ->map(fn ($line) => [
+                        'id' => $line->id,
+                        'account_code' => $line->chartOfAccount?->code,
+                        'account_name' => $line->chartOfAccount?->name,
+                        'description' => $line->memo,
+                        'debit_cents' => $line->type === 'debit' ? $line->amount_cents : null,
+                        'credit_cents' => $line->type === 'credit' ? $line->amount_cents : null,
+                    ])
+                    ->values();
+
                 return [
                     'id' => $entry->id,
+                    'entry_date' => $entry->entry_date,
                     'date' => $entry->entry_date,
                     'entry_label' => 'JE-' . str_pad((string) $entry->id, 6, '0', STR_PAD_LEFT),
                     'entry_show_url' => route('journal-entries.show', $entry),
                     'description' => $entry->description,
                     'status' => $entry->status,
                     'source' => $entry->source,
-                    'lines' => $entry->lines
-                        ->sortBy('id')
-                        ->map(fn ($line) => [
-                            'id' => $line->id,
-                            'account_code' => $line->chartOfAccount?->code,
-                            'account_name' => $line->chartOfAccount?->name,
-                            'description' => $line->memo,
-                            'debit_cents' => $line->type === 'debit' ? $line->amount_cents : null,
-                            'credit_cents' => $line->type === 'credit' ? $line->amount_cents : null,
-                        ])
-                        ->values(),
+
+                    'debit_total_cents' => $lines->sum('debit_cents'),
+                    'credit_total_cents' => $lines->sum('credit_cents'),
+
+                    'lines' => $lines,
                 ];
             });
 

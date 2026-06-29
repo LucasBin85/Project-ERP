@@ -50,6 +50,11 @@ const mainNavItems: NavItem[] = [
         //href: '/journal-entries',
         icon: Folder,
     },
+    {
+        title: 'Balancete',
+        href: route('trial-balance.index'),
+        icon: Scale,
+    }
 
 ];
 
