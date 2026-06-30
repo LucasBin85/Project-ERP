@@ -12,7 +12,7 @@ use App\Http\Controllers\Accounting\GeneralJournalController;
 use App\Http\Controllers\Accounting\LedgerController;
 use App\Http\Controllers\Accounting\TrialBalanceController;
 use App\Http\Controllers\Accounting\IncomeStatementController;
-
+use App\Http\Controllers\Accounting\BalanceSheetController;
 
 
 
@@ -74,6 +74,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/income-statement', [IncomeStatementController::class, 'index'])
     ->name('income-statement.index');
+
+
+    Route::get('/balance-sheet', [BalanceSheetController::class, 'index'])
+    ->name('balance-sheet.index'); 
 
 });
 

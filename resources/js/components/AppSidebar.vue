@@ -55,6 +55,17 @@ const mainNavItems: NavItem[] = [
         href: route('trial-balance.index'),
         icon: Scale,
     }
+    ,
+    {
+        title: 'DRE',
+        href: route('income-statement.index'),
+        icon: Folder,
+    },
+    {
+        title: 'Balanço Patrimonial',
+        href: route('balance-sheet.index'),
+        icon: Scale,
+    }
 
 ];
 
