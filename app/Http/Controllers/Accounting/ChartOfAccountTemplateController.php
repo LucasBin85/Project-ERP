@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Accounting;
 
+use App\Http\Controllers\Controller;
 use App\Models\ChartOfAccountTemplate;
 use Illuminate\Http\Request;
 

@@ -4,13 +4,16 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 use App\Http\Controllers\WalletController;
-use App\Http\Controllers\ChartOfAccountController;
-use App\Http\Controllers\JournalEntryController;
-use App\Http\Controllers\GeneralJournalController;
-use App\Http\Controllers\LedgerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinancialPositionController;
-use App\Http\Controllers\TrialBalanceController;
+use App\Http\Controllers\Accounting\ChartOfAccountController;
+use App\Http\Controllers\Accounting\JournalEntryController;
+use App\Http\Controllers\Accounting\GeneralJournalController;
+use App\Http\Controllers\Accounting\LedgerController;
+use App\Http\Controllers\Accounting\TrialBalanceController;
+use App\Http\Controllers\Accounting\IncomeStatementController;
+
+
 
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -31,22 +34,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     
 
-    Route::get('/journal-entries', [JournalEntryController::class, 'index'])
+    Route::get('/Accounting/journal-entries', [JournalEntryController::class, 'index'])
         ->name('journal-entries.index');
 
-    Route::get('/journal-entries/create', [JournalEntryController::class, 'create'])
+    Route::get('/Accounting/journal-entries/create', [JournalEntryController::class, 'create'])
         ->name('journal-entries.create');
 
-    Route::post('/journal-entries', [JournalEntryController::class, 'store'])
+    Route::post('/Accounting/journal-entries', [JournalEntryController::class, 'store'])
         ->name('journal-entries.store');
 
-    Route::get('/journal-entries/{journalEntry}', [JournalEntryController::class, 'show'])
+    Route::get('/Accounting/journal-entries/{journalEntry}', [JournalEntryController::class, 'show'])
         ->name('journal-entries.show');
 
-    Route::post('/journal-entries/{journalEntry}/reclassify', [JournalEntryController::class, 'reclassify'])
+    Route::post('/Accounting/journal-entries/{journalEntry}/reclassify', [JournalEntryController::class, 'reclassify'])
         ->name('journal-entries.reclassify');
 
-    Route::post('/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])
+    Route::post('/Accounting/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])
         ->name('journal-entries.post');
 
 
@@ -67,6 +70,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/trial-balance', [TrialBalanceController::class, 'index'])
     ->name('trial-balance.index');
+
+
+    Route::get('/income-statement', [IncomeStatementController::class, 'index'])
+    ->name('income-statement.index');
 
 });
 

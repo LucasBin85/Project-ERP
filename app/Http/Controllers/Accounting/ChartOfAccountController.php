@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Accounting;
 
+use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Models\ChartOfAccount;
 use App\Models\Wallet;
@@ -48,7 +49,7 @@ class ChartOfAccountController extends Controller
                 ->all();
         };
 
-        return Inertia::render('ChartOfAccounts/Index', [
+        return Inertia::render('Accounting/ChartOfAccounts/Index', [
             'tree' => $buildTree($accounts),
             'activeWallet' => $wallet->id,
             'financialGroups' => ChartOfAccount::financialGroups(),

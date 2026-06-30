@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Accounting;
 
+use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Models\JournalEntry;
 use Illuminate\Http\Request;
@@ -69,7 +70,7 @@ class GeneralJournalController extends Controller
                 ];
             });
 
-        return Inertia::render('GeneralJournal/Index', [
+        return Inertia::render('Accounting/GeneralJournal/Index', [
             'wallet' => [
                 'id' => $wallet->id,
                 'name' => $wallet->name,

@@ -1,20 +1,21 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Accounting;
 
+use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
 use App\Models\Wallet;
+use App\Services\Accounting\CreateJournalEntry;
 use App\Services\Accounting\PostJournalEntry;
 use App\Services\Accounting\ReclassifyDraftEntry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
-use App\Http\Controllers\Concerns\ResolvesActiveWallet;
-use App\Services\Accounting\CreateJournalEntry;
-use Illuminate\Validation\Rule;
 
 class JournalEntryController extends Controller
 {
@@ -31,7 +32,7 @@ class JournalEntryController extends Controller
             ->paginate(20)
             ->withQueryString();
 
-        return Inertia::render('JournalEntries/Index', [
+        return Inertia::render('Accounting/JournalEntries/Index', [
             'wallet' => [
                 'id' => $wallet->id,
                 'name' => $wallet->name,

@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Accounting;
 
+use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Models\ChartOfAccount;
 use App\Models\JournalLine;
@@ -145,7 +146,7 @@ class LedgerController extends Controller
             $closingBalanceCents = $runningBalance;
         }
 
-        return Inertia::render('Ledger/Index', [
+        return Inertia::render('Accounting/Ledger/Index', [
             'wallet' => [
                 'id' => $wallet->id,
                 'name' => $wallet->name,

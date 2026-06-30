@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Accounting;
 
 use App\Models\ChartOfAccount;
 use Illuminate\Validation\ValidationException;

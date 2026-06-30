@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Accounting;
 
+use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Services\Accounting\TrialBalanceService;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ class TrialBalanceController extends Controller
         $endDate = $request->query('end_date')
             ?: now()->toDateString();
             
-        return Inertia::render('TrialBalance/Index', [
+        return Inertia::render('Accounting/TrialBalance/Index', [
             'wallet' => $wallet,
             'trialBalance' => $service->generate(
                 wallet: $wallet,
