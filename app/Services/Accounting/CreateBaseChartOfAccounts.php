@@ -169,6 +169,14 @@ class CreateBaseChartOfAccounts
                         'type' => 'patrimonio',
                         'allows_posting' => true,
                     ],
+                    [
+                        'code' => '3.9',
+                        'name' => 'Saldos Iniciais',
+                        'type' => 'patrimonio',
+                        'normal_balance' => 'credit',
+                        'allows_posting' => true,
+                        'is_system' => true,
+                    ],
                 ],
             ],
             [

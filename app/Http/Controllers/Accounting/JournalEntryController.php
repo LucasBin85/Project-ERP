@@ -64,7 +64,7 @@ class JournalEntryController extends Controller
                 'normal_balance',
             ]);
 
-        return Inertia::render('JournalEntries/Show', [
+        return Inertia::render('Accounting/JournalEntries/Show', [
             'wallet' => [
                 'id' => $wallet->id,
                 'name' => $wallet->name,

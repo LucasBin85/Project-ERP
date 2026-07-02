@@ -78,3 +78,14 @@ export function formatAccountType(type?: string | null): string {
 
     return types[type] ?? type
 }
+
+export function formatPercentage(value: number): string {
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'percent',
+        minimumFractionDigits: 2,
+    }).format(value / 100)
+}
+
+export function formatNumber(value: number): string {
+    return new Intl.NumberFormat('pt-BR').format(value)
+}

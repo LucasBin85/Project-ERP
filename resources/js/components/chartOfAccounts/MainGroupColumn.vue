@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'create-child', node: TreeNode): void
+  (e: 'create-bank-account'): void
   (e: 'edit', node: TreeNode): void
   (e: 'delete', node: TreeNode): void
 }>()
@@ -34,6 +35,7 @@ const rootNode = computed(() =>
         :key="child.id"
         :node="child"
         @create-child="$emit('create-child', $event)"
+        @create-bank-account="$emit('create-bank-account')"
         @edit="$emit('edit', $event)"
         @delete="$emit('delete', $event)"
       />

@@ -1,6 +1,7 @@
 <script setup>
 import AppLayout from '@/layouts/AppLayout.vue'
 import AccountNode from '@/components/accounting/AccountNode.vue'
+import { todayLocal } from '@/lib/date'
 
 defineProps({
     wallet: Object,
@@ -14,7 +15,7 @@ const formatDate = (date) => {
 }
 
 const positionDate = () => {
-    return new Date().toISOString().slice(0, 10)
+    return todayLocal()
 }
 
 const formatCurrency = (value) => {

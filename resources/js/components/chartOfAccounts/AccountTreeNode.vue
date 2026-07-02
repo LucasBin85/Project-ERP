@@ -9,6 +9,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'create-child', node: TreeNode): void
+  (e: 'create-bank-account'): void
   (e: 'edit', node: TreeNode): void
   (e: 'delete', node: TreeNode): void
 }>()
@@ -21,9 +22,30 @@ const isRootStructure = computed(() =>
   (props.node.code === '5' && props.node.name === 'Despesas')
 )
 
-const canCreate = computed(() => !isRootStructure.value)
+const isBanksGroup = computed(() => props.node.code === '1.1.2')
+
+const isBankAccountChild = computed(() =>
+  props.node.code?.startsWith('1.1.2.')
+)
+
+const canCreate = computed(() => {
+  if (isBanksGroup.value) return true
+  if (isBankAccountChild.value) return false
+
+  return !isRootStructure.value
+})
+
 const canEdit = computed(() => !props.node.is_system)
 const canDelete = computed(() => !props.node.is_system)
+
+function handleCreate() {
+  if (isBanksGroup.value) {
+    emit('create-bank-account')
+    return
+  }
+
+  emit('create-child', props.node)
+}
 </script>
 
 <template>
@@ -39,9 +61,9 @@ const canDelete = computed(() => !props.node.is_system)
       <div class="flex items-center space-x-1">
         <button
           v-if="canCreate"
-          @click.stop="emit('create-child', node)"
+          @click.stop="handleCreate"
           class="text-green-500 hover:text-green-700"
-          title="Criar subconta"
+          :title="isBanksGroup ? 'Nova conta bancária' : 'Criar subconta'"
         >
           <Plus class="h-4 w-4" />
         </button>
@@ -72,6 +94,7 @@ const canDelete = computed(() => !props.node.is_system)
         :key="child.id"
         :node="child"
         @create-child="$emit('create-child', $event)"
+        @create-bank-account="$emit('create-bank-account')"
         @edit="$emit('edit', $event)"
         @delete="$emit('delete', $event)"
       />

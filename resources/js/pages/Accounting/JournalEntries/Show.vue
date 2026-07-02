@@ -1,8 +1,9 @@
 <script setup>
 import AppLayout from '@/layouts/AppLayout.vue'
-import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3'
+import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import { computed, ref, watch } from 'vue'
+import { formatCurrency, formatDate } from '@/lib/formatters'
 
 const props = defineProps({
     wallet: { type: Object, required: true },
@@ -16,36 +17,23 @@ const selectedAccountId = ref('')
 const selectedAmount = ref('')
 const selectedMemo = ref('')
 
-const formatCurrency = cents => {
-    return new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-    }).format(Number(cents || 0) / 100)
-}
-
-const formatDate = date => {
+function formatDateTime(date) {
     if (!date) return '-'
 
-    return new Intl.DateTimeFormat('pt-BR').format(new Date(date))
-}
-
-const formatDateTime = date => {
-    if (!date) return '-'
-
-    return new Intl.DateTimeFormat('pt-BR', {
+    return new Date(date).toLocaleString('pt-BR', {
         dateStyle: 'short',
         timeStyle: 'short',
-    }).format(new Date(date))
+    })
 }
 
-const formatCentsToInput = cents => {
+function formatCentsToInput(cents) {
     return (Number(cents || 0) / 100).toLocaleString('pt-BR', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     })
 }
 
-const parseCurrencyToCents = value => {
+function parseCurrencyToCents(value) {
     if (!value) return 0
 
     const normalized = String(value)
@@ -114,14 +102,14 @@ watch(
             selectedAmount.value = formatCentsToInput(value)
         }
     },
-    { immediate: true }
+    { immediate: true },
 )
 
 const form = useForm({
     splits: [],
 })
 
-const submitReclassification = () => {
+function submitReclassification() {
     if (!canReclassify.value) return
 
     const amountCents = parseCurrencyToCents(selectedAmount.value)
@@ -144,7 +132,7 @@ const submitReclassification = () => {
     })
 }
 
-const postEntry = () => {
+function postEntry() {
     if (!canPost.value) return
 
     router.post(route('journal-entries.post', props.entry.id), {}, {
@@ -155,8 +143,6 @@ const postEntry = () => {
 
 <template>
     <AppLayout :title="`Lançamento #${entry.id}`">
-        <Head :title="`Lançamento #${entry.id}`" />
-
         <div class="space-y-6">
             <div>
                 <Link
@@ -206,9 +192,7 @@ const postEntry = () => {
                 {{ page.props.flash.success }}
             </div>
 
-            <div
-                class="grid gap-4 rounded-xl border border-gray-700 bg-[#111827] p-5 shadow-sm md:grid-cols-5"
-            >
+            <div class="grid gap-4 rounded-xl border border-gray-700 bg-[#111827] p-5 shadow-sm md:grid-cols-5">
                 <div>
                     <p class="text-xs font-semibold uppercase text-gray-400">Data</p>
                     <p class="mt-2 text-white">{{ formatDate(entry.entry_date) }}</p>
@@ -390,24 +374,6 @@ const postEntry = () => {
                         Excluir
                     </button>
                 </div>
-
-                <p class="mt-4 text-sm text-gray-400">
-                    <span v-if="isPosted">
-                        Este lançamento já foi postado e está bloqueado para alterações.
-                    </span>
-
-                    <span v-else-if="hasSuspenseLine">
-                        Para postar, primeiro reclassifique o valor em conta transitória.
-                    </span>
-
-                    <span v-else-if="!isBalanced">
-                        Para postar, o lançamento precisa estar balanceado.
-                    </span>
-
-                    <span v-else>
-                        O lançamento está pronto para ser postado.
-                    </span>
-                </p>
             </div>
 
             <div

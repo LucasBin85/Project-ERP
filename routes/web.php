@@ -13,6 +13,7 @@ use App\Http\Controllers\Accounting\LedgerController;
 use App\Http\Controllers\Accounting\TrialBalanceController;
 use App\Http\Controllers\Accounting\IncomeStatementController;
 use App\Http\Controllers\Accounting\BalanceSheetController;
+use App\Http\Controllers\Financial\BankAccountController;
 
 
 
@@ -77,7 +78,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 
     Route::get('/balance-sheet', [BalanceSheetController::class, 'index'])
-    ->name('balance-sheet.index'); 
+    ->name('balance-sheet.index');
+
+
+    Route::prefix('financial')->group(function () {
+    Route::resource('bank-accounts', BankAccountController::class)
+        ->only(['index', 'create', 'store']);
+    });
 
 });
 

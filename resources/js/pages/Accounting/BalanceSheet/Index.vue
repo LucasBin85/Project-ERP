@@ -85,155 +85,155 @@ function sectionTone(sectionKey) {
                 />
             </div>
 
-<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-    <!-- ATIVO -->
-    <ReportSection>
-        <template #header>
-            <div class="flex items-center justify-between">
-                <h2 class="text-lg font-bold text-white">
-                    Ativo
-                </h2>
+            <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <!-- ATIVO -->
+                <ReportSection>
+                    <template #header>
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-lg font-bold text-white">
+                                Ativo
+                            </h2>
 
-                <div class="text-sm font-bold text-green-300">
-                    {{ formatCurrency(balanceSheet.totals.assets_cents) }}
-                </div>
-            </div>
-        </template>
-
-        <ReportTable
-            :empty="balanceSheet.sections[0].rows.length === 0"
-            empty-message="Nenhuma conta de ativo encontrada."
-            :empty-colspan="3"
-        >
-            <template #head>
-                <tr>
-                    <th class="w-[120px] px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
-                        Código
-                    </th>
-
-                    <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
-                        Conta
-                    </th>
-
-                    <th class="w-[180px] px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">
-                        Saldo
-                    </th>
-                </tr>
-            </template>
-
-            <tr
-                v-for="row in balanceSheet.sections[0].rows"
-                :key="row.account_id"
-                class="hover:bg-gray-800/50"
-                :class="row.is_summary ? 'bg-gray-900/40' : ''"
-            >
-                <td class="w-[120px] whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-300">
-                    {{ row.code }}
-                </td>
-
-                <td
-                    class="px-4 py-3 text-sm text-white"
-                    :class="row.is_summary ? 'font-bold' : ''"
-                >
-                    <span :style="{ paddingLeft: rowPadding(row.level) }">
-                        {{ row.name }}
-                    </span>
-                </td>
-
-                <td class="w-[180px] whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-green-300">
-                    {{ formatCurrency(row.balance_cents) }}
-                </td>
-            </tr>
-        </ReportTable>
-    </ReportSection>
-
-    <!-- PASSIVO + PL -->
-    <ReportSection>
-        <template #header>
-            <div class="flex items-center justify-between">
-                <h2 class="text-lg font-bold text-white">
-                    Passivo + Patrimônio Líquido
-                </h2>
-
-                <div class="text-sm font-bold text-blue-300">
-                    {{ formatCurrency(balanceSheet.totals.liabilities_and_equity_cents) }}
-                </div>
-            </div>
-        </template>
-
-        <div class="space-y-6">
-            <div
-                v-for="section in balanceSheet.sections.slice(1)"
-                :key="section.key"
-            >
-                <div class="flex items-center justify-between border-b border-gray-700 px-4 py-3">
-                    <h3 class="text-base font-bold text-white">
-                        {{ section.title }}
-                    </h3>
-
-                    <span
-                        class="text-sm font-bold"
-                        :class="sectionTone(section.key)"
-                    >
-                        {{ formatCurrency(section.total_cents) }}
-                    </span>
-                </div>
-
-                <ReportTable
-                    :empty="section.rows.length === 0"
-                    :empty-message="`Nenhuma conta de ${section.title.toLowerCase()} encontrada.`"
-                    :empty-colspan="3"
-                >
-                    <template #head>
-                        <tr>
-                            <th class="w-[120px] px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
-                                Código
-                            </th>
-
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
-                                Conta
-                            </th>
-
-                            <th class="w-[180px] px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">
-                                Saldo
-                            </th>
-                        </tr>
+                            <div class="text-sm font-bold text-green-300">
+                                {{ formatCurrency(balanceSheet.totals.assets_cents) }}
+                            </div>
+                        </div>
                     </template>
 
-                    <tr
-                        v-for="row in section.rows"
-                        :key="row.account_id"
-                        class="hover:bg-gray-800/50"
-                        :class="[
-                            row.is_summary ? 'bg-gray-900/40' : '',
-                            row.is_virtual ? 'border-t border-indigo-700/50 bg-indigo-950/20' : '',
-                        ]"
+                    <ReportTable
+                        :empty="balanceSheet.sections[0].rows.length === 0"
+                        empty-message="Nenhuma conta de ativo encontrada."
+                        :empty-colspan="3"
                     >
-                        <td class="w-[120px] whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-300">
-                            {{ row.code || '-' }}
-                        </td>
+                        <template #head>
+                            <tr>
+                                <th class="w-[120px] px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
+                                    Código
+                                </th>
 
-                        <td
-                            class="px-4 py-3 text-sm text-white"
-                            :class="row.is_summary || row.is_virtual ? 'font-bold' : ''"
-                        >
-                            <span :style="{ paddingLeft: rowPadding(row.level) }">
-                                {{ row.name }}
-                            </span>
-                        </td>
+                                <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
+                                    Conta
+                                </th>
 
-                        <td
-                            class="w-[180px] whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
-                            :class="sectionTone(section.key)"
+                                <th class="w-[180px] px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">
+                                    Saldo
+                                </th>
+                            </tr>
+                        </template>
+
+                        <tr
+                            v-for="row in balanceSheet.sections[0].rows"
+                            :key="row.account_id"
+                            class="hover:bg-gray-800/50"
+                            :class="row.is_summary ? 'bg-gray-900/40' : ''"
                         >
-                            {{ formatCurrency(row.balance_cents) }}
-                        </td>
-                    </tr>
-                </ReportTable>
+                            <td class="w-[120px] whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-300">
+                                {{ row.code }}
+                            </td>
+
+                            <td
+                                class="px-4 py-3 text-sm text-white"
+                                :class="row.is_summary ? 'font-bold' : ''"
+                            >
+                                <span :style="{ paddingLeft: rowPadding(row.level) }">
+                                    {{ row.name }}
+                                </span>
+                            </td>
+
+                            <td class="w-[180px] whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-green-300">
+                                {{ formatCurrency(row.balance_cents) }}
+                            </td>
+                        </tr>
+                    </ReportTable>
+                </ReportSection>
+
+                <!-- PASSIVO + PL -->
+                <ReportSection>
+                    <template #header>
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-lg font-bold text-white">
+                                Passivo + Patrimônio Líquido
+                            </h2>
+
+                            <div class="text-sm font-bold text-blue-300">
+                                {{ formatCurrency(balanceSheet.totals.liabilities_and_equity_cents) }}
+                            </div>
+                        </div>
+                    </template>
+
+                    <div class="space-y-6">
+                        <div
+                            v-for="section in balanceSheet.sections.slice(1)"
+                            :key="section.key"
+                        >
+                            <div class="flex items-center justify-between border-b border-gray-700 px-4 py-3">
+                                <h3 class="text-base font-bold text-white">
+                                    {{ section.title }}
+                                </h3>
+
+                                <span
+                                    class="text-sm font-bold"
+                                    :class="sectionTone(section.key)"
+                                >
+                                    {{ formatCurrency(section.total_cents) }}
+                                </span>
+                            </div>
+
+                            <ReportTable
+                                :empty="section.rows.length === 0"
+                                :empty-message="`Nenhuma conta de ${section.title.toLowerCase()} encontrada.`"
+                                :empty-colspan="3"
+                            >
+                                <template #head>
+                                    <tr>
+                                        <th class="w-[120px] px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
+                                            Código
+                                        </th>
+
+                                        <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
+                                            Conta
+                                        </th>
+
+                                        <th class="w-[180px] px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">
+                                            Saldo
+                                        </th>
+                                    </tr>
+                                </template>
+
+                                <tr
+                                    v-for="row in section.rows"
+                                    :key="row.account_id"
+                                    class="hover:bg-gray-800/50"
+                                    :class="[
+                                        row.is_summary ? 'bg-gray-900/40' : '',
+                                        row.is_virtual ? 'border-t border-indigo-700/50 bg-indigo-950/20' : '',
+                                    ]"
+                                >
+                                    <td class="w-[120px] whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-300">
+                                        {{ row.code || '-' }}
+                                    </td>
+
+                                    <td
+                                        class="px-4 py-3 text-sm text-white"
+                                        :class="row.is_summary || row.is_virtual ? 'font-bold' : ''"
+                                    >
+                                        <span :style="{ paddingLeft: rowPadding(row.level) }">
+                                            {{ row.name }}
+                                        </span>
+                                    </td>
+
+                                    <td
+                                        class="w-[180px] whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
+                                        :class="sectionTone(section.key)"
+                                    >
+                                        {{ formatCurrency(row.balance_cents) }}
+                                    </td>
+                                </tr>
+                            </ReportTable>
+                        </div>
+                    </div>
+                </ReportSection>
             </div>
-        </div>
-    </ReportSection>
-</div>
 
             <ReportSection>
                 <div class="grid grid-cols-1 gap-4 px-4 py-4 text-lg font-bold md:grid-cols-2">

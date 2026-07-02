@@ -106,6 +106,10 @@ function openCreate(node: TreeNode | null) {
   nextTick(() => nameInput.value?.focus())
 }
 
+function openCreateBankAccount() {
+  router.visit(route('bank-accounts.create'))
+}
+
 function openEdit(node: TreeNode) {
   isEditing.value = true
   editingId.value = node.id
@@ -224,6 +228,7 @@ watch(showModal, visible => {
           :group-number="n"
           :tree="props.tree"
           @create-child="openCreate"
+          @create-bank-account="openCreateBankAccount"
           @edit="openEdit"
           @delete="deleteNode"
         />
