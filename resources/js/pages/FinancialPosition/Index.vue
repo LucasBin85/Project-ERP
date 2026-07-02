@@ -2,27 +2,15 @@
 import AppLayout from '@/layouts/AppLayout.vue'
 import AccountNode from '@/components/accounting/AccountNode.vue'
 import { todayLocal } from '@/lib/date'
+import { formatCurrency, formatDate } from '@/lib/formatters'
 
 defineProps({
     wallet: Object,
     position: Object,
 })
 
-const formatDate = (date) => {
-    if (!date) return '-'
-
-    return new Date(date).toLocaleDateString('pt-BR')
-}
-
 const positionDate = () => {
     return todayLocal()
-}
-
-const formatCurrency = (value) => {
-    return (value / 100).toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-    })
 }
 
 const isNegative = (value) => value < 0
