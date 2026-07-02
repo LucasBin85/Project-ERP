@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/AppLayout.vue'
 import { Link, router } from '@inertiajs/vue3'
 import { computed, reactive, watch } from 'vue'
 import { route } from 'ziggy-js'
+import { formatCurrency as formatMoney, formatDate } from '@/lib/formatters'
 
 const props = defineProps({
   wallet: Object,
@@ -42,22 +43,6 @@ function openDatePicker(event) {
 function clearFilters() {
   form.start_date = ''
   form.end_date = ''
-}
-
-function formatMoney(cents) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format((cents || 0) / 100)
-}
-
-function formatDate(value) {
-  if (!value) return '—'
-
-  const datePart = String(value).slice(0, 10)
-  const [year, month, day] = datePart.split('-')
-
-  return `${day}/${month}/${year}`
 }
 
 function sourceLabel(source) {
