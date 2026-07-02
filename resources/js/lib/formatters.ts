@@ -14,6 +14,15 @@ export function formatDate(value: unknown): string {
     return `${day}/${month}/${year}`
 }
 
+export function formatDateTime(value: string | Date | null | undefined): string {
+    if (!value) return '-'
+
+    return new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    }).format(new Date(value))
+}
+
 export function formatCurrency(cents: number | null | undefined): string {
     return new Intl.NumberFormat('pt-BR', {
         style: 'currency',
