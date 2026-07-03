@@ -115,6 +115,40 @@ export function useDashboard(props) {
         },
     ])
 
+    const chartWidth = 900
+    const chartHeight = 300
+    const padding = 36
+
+    const maxValue = computed(() => {
+        const values = props.chart.flatMap(item => [item.revenue_cents, item.expense_cents])
+        return Math.max(...values, 1)
+    })
+
+    function chartPoint(item, index, key) {
+        const denominator = Math.max(props.chart.length - 1, 1)
+        const x = padding + (index * ((chartWidth - padding * 2) / denominator))
+        const y = chartHeight - padding - ((Number(item[key] || 0) / maxValue.value) * (chartHeight - padding * 2))
+
+        return { x, y, date: item.date, value: item[key] }
+    }
+
+    const revenuePoints = computed(() => props.chart.map((item, index) => chartPoint(item, index, 'revenue_cents')))
+    const expensePoints = computed(() => props.chart.map((item, index) => chartPoint(item, index, 'expense_cents')))
+    const pointsRevenue = computed(() => revenuePoints.value.map(point => `${point.x},${point.y}`).join(' '))
+    const pointsExpense = computed(() => expensePoints.value.map(point => `${point.x},${point.y}`).join(' '))
+
+    const chartTicks = computed(() => {
+        return props.chart.map((item, index) => {
+            const denominator = Math.max(props.chart.length - 1, 1)
+            const x = padding + (index * ((chartWidth - padding * 2) / denominator))
+
+            return {
+                x,
+                label: formatDate(item.date).slice(0, 5),
+            }
+        })
+    })
+
     return {
         form,
         openDatePicker,
@@ -128,5 +162,13 @@ export function useDashboard(props) {
         resultTone,
         resultMargin,
         dashboardCards,
+        chartWidth,
+        chartHeight,
+        padding,
+        revenuePoints,
+        expensePoints,
+        pointsRevenue,
+        pointsExpense,
+        chartTicks,
     }
 }
