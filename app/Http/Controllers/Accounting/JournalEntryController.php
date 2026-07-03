@@ -154,7 +154,7 @@ class JournalEntryController extends Controller
                 'label' => "{$account->code} - {$account->name}",
             ]);
 
-        return Inertia::render('JournalEntries/Create', [
+        return Inertia::render('Accounting/JournalEntries/Create', [
             'accounts' => $accounts,
         ]);
     }
