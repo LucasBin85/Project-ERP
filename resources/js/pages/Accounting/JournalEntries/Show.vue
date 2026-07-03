@@ -17,7 +17,24 @@ const props = defineProps({
 
 const page = usePage()
 
-const journal = useJournalEntryShow(props)
+const {
+    selectedAccountId,
+    selectedAmount,
+    selectedMemo,
+    debitLines,
+    creditLines,
+    debitTotal,
+    creditTotal,
+    difference,
+    isBalanced,
+    isPosted,
+    statusLabel,
+    canReclassify,
+    canPost,
+    form,
+    submitReclassification,
+    postEntry,
+} = useJournalEntryShow(props)
 </script>
 
 <template>
@@ -26,9 +43,9 @@ const journal = useJournalEntryShow(props)
             <JournalEntryHeader :entry="entry">
                 <template #badges>
                     <JournalEntryStatusBadges
-                        :is-posted="journal.isPosted.value"
-                        :is-balanced="journal.isBalanced.value"
-                        :status-label="journal.statusLabel.value"
+                        :is-posted="isPosted"
+                        :is-balanced="isBalanced"
+                        :status-label="statusLabel"
                     />
                 </template>
             </JournalEntryHeader>
@@ -46,30 +63,30 @@ const journal = useJournalEntryShow(props)
             />
 
             <JournalEntryLedger
-                :debit-lines="journal.debitLines.value"
-                :credit-lines="journal.creditLines.value"
-                :debit-total="journal.debitTotal.value"
-                :credit-total="journal.creditTotal.value"
-                :difference="journal.difference.value"
-                :is-balanced="journal.isBalanced.value"
+                :debit-lines="debitLines"
+                :credit-lines="creditLines"
+                :debit-total="debitTotal"
+                :credit-total="creditTotal"
+                :difference="difference"
+                :is-balanced="isBalanced"
                 :suspense-account-id="wallet.suspense_account_id"
             />
 
             <JournalEntryActions
-                :can-post="journal.canPost.value"
-                :can-reclassify="journal.canReclassify.value"
-                :is-posted="journal.isPosted.value"
-                @post="journal.postEntry"
+                :can-post="canPost"
+                :can-reclassify="canReclassify"
+                :is-posted="isPosted"
+                @post="postEntry"
             />
 
             <JournalEntryReclassification
-                v-model:selected-account-id="journal.selectedAccountId.value"
-                v-model:selected-amount="journal.selectedAmount.value"
-                v-model:selected-memo="journal.selectedMemo.value"
-                :can-reclassify="journal.canReclassify.value"
+                v-model:selected-account-id="selectedAccountId"
+                v-model:selected-amount="selectedAmount"
+                v-model:selected-memo="selectedMemo"
+                :can-reclassify="canReclassify"
                 :classification-accounts="classificationAccounts"
-                :form-processing="journal.form.processing"
-                @submit="journal.submitReclassification"
+                :form-processing="form.processing"
+                @submit="submitReclassification"
             />
         </div>
     </AppLayout>
