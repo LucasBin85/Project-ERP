@@ -9,13 +9,16 @@ const emit = defineEmits(['post'])
 </script>
 
 <template>
-    <div class="rounded-xl border border-gray-700 bg-[#111827] p-6">
-        <h2 class="mb-5 text-xl font-bold text-white">Ações</h2>
+    <section class="rounded-2xl border border-white/10 bg-[#111827] p-5 shadow">
+        <div class="mb-5">
+            <h2 class="text-xl font-bold text-white">Ações</h2>
+            <p class="mt-1 text-sm text-gray-500">Operações disponíveis para este lançamento.</p>
+        </div>
 
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-3 md:grid-cols-3">
             <button
                 type="button"
-                class="rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-50"
+                class="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="!canPost"
                 @click="emit('post')"
             >
@@ -24,7 +27,7 @@ const emit = defineEmits(['post'])
 
             <button
                 type="button"
-                class="rounded-lg border border-gray-600 px-4 py-3 text-sm font-bold text-gray-300 disabled:opacity-50"
+                class="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-gray-300 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="!canReclassify"
             >
                 Reclassificar
@@ -32,11 +35,11 @@ const emit = defineEmits(['post'])
 
             <button
                 type="button"
-                class="rounded-lg border border-gray-600 px-4 py-3 text-sm font-bold text-gray-300 disabled:opacity-50"
+                class="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-gray-300 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                 :disabled="isPosted"
             >
                 Editar
             </button>
         </div>
-    </div>
+    </section>
 </template>
