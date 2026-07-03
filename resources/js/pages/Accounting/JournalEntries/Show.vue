@@ -105,7 +105,7 @@ function postEntry() {
 
 <template>
     <AppLayout :title="`Lançamento #${entry.id}`">
-        <div class="space-y-6">
+        <div class="space-y-6 p-6">
             <JournalEntryHeader :entry="entry">
                 <template #badges>
                     <JournalEntryStatusBadges
@@ -118,7 +118,7 @@ function postEntry() {
 
             <div
                 v-if="page.props.flash?.success"
-                class="rounded-xl border border-green-700 bg-green-950/30 px-4 py-3 text-sm text-green-300"
+                class="rounded-2xl border border-green-500/30 bg-green-950/30 px-4 py-3 text-sm font-semibold text-green-300"
             >
                 {{ page.props.flash.success }}
             </div>
