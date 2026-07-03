@@ -6,10 +6,8 @@ import JournalEntryInfoPanel from '@/components/accounting/journalEntries/Journa
 import JournalEntryLedger from '@/components/accounting/journalEntries/JournalEntryLedger.vue'
 import JournalEntryReclassification from '@/components/accounting/journalEntries/JournalEntryReclassification.vue'
 import JournalEntryStatusBadges from '@/components/accounting/journalEntries/JournalEntryStatusBadges.vue'
-import { router, useForm, usePage } from '@inertiajs/vue3'
-import { route } from 'ziggy-js'
-import { computed, ref, watch } from 'vue'
-import { moneyToCents } from '@/lib/input'
+import { usePage } from '@inertiajs/vue3'
+import { useJournalEntryShow } from '@/composables/accounting/useJournalEntryShow'
 
 const props = defineProps({
     wallet: { type: Object, required: true },
@@ -19,88 +17,7 @@ const props = defineProps({
 
 const page = usePage()
 
-const selectedAccountId = ref('')
-const selectedAmount = ref('')
-const selectedMemo = ref('')
-
-function formatCentsToInput(cents) {
-    return (Number(cents || 0) / 100).toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })
-}
-
-const debitLines = computed(() => props.entry.lines?.filter(line => line.type === 'debit') || [])
-const creditLines = computed(() => props.entry.lines?.filter(line => line.type === 'credit') || [])
-
-const debitTotal = computed(() => {
-    return debitLines.value.reduce((total, line) => total + Number(line.amount_cents || 0), 0)
-})
-
-const creditTotal = computed(() => {
-    return creditLines.value.reduce((total, line) => total + Number(line.amount_cents || 0), 0)
-})
-
-const difference = computed(() => debitTotal.value - creditTotal.value)
-const isBalanced = computed(() => difference.value === 0)
-const isPosted = computed(() => props.entry.status === 'posted')
-const statusLabel = computed(() => isPosted.value ? 'POSTADO' : 'RASCUNHO')
-
-const hasSuspenseLine = computed(() => {
-    return props.entry.lines?.some(line => Number(line.chart_of_account_id) === Number(props.wallet.suspense_account_id))
-})
-
-const suspenseLine = computed(() => {
-    return props.entry.lines?.find(line => Number(line.chart_of_account_id) === Number(props.wallet.suspense_account_id)) || null
-})
-
-const canReclassify = computed(() => !isPosted.value && hasSuspenseLine.value)
-const canPost = computed(() => !isPosted.value && isBalanced.value && !hasSuspenseLine.value)
-
-watch(
-    () => suspenseLine.value?.amount_cents,
-    value => {
-        if (value && !selectedAmount.value) {
-            selectedAmount.value = formatCentsToInput(value)
-        }
-    },
-    { immediate: true },
-)
-
-const form = useForm({
-    splits: [],
-})
-
-function submitReclassification() {
-    if (!canReclassify.value) return
-
-    const amountCents = moneyToCents(selectedAmount.value)
-
-    if (!selectedAccountId.value || amountCents <= 0) return
-
-    form.splits = [
-        {
-            chart_of_account_id: Number(selectedAccountId.value),
-            amount_cents: amountCents,
-            memo: selectedMemo.value || null,
-        },
-    ]
-
-    form.post(route('journal-entries.reclassify', props.entry.id), {
-        preserveScroll: true,
-        onSuccess: () => {
-            selectedMemo.value = ''
-        },
-    })
-}
-
-function postEntry() {
-    if (!canPost.value) return
-
-    router.post(route('journal-entries.post', props.entry.id), {}, {
-        preserveScroll: true,
-    })
-}
+const journal = useJournalEntryShow(props)
 </script>
 
 <template>
@@ -109,9 +26,9 @@ function postEntry() {
             <JournalEntryHeader :entry="entry">
                 <template #badges>
                     <JournalEntryStatusBadges
-                        :is-posted="isPosted"
-                        :is-balanced="isBalanced"
-                        :status-label="statusLabel"
+                        :is-posted="journal.isPosted.value"
+                        :is-balanced="journal.isBalanced.value"
+                        :status-label="journal.statusLabel.value"
                     />
                 </template>
             </JournalEntryHeader>
@@ -129,30 +46,30 @@ function postEntry() {
             />
 
             <JournalEntryLedger
-                :debit-lines="debitLines"
-                :credit-lines="creditLines"
-                :debit-total="debitTotal"
-                :credit-total="creditTotal"
-                :difference="difference"
-                :is-balanced="isBalanced"
+                :debit-lines="journal.debitLines.value"
+                :credit-lines="journal.creditLines.value"
+                :debit-total="journal.debitTotal.value"
+                :credit-total="journal.creditTotal.value"
+                :difference="journal.difference.value"
+                :is-balanced="journal.isBalanced.value"
                 :suspense-account-id="wallet.suspense_account_id"
             />
 
             <JournalEntryActions
-                :can-post="canPost"
-                :can-reclassify="canReclassify"
-                :is-posted="isPosted"
-                @post="postEntry"
+                :can-post="journal.canPost.value"
+                :can-reclassify="journal.canReclassify.value"
+                :is-posted="journal.isPosted.value"
+                @post="journal.postEntry"
             />
 
             <JournalEntryReclassification
-                v-model:selected-account-id="selectedAccountId"
-                v-model:selected-amount="selectedAmount"
-                v-model:selected-memo="selectedMemo"
-                :can-reclassify="canReclassify"
+                v-model:selected-account-id="journal.selectedAccountId.value"
+                v-model:selected-amount="journal.selectedAmount.value"
+                v-model:selected-memo="journal.selectedMemo.value"
+                :can-reclassify="journal.canReclassify.value"
                 :classification-accounts="classificationAccounts"
-                :form-processing="form.processing"
-                @submit="submitReclassification"
+                :form-processing="journal.form.processing"
+                @submit="journal.submitReclassification"
             />
         </div>
     </AppLayout>
