@@ -66,8 +66,9 @@ const journalEntries = useJournalEntriesIndex(props.entries)
                             : 'border-gray-700 text-gray-300 hover:bg-gray-800',
                         !link.url ? 'pointer-events-none opacity-50' : '',
                     ]"
-                    v-html="link.label"
-                />
+                >
+                    {{ link.label }}
+                </Link>
             </div>
         </ReportPage>
     </AppLayout>
