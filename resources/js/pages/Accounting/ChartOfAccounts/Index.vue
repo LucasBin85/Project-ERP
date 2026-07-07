@@ -60,7 +60,6 @@ const breadcrumbs: BreadcrumbItem[] = [
     :is-duplicate-name="chart.isDuplicateName.value"
     :is-same-name="chart.isSameName.value"
     :can-submit="chart.canSubmit.value"
-    :name-input="chart.nameInput"
     @close="chart.closeModal"
     @submit="chart.submit"
   />
