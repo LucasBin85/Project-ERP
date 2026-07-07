@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue'
+import JournalEntriesTable from '@/components/accounting/journalEntries/JournalEntriesTable.vue'
 import ReportPage from '@/components/reports/ReportPage.vue'
 import ReportSection from '@/components/reports/ReportSection.vue'
-import ReportTable from '@/components/reports/ReportTable.vue'
-import StatusBadge from '@/components/ui/StatusBadge.vue'
-import {
-    formatCurrency,
-    formatDate,
-} from '@/lib/formatters'
+import { useJournalEntriesIndex } from '@/composables/accounting/useJournalEntriesIndex'
 import { Head, Link } from '@inertiajs/vue3'
 
 const props = defineProps({
@@ -21,35 +17,7 @@ const props = defineProps({
     },
 })
 
-const rows = props.entries?.data ?? []
-
-function entryTotal(entry) {
-    if (entry.amount_cents !== undefined && entry.amount_cents !== null) {
-        return entry.amount_cents
-    }
-
-    if (entry.debit_total_cents !== undefined && entry.debit_total_cents !== null) {
-        return entry.debit_total_cents
-    }
-
-    if (entry.debit_total !== undefined && entry.debit_total !== null) {
-        return entry.debit_total
-    }
-
-    if (entry.lines?.length) {
-        return entry.lines
-            .filter((line) => line.type === 'debit' || line.debit_cents)
-            .reduce((total, line) => {
-                return total + Number(line.amount_cents ?? line.debit_cents ?? 0)
-            }, 0)
-    }
-
-    return 0
-}
-
-function entryDate(entry) {
-    return entry.entry_date ?? entry.date
-}
+const journalEntries = useJournalEntriesIndex(props.entries)
 </script>
 
 <template>
@@ -76,80 +44,11 @@ function entryDate(entry) {
                     </h2>
                 </template>
 
-                <ReportTable
-                    :empty="rows.length === 0"
-                    empty-message="Nenhum lançamento encontrado."
-                    :empty-colspan="6"
-                >
-                    <template #head>
-                        <tr>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
-                                Data
-                            </th>
-
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
-                                Descrição
-                            </th>
-
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
-                                Origem
-                            </th>
-
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">
-                                Status
-                            </th>
-
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">
-                                Valor
-                            </th>
-
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">
-                                Ações
-                            </th>
-                        </tr>
-                    </template>
-
-                    <tr
-                        v-for="entry in rows"
-                        :key="entry.id"
-                        class="hover:bg-gray-800/50"
-                    >
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
-                            {{ formatDate(entryDate(entry)) }}
-                        </td>
-
-                        <td class="px-4 py-3 text-sm text-white">
-                            <div class="font-semibold">
-                                {{ entry.description }}
-                            </div>
-
-                            <div class="text-sm text-gray-400">
-                                #{{ entry.id }}
-                            </div>
-                        </td>
-
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-400">
-                            {{ entry.source }}
-                        </td>
-
-                        <td class="whitespace-nowrap px-4 py-3 text-sm">
-                            <StatusBadge :status="entry.status" />
-                        </td>
-
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-white">
-                            {{ formatCurrency(entryTotal(entry)) }}
-                        </td>
-
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
-                            <Link
-                                :href="route('journal-entries.show', entry.id)"
-                                class="text-blue-400 hover:text-blue-300"
-                            >
-                                Ver
-                            </Link>
-                        </td>
-                    </tr>
-                </ReportTable>
+                <JournalEntriesTable
+                    :rows="journalEntries.rows.value"
+                    :entry-total="journalEntries.entryTotal"
+                    :entry-date="journalEntries.entryDate"
+                />
             </ReportSection>
 
             <div
