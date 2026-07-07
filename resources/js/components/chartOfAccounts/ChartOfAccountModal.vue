@@ -14,7 +14,13 @@ defineProps({
     canSubmit: Boolean,
 })
 
-const emit = defineEmits(['close', 'submit'])
+const emit = defineEmits([
+    'close',
+    'submit',
+    'update-name',
+    'update-allows-posting',
+    'update-financial-group',
+])
 </script>
 
 <template>
@@ -48,11 +54,12 @@ const emit = defineEmits(['close', 'submit'])
 
                         <input
                             id="account-name"
-                            v-model="form.name"
+                            :value="form.name"
                             name="name"
                             type="text"
                             autofocus
                             class="w-full rounded border border-gray-300 bg-white p-2 text-gray-900 focus:ring-2 focus:ring-blue-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                            @input="emit('update-name', $event.target.value)"
                         />
 
                         <p v-if="isDuplicateName" class="mt-1 text-sm text-red-600">
@@ -76,9 +83,10 @@ const emit = defineEmits(['close', 'submit'])
 
                         <select
                             id="allows-posting"
-                            v-model="form.allows_posting"
+                            :value="form.allows_posting"
                             name="allows_posting"
                             class="w-full rounded border border-gray-300 bg-white p-2 text-gray-900 focus:ring-2 focus:ring-blue-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                            @change="emit('update-allows-posting', $event.target.value === 'true')"
                         >
                             <option :value="true">Analítica (permite lançamentos)</option>
                             <option :value="false">Sintética (não permite lançamentos)</option>
@@ -99,10 +107,11 @@ const emit = defineEmits(['close', 'submit'])
 
                         <select
                             id="financial-group"
-                            v-model="form.financial_group"
+                            :value="form.financial_group"
                             name="financial_group"
                             :disabled="form.allows_posting"
                             class="w-full rounded border border-gray-300 bg-white p-2 text-gray-900 focus:ring-2 focus:ring-blue-400 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:disabled:bg-gray-700"
+                            @change="emit('update-financial-group', $event.target.value || null)"
                         >
                             <option :value="null">Nenhum</option>
                             <option
