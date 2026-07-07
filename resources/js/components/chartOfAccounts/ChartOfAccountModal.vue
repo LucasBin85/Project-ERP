@@ -12,7 +12,6 @@ defineProps({
     isDuplicateName: Boolean,
     isSameName: Boolean,
     canSubmit: Boolean,
-    nameInput: Object,
 })
 
 const emit = defineEmits(['close', 'submit'])
@@ -49,10 +48,10 @@ const emit = defineEmits(['close', 'submit'])
 
                         <input
                             id="account-name"
-                            :ref="nameInput"
                             v-model="form.name"
                             name="name"
                             type="text"
+                            autofocus
                             class="w-full rounded border border-gray-300 bg-white p-2 text-gray-900 focus:ring-2 focus:ring-blue-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                         />
 
