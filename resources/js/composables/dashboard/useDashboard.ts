@@ -36,20 +36,6 @@ export function useDashboard(props) {
         form.end_date = ''
     }
 
-    function sourceLabel(source) {
-        const map = {
-            manual: 'Manual',
-            ofx: 'OFX',
-            open_finance: 'Open Finance',
-        }
-
-        return map[source] || source || '—'
-    }
-
-    function statusLabel(status) {
-        return status === 'posted' ? 'Postado' : 'Rascunho'
-    }
-
     function goToGeneralJournal(params = {}) {
         router.get(route('general-journal.index'), {
             start_date: form.start_date,
@@ -153,8 +139,6 @@ export function useDashboard(props) {
         form,
         openDatePicker,
         clearFilters,
-        sourceLabel,
-        statusLabel,
         goToGeneralJournal,
         goToDate,
         goToEntry,
