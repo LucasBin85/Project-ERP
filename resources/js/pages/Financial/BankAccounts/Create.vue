@@ -49,6 +49,9 @@ function submit() {
                     :is-duplicate-bank-account="bankAccount.isDuplicateBankAccount.value"
                     :can-submit="bankAccount.canSubmit.value"
                     @submit="submit"
+                    @update-name="bankAccount.form.name = $event"
+                    @update-account-type="bankAccount.form.account_type = $event"
+                    @update-opening-balance-date="bankAccount.form.opening_balance_date = $event"
                     @update-only-numbers="bankAccount.updateOnlyNumbers"
                     @update-opening-balance="bankAccount.updateOpeningBalance"
                 />
