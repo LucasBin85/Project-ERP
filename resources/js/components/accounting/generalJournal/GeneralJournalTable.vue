@@ -3,6 +3,7 @@ import ReportTable from '@/components/reports/ReportTable.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
 import { formatAccount, formatDate, formatMoneyOrDash } from '@/lib/formatters'
 import { Link } from '@inertiajs/vue3'
+import { route } from 'ziggy-js'
 
 defineProps({
     rows: {
