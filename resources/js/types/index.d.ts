@@ -13,9 +13,12 @@ export interface BreadcrumbItem {
 
 export interface NavItem {
     title: string;
-    href: string;
+    href?: string;
     icon?: LucideIcon;
     isActive?: boolean;
+    disabled?: boolean;
+    badge?: string;
+    items?: NavItem[];
 }
 
 export interface SharedData extends PageProps {
@@ -37,4 +40,3 @@ export interface User {
 }
 
 export type BreadcrumbItemType = BreadcrumbItem;
-
