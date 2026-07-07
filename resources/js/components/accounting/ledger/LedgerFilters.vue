@@ -1,9 +1,12 @@
 <script setup>
 defineProps({
-    form: Object,
+    chartOfAccountId: String,
+    status: String,
     accounts: Array,
     statuses: Array,
 })
+
+const emit = defineEmits(['update:chartOfAccountId', 'update:status'])
 </script>
 
 <template>
@@ -18,8 +21,9 @@ defineProps({
 
             <select
                 id="chart_of_account_id"
-                v-model="form.chart_of_account_id"
+                :value="chartOfAccountId"
                 class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                @change="emit('update:chartOfAccountId', $event.target.value)"
             >
                 <option value="">Selecione</option>
 
@@ -43,17 +47,18 @@ defineProps({
 
             <select
                 id="status"
-                v-model="form.status"
+                :value="status"
                 class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                @change="emit('update:status', $event.target.value)"
             >
                 <option value="">Todos</option>
 
                 <option
-                    v-for="status in statuses"
-                    :key="status.value"
-                    :value="status.value"
+                    v-for="statusOption in statuses"
+                    :key="statusOption.value"
+                    :value="statusOption.value"
                 >
-                    {{ status.label }}
+                    {{ statusOption.label }}
                 </option>
             </select>
         </div>
