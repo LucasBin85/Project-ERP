@@ -2,77 +2,26 @@
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
-import { 
-    Sidebar, 
-    SidebarContent, 
-    SidebarFooter, 
-    SidebarHeader, 
-    SidebarMenu, 
-    SidebarMenuButton, 
-    SidebarMenuItem } 
-    from '@/components/ui/sidebar';
+import {
+    Sidebar,
+    SidebarContent,
+    SidebarFooter,
+    SidebarHeader,
+    SidebarMenu,
+    SidebarMenuButton,
+    SidebarMenuItem,
+} from '@/components/ui/sidebar';
+import { mainNavItems } from '@/lib/navigation';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { Home, BookOpen, Folder, LayoutGrid, Scale } from 'lucide-vue-next';
+import { BookOpen, Folder } from 'lucide-vue-next';
+import { route } from 'ziggy-js';
 import AppLogo from './AppLogo.vue';
-import { route } from 'ziggy-js'
-
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Home',
-        href: route('financial-position.index'),
-        icon: Home,
-    },
-    {
-        title: 'Dashboard',
-        href: route('dashboard'),
-        icon: LayoutGrid,
-    },
-    {
-        title: 'Plano de Contas',
-        //href: '/chart-of-accounts',
-        href: route('chart-of-accounts.index'),
-        icon: Folder,
-    },
-    {
-        title: 'Livro Diário',
-        href: route('general-journal.index'),
-        icon: BookOpen,
-    },
-    {
-        title: 'Livro Razão',
-        href: '/ledger',
-        icon: Scale,
-    },
-    {
-        title: 'Lançamentos',
-        href: route('journal-entries.index'),
-        //href: '/journal-entries',
-        icon: Folder,
-    },
-    {
-        title: 'Balancete',
-        href: route('trial-balance.index'),
-        icon: Scale,
-    }
-    ,
-    {
-        title: 'DRE',
-        href: route('income-statement.index'),
-        icon: Folder,
-    },
-    {
-        title: 'Balanço Patrimonial',
-        href: route('balance-sheet.index'),
-        icon: Scale,
-    }
-
-];
 
 const footerNavItems: NavItem[] = [
     {
         title: 'Github Repo',
-        href: 'https://github.com/laravel/vue-starter-kit',
+        href: 'https://github.com/LucasBin85/Project-ERP',
         icon: Folder,
     },
     {
