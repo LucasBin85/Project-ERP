@@ -35,7 +35,8 @@ const ledger = useLedgerIndex(props)
 
             <ReportSection>
                 <LedgerFilters
-                    :form="ledger.form"
+                    v-model:chart-of-account-id="ledger.form.chart_of_account_id"
+                    v-model:status="ledger.form.status"
                     :accounts="accounts"
                     :statuses="statuses"
                 />
