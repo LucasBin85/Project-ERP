@@ -1,4 +1,4 @@
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import { useToast } from 'vue-toastification'
@@ -8,7 +8,6 @@ export function useChartOfAccountsIndex(props) {
     const showModal = ref(false)
     const isEditing = ref(false)
     const editingId = ref<number | null>(null)
-    const nameInput = ref<HTMLInputElement | null>(null)
 
     const toast = useToast()
 
@@ -93,7 +92,6 @@ export function useChartOfAccountsIndex(props) {
         form.financial_group = null
 
         showModal.value = true
-        nextTick(() => nameInput.value?.focus())
     }
 
     function openCreateBankAccount() {
@@ -111,7 +109,6 @@ export function useChartOfAccountsIndex(props) {
         form.financial_group = node.financial_group ?? null
 
         showModal.value = true
-        nextTick(() => nameInput.value?.focus())
     }
 
     watch(
@@ -186,7 +183,6 @@ export function useChartOfAccountsIndex(props) {
         showModal,
         isEditing,
         editingId,
-        nameInput,
         form,
         isDuplicateName,
         isSameName,
