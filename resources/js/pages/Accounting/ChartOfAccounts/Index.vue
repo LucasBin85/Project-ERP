@@ -62,5 +62,8 @@ const breadcrumbs: BreadcrumbItem[] = [
     :can-submit="chart.canSubmit.value"
     @close="chart.closeModal"
     @submit="chart.submit"
+    @update-name="chart.form.name = $event"
+    @update-allows-posting="chart.form.allows_posting = $event"
+    @update-financial-group="chart.form.financial_group = $event"
   />
 </template>
