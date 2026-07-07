@@ -1,11 +1,12 @@
 <script setup>
 defineProps({
     wallet: Object,
-    form: Object,
+    startDate: String,
+    endDate: String,
     periodLabel: String,
 })
 
-const emit = defineEmits(['clear-filters', 'open-date-picker'])
+const emit = defineEmits(['clear-filters', 'open-date-picker', 'update:startDate', 'update:endDate'])
 </script>
 
 <template>
@@ -36,10 +37,11 @@ const emit = defineEmits(['clear-filters', 'open-date-picker'])
                     </label>
 
                     <input
-                        v-model="form.start_date"
+                        :value="startDate"
                         type="date"
-                        :max="form.end_date || undefined"
+                        :max="endDate || undefined"
                         class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                        @input="emit('update:startDate', $event.target.value)"
                         @click="emit('open-date-picker', $event)"
                     >
                 </div>
@@ -50,10 +52,11 @@ const emit = defineEmits(['clear-filters', 'open-date-picker'])
                     </label>
 
                     <input
-                        v-model="form.end_date"
+                        :value="endDate"
                         type="date"
-                        :min="form.start_date || undefined"
+                        :min="startDate || undefined"
                         class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                        @input="emit('update:endDate', $event.target.value)"
                         @click="emit('open-date-picker', $event)"
                     >
                 </div>
