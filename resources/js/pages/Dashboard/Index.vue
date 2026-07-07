@@ -23,7 +23,8 @@ const dashboard = useDashboard(props)
         <div class="space-y-6 p-6">
             <DashboardHero
                 :wallet="wallet"
-                :form="dashboard.form"
+                v-model:start-date="dashboard.form.start_date"
+                v-model:end-date="dashboard.form.end_date"
                 :period-label="dashboard.periodLabel.value"
                 @clear-filters="dashboard.clearFilters"
                 @open-date-picker="dashboard.openDatePicker"
