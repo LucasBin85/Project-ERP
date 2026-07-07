@@ -9,7 +9,14 @@ defineProps({
     canSubmit: Boolean,
 })
 
-const emit = defineEmits(['submit', 'update-only-numbers', 'update-opening-balance'])
+const emit = defineEmits([
+    'submit',
+    'update-name',
+    'update-account-type',
+    'update-opening-balance-date',
+    'update-only-numbers',
+    'update-opening-balance',
+])
 </script>
 
 <template>
@@ -18,10 +25,11 @@ const emit = defineEmits(['submit', 'update-only-numbers', 'update-opening-balan
             <div>
                 <label class="mb-1 block text-sm font-semibold text-gray-300">Nome/Banco</label>
                 <input
-                    v-model="form.name"
+                    :value="form.name"
                     class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
                     :class="isDuplicateName ? 'border-red-500' : ''"
                     placeholder="Ex: Banco Nubank"
+                    @input="emit('update-name', $event.target.value)"
                 />
                 <p v-if="isDuplicateName" class="mt-1 text-sm text-red-400">
                     Já existe uma conta bancária com esse nome.
@@ -33,10 +41,10 @@ const emit = defineEmits(['submit', 'update-only-numbers', 'update-opening-balan
                 <label class="mb-1 block text-sm font-semibold text-gray-300">Código do banco</label>
                 <input
                     :value="form.bank_code"
-                    @input="emit('update-only-numbers', 'bank_code', $event)"
                     class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
                     placeholder="Ex: 260"
                     inputmode="numeric"
+                    @input="emit('update-only-numbers', 'bank_code', $event)"
                 />
                 <p class="mt-1 text-sm text-red-400">{{ form.errors.bank_code }}</p>
             </div>
@@ -44,11 +52,11 @@ const emit = defineEmits(['submit', 'update-only-numbers', 'update-opening-balan
             <div>
                 <label class="mb-1 block text-sm font-semibold text-gray-300">Agência</label>
                 <input
-                    v-model="form.agency"
-                    @input="emit('update-only-numbers', 'agency', $event)"
+                    :value="form.agency"
                     class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
                     placeholder="Ex: 0001"
                     inputmode="numeric"
+                    @input="emit('update-only-numbers', 'agency', $event)"
                 />
                 <p class="mt-1 text-sm text-red-400">{{ form.errors.agency }}</p>
             </div>
@@ -56,12 +64,12 @@ const emit = defineEmits(['submit', 'update-only-numbers', 'update-opening-balan
             <div>
                 <label class="mb-1 block text-sm font-semibold text-gray-300">Número da conta</label>
                 <input
-                    v-model="form.account_number"
-                    @input="emit('update-only-numbers', 'account_number', $event)"
+                    :value="form.account_number"
                     class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
                     :class="isDuplicateBankAccount ? 'border-red-500' : ''"
                     placeholder="Ex: 123456"
                     inputmode="numeric"
+                    @input="emit('update-only-numbers', 'account_number', $event)"
                 />
                 <p v-if="isDuplicateBankAccount" class="mt-1 text-sm text-red-400">
                     Já existe uma conta bancária com este código, agência e número.
@@ -72,8 +80,9 @@ const emit = defineEmits(['submit', 'update-only-numbers', 'update-opening-balan
             <div>
                 <label class="mb-1 block text-sm font-semibold text-gray-300">Tipo</label>
                 <select
-                    v-model="form.account_type"
+                    :value="form.account_type"
                     class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
+                    @change="emit('update-account-type', $event.target.value)"
                 >
                     <option value="checking">Conta Corrente</option>
                     <option value="savings">Poupança</option>
@@ -88,8 +97,8 @@ const emit = defineEmits(['submit', 'update-only-numbers', 'update-opening-balan
                 <label class="mb-1 block text-sm font-semibold text-gray-300">Saldo inicial</label>
                 <input
                     :value="form.opening_balance"
-                    @input="emit('update-opening-balance', $event)"
                     class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
+                    @input="emit('update-opening-balance', $event)"
                 />
                 <p class="mt-1 text-sm text-red-400">{{ form.errors.opening_balance_cents }}</p>
             </div>
@@ -97,9 +106,10 @@ const emit = defineEmits(['submit', 'update-only-numbers', 'update-opening-balan
             <div>
                 <label class="mb-1 block text-sm font-semibold text-gray-300">Data do saldo inicial</label>
                 <input
-                    v-model="form.opening_balance_date"
+                    :value="form.opening_balance_date"
                     type="date"
                     class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
+                    @input="emit('update-opening-balance-date', $event.target.value)"
                 />
                 <p class="mt-1 text-sm text-red-400">{{ form.errors.opening_balance_date }}</p>
             </div>
