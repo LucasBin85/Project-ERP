@@ -8,7 +8,7 @@ const props = defineProps<{
   groupNumber: number
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'create-child', node: TreeNode): void
   (e: 'create-bank-account'): void
   (e: 'edit', node: TreeNode): void
