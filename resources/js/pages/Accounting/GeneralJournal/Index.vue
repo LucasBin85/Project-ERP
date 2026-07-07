@@ -30,7 +30,9 @@ const journal = useGeneralJournalIndex(props)
 
             <ReportSection>
                 <GeneralJournalFilters
-                    :form="journal.form"
+                    v-model:source="journal.form.source"
+                    v-model:status="journal.form.status"
+                    v-model:search="journal.form.search"
                     :sources="sources"
                     :statuses="statuses"
                 />
