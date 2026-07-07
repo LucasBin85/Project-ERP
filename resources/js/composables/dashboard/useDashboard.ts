@@ -24,11 +24,9 @@ export function useDashboard(props) {
     )
 
     function openDatePicker(event) {
-        try {
-            if (typeof event?.target?.showPicker === 'function') {
-                event.target.showPicker()
-            }
-        } catch {}
+        if (typeof event?.target?.showPicker !== 'function') return
+
+        event.target.showPicker()
     }
 
     function clearFilters() {
