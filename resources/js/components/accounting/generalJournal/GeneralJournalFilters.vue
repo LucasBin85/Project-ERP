@@ -1,9 +1,13 @@
 <script setup>
 defineProps({
-    form: Object,
+    source: String,
+    status: String,
+    search: String,
     sources: Array,
     statuses: Array,
 })
+
+const emit = defineEmits(['update:source', 'update:status', 'update:search'])
 </script>
 
 <template>
@@ -14,17 +18,18 @@ defineProps({
             </label>
 
             <select
-                v-model="form.source"
+                :value="source"
                 class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                @change="emit('update:source', $event.target.value)"
             >
                 <option value="">Todas</option>
 
                 <option
-                    v-for="source in sources"
-                    :key="source.value"
-                    :value="source.value"
+                    v-for="sourceOption in sources"
+                    :key="sourceOption.value"
+                    :value="sourceOption.value"
                 >
-                    {{ source.label }}
+                    {{ sourceOption.label }}
                 </option>
             </select>
         </div>
@@ -35,17 +40,18 @@ defineProps({
             </label>
 
             <select
-                v-model="form.status"
+                :value="status"
                 class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                @change="emit('update:status', $event.target.value)"
             >
                 <option value="">Todos</option>
 
                 <option
-                    v-for="status in statuses"
-                    :key="status.value"
-                    :value="status.value"
+                    v-for="statusOption in statuses"
+                    :key="statusOption.value"
+                    :value="statusOption.value"
                 >
-                    {{ status.label }}
+                    {{ statusOption.label }}
                 </option>
             </select>
         </div>
@@ -56,10 +62,11 @@ defineProps({
             </label>
 
             <input
-                v-model="form.search"
+                :value="search"
                 type="text"
                 placeholder="Descrição..."
                 class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                @input="emit('update:search', $event.target.value)"
             />
         </div>
     </div>
