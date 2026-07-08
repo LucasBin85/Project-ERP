@@ -1,22 +1,25 @@
 <script setup lang="ts">
 defineProps<{
-    form: Record<string, any>;
+    bankAccountId: string;
+    search: string;
     bankAccounts: Array<Record<string, any>>;
 }>();
 
 const emit = defineEmits<{
-    submit: [];
+    'update:bankAccountId': [value: string];
+    'update:search': [value: string];
     clear: [];
 }>();
 </script>
 
 <template>
-    <form class="grid grid-cols-1 gap-4 p-6 lg:grid-cols-5" @submit.prevent="emit('submit')">
+    <div class="grid w-full grid-cols-1 gap-4 lg:grid-cols-3">
         <div class="lg:col-span-2">
             <label class="mb-1 block text-sm font-semibold text-gray-300">Conta bancária</label>
             <select
-                v-model="form.bank_account_id"
-                class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
+                :value="bankAccountId"
+                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                @change="emit('update:bankAccountId', ($event.target as HTMLSelectElement).value)"
             >
                 <option value="">Selecione uma conta</option>
                 <option
@@ -30,47 +33,25 @@ const emit = defineEmits<{
         </div>
 
         <div>
-            <label class="mb-1 block text-sm font-semibold text-gray-300">Data inicial</label>
-            <input
-                v-model="form.start_date"
-                type="date"
-                class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
-            />
-        </div>
+            <label class="mb-1 block text-sm font-semibold text-gray-300">Busca</label>
+            <div class="flex gap-2">
+                <input
+                    :value="search"
+                    type="text"
+                    class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                    placeholder="Descrição..."
+                    @input="emit('update:search', ($event.target as HTMLInputElement).value)"
+                />
 
-        <div>
-            <label class="mb-1 block text-sm font-semibold text-gray-300">Data final</label>
-            <input
-                v-model="form.end_date"
-                type="date"
-                class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
-            />
+                <button
+                    type="button"
+                    class="rounded-lg border border-gray-700 px-3 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                    title="Limpar filtros"
+                    @click="emit('clear')"
+                >
+                    Limpar
+                </button>
+            </div>
         </div>
-
-        <div>
-            <label class="mb-1 block text-sm font-semibold text-gray-300">Buscar</label>
-            <input
-                v-model="form.search"
-                class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
-                placeholder="Descrição"
-            />
-        </div>
-
-        <div class="flex gap-3 lg:col-span-5 lg:justify-end">
-            <button
-                type="button"
-                class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
-                @click="emit('clear')"
-            >
-                Limpar
-            </button>
-
-            <button
-                type="submit"
-                class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-            >
-                Aplicar filtros
-            </button>
-        </div>
-    </form>
+    </div>
 </template>
