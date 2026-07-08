@@ -87,9 +87,8 @@ export const mainNavItems: NavItem[] = [
             },
             {
                 title: 'Extrato Bancário',
+                href: route('bank-statements.index'),
                 icon: Receipt,
-                disabled: true,
-                badge: 'Em breve',
             },
             {
                 title: 'Conciliação',
