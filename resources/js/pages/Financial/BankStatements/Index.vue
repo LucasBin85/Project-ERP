@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import BankStatementDateRangeFilter from '@/components/financial/bankStatements/BankStatementDateRangeFilter.vue';
 import BankStatementFilters from '@/components/financial/bankStatements/BankStatementFilters.vue';
 import BankStatementSummary from '@/components/financial/bankStatements/BankStatementSummary.vue';
 import BankStatementTable from '@/components/financial/bankStatements/BankStatementTable.vue';
-import DateRangeFilter from '@/components/filters/DateRangeFilter.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import { useBankStatementIndex } from '@/composables/financial/useBankStatementIndex';
@@ -24,11 +24,6 @@ const bankStatement = useBankStatementIndex(props.filters as any);
 <template>
     <AppLayout title="Extrato Bancário">
         <ReportPage title="Extrato Bancário" :subtitle="props.wallet?.name">
-            <DateRangeFilter
-                v-model:start="bankStatement.form.start_date"
-                v-model:end="bankStatement.form.end_date"
-            />
-
             <ReportSection>
                 <template #header>
                     <div>
@@ -50,6 +45,12 @@ const bankStatement = useBankStatementIndex(props.filters as any);
                 />
             </ReportSection>
 
+            <BankStatementDateRangeFilter
+                v-model:start="bankStatement.form.start_date"
+                v-model:end="bankStatement.form.end_date"
+                :max-end="bankStatement.maxEndDate.value"
+            />
+
             <div
                 v-if="!statementReady"
                 class="rounded-xl border border-dashed border-gray-700 bg-gray-900/50 p-8 text-center"
@@ -59,7 +60,7 @@ const bankStatement = useBankStatementIndex(props.filters as any);
                 </h2>
 
                 <p class="mt-2 text-sm text-gray-400">
-                    As datas já vêm preenchidas automaticamente. Depois de selecionar a conta, os filtros passam a atualizar a tela de forma dinâmica.
+                    O período já vem preenchido com o mês atual. Depois de selecionar a conta, os filtros passam a atualizar a tela de forma dinâmica.
                 </p>
             </div>
 
