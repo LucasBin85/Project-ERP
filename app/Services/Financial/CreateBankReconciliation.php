@@ -36,10 +36,21 @@ class CreateBankReconciliation
                 ->pluck('journal_line_id')
                 ->filter()
                 ->map(fn ($id) => (int) $id)
-                ->unique()
                 ->values();
 
-            $invalidIds = $linkedLineIds->reject(fn (int $id) => $availableLines->has($id));
+            $duplicatedLinkedIds = $linkedLineIds
+                ->duplicates()
+                ->values();
+
+            if ($duplicatedLinkedIds->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'statement_items' => 'Um mesmo lançamento do sistema não pode ser vinculado a mais de um item do extrato.',
+                ]);
+            }
+
+            $invalidIds = $linkedLineIds
+                ->unique()
+                ->reject(fn (int $id) => $availableLines->has($id));
 
             if ($invalidIds->isNotEmpty()) {
                 throw ValidationException::withMessages([
@@ -47,12 +58,18 @@ class CreateBankReconciliation
                 ]);
             }
 
+            $statementMovementCents = collect($dto->statementItems)
+                ->sum('amount_cents');
+
+            $statementBalanceCents = (int) $preview['opening_balance_cents'] + (int) $statementMovementCents;
+
             $reconciledMovementCents = $linkedLineIds
+                ->unique()
                 ->map(fn (int $id) => $availableLines->get($id))
                 ->sum('signed_amount_cents');
 
             $reconciledBalanceCents = (int) $preview['opening_balance_cents'] + (int) $reconciledMovementCents;
-            $differenceCents = $reconciledBalanceCents - $dto->statementBalanceCents;
+            $differenceCents = $reconciledBalanceCents - $statementBalanceCents;
 
             $hasPendingItems = collect($dto->statementItems)
                 ->contains(fn (array $item) => empty($item['journal_line_id']));
@@ -65,7 +82,7 @@ class CreateBankReconciliation
                 'period_start' => $dto->periodStart,
                 'period_end' => $dto->periodEnd,
                 'opening_balance_cents' => $preview['opening_balance_cents'],
-                'statement_balance_cents' => $dto->statementBalanceCents,
+                'statement_balance_cents' => $statementBalanceCents,
                 'book_balance_cents' => $preview['book_balance_cents'],
                 'reconciled_balance_cents' => $reconciledBalanceCents,
                 'difference_cents' => $differenceCents,
@@ -78,7 +95,7 @@ class CreateBankReconciliation
                 $linkedLineId = $statementItem['journal_line_id'] ?? null;
                 $status = $linkedLineId ? 'reconciled' : 'pending';
 
-                $createdStatementItem = $reconciliation->statementItems()->create([
+                $reconciliation->statementItems()->create([
                     'journal_line_id' => $linkedLineId,
                     'transaction_date' => $statementItem['transaction_date'],
                     'description' => $statementItem['description'],
