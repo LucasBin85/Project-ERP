@@ -21,15 +21,15 @@ class BankStatementController extends Controller
 
         $rawFilters = [
             'bank_account_id' => $request->string('bank_account_id')->toString(),
-            'start_date' => $request->string('start_date')->toString(),
-            'end_date' => $request->string('end_date')->toString(),
+            'start_date' => $request->query('start_date') ?: now()->startOfYear()->toDateString(),
+            'end_date' => $request->query('end_date') ?: now()->toDateString(),
             'search' => $request->string('search')->toString(),
         ];
 
         $validated = validator($rawFilters, [
             'bank_account_id' => ['nullable', 'integer'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'start_date' => ['required', 'date'],
+            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
             'search' => ['nullable', 'string', 'max:255'],
         ])->validate();
 
