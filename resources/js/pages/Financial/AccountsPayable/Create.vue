@@ -1,0 +1,133 @@
+<script setup lang="ts">
+import ReportPage from '@/components/reports/ReportPage.vue';
+import ReportSection from '@/components/reports/ReportSection.vue';
+import { useAccountPayableCreate } from '@/composables/financial/useAccountPayableCreate';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { Link } from '@inertiajs/vue3';
+import { route } from 'ziggy-js';
+
+const props = defineProps<{
+    wallet: Record<string, any>;
+    expenseAccounts: Array<Record<string, any>>;
+}>();
+
+const accountPayable = useAccountPayableCreate();
+
+function submit() {
+    if (!accountPayable.canSubmit.value) {
+        return;
+    }
+
+    accountPayable.form.post(route('accounts-payable.store'));
+}
+</script>
+
+<template>
+    <AppLayout title="Nova Conta a Pagar">
+        <ReportPage title="Nova Conta a Pagar" :subtitle="props.wallet?.name">
+            <ReportSection>
+                <template #header>
+                    <div>
+                        <h2 class="text-lg font-bold text-white">
+                            Dados do título
+                        </h2>
+
+                        <p class="mt-1 text-sm text-gray-400">
+                            O cadastro cria apenas o controle financeiro. O lançamento contábil será gerado no pagamento.
+                        </p>
+                    </div>
+                </template>
+
+                <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Fornecedor / Beneficiário</label>
+                        <input
+                            v-model="accountPayable.form.payee_name"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            placeholder="Ex: CEEE"
+                        />
+                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.payee_name }}</p>
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de despesa</label>
+                        <select
+                            v-model="accountPayable.form.expense_account_id"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                        >
+                            <option value="">Selecione uma despesa</option>
+                            <option
+                                v-for="account in expenseAccounts"
+                                :key="account.id"
+                                :value="account.id"
+                            >
+                                {{ account.label }}
+                            </option>
+                        </select>
+                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.expense_account_id }}</p>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Descrição</label>
+                        <input
+                            v-model="accountPayable.form.description"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            placeholder="Ex: Conta de energia julho"
+                        />
+                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.description }}</p>
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Vencimento</label>
+                        <input
+                            v-model="accountPayable.form.due_date"
+                            type="date"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]"
+                        />
+                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.due_date }}</p>
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Valor</label>
+                        <input
+                            :value="accountPayable.form.amount"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            placeholder="R$ 0,00"
+                            inputmode="numeric"
+                            @input="accountPayable.updateAmount"
+                        />
+                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.amount_cents }}</p>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Observações</label>
+                        <textarea
+                            v-model="accountPayable.form.notes"
+                            rows="3"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            placeholder="Opcional"
+                        />
+                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.notes }}</p>
+                    </div>
+
+                    <div class="md:col-span-2 flex justify-end gap-3">
+                        <Link
+                            :href="route('accounts-payable.index')"
+                            class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                        >
+                            Cancelar
+                        </Link>
+
+                        <button
+                            type="submit"
+                            :disabled="!accountPayable.canSubmit.value || accountPayable.form.processing"
+                            class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            Salvar conta a pagar
+                        </button>
+                    </div>
+                </form>
+            </ReportSection>
+        </ReportPage>
+    </AppLayout>
+</template>
