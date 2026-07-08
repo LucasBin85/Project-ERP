@@ -1,41 +1,50 @@
+import { useAutoFilters } from '@/composables/useAutoFilters';
+import { useDateRangeFilter } from '@/composables/useDateRangeFilter';
 import { router } from '@inertiajs/vue3';
-import { reactive } from 'vue';
 import { route } from 'ziggy-js';
 
 type BankStatementFilters = {
-    bank_account_id: string;
-    start_date: string;
-    end_date: string;
-    search: string;
+    bank_account_id?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    search?: string | null;
 };
 
+function todayLocal(): string {
+    const today = new Date();
+
+    return [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, '0'),
+        String(today.getDate()).padStart(2, '0'),
+    ].join('-');
+}
+
+function startOfYearLocal(): string {
+    const today = new Date();
+
+    return `${today.getFullYear()}-01-01`;
+}
+
 export function useBankStatementIndex(filters: BankStatementFilters) {
-    const form = reactive({
+    const { form } = useDateRangeFilter(filters);
+
+    Object.assign(form, {
         bank_account_id: filters.bank_account_id ?? '',
-        start_date: filters.start_date ?? '',
-        end_date: filters.end_date ?? '',
         search: filters.search ?? '',
     });
 
-    function cleanFilters() {
-        return Object.fromEntries(
-            Object.entries(form).filter(([, value]) => String(value ?? '').trim() !== ''),
-        );
-    }
-
-    function applyFilters() {
-        router.get(route('bank-statements.index'), cleanFilters(), {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-        });
-    }
+    useAutoFilters(form, 'bank-statements.index', {
+        beforeFilter: () => Boolean(form.bank_account_id && form.start_date && form.end_date),
+    });
 
     function clearFilters() {
-        form.bank_account_id = '';
-        form.start_date = '';
-        form.end_date = '';
-        form.search = '';
+        Object.assign(form, {
+            bank_account_id: '',
+            start_date: startOfYearLocal(),
+            end_date: todayLocal(),
+            search: '',
+        });
 
         router.get(route('bank-statements.index'), {}, {
             preserveState: true,
@@ -46,7 +55,6 @@ export function useBankStatementIndex(filters: BankStatementFilters) {
 
     return {
         form,
-        applyFilters,
         clearFilters,
     };
 }
