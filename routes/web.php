@@ -14,6 +14,7 @@ use App\Http\Controllers\Accounting\TrialBalanceController;
 use App\Http\Controllers\Accounting\IncomeStatementController;
 use App\Http\Controllers\Accounting\BalanceSheetController;
 use App\Http\Controllers\Financial\BankAccountController;
+use App\Http\Controllers\Financial\BankTransferController;
 
 
 
@@ -82,8 +83,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 
     Route::prefix('financial')->group(function () {
-    Route::resource('bank-accounts', BankAccountController::class)
-        ->only(['index', 'create', 'store']);
+        Route::resource('bank-accounts', BankAccountController::class)
+            ->only(['index', 'create', 'store']);
+
+        Route::resource('bank-transfers', BankTransferController::class)
+            ->only(['index', 'create', 'store', 'show']);
     });
 
 });
@@ -104,5 +108,3 @@ Route::get('/check-auth', function () {
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';
-
-
