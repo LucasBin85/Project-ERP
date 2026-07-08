@@ -82,9 +82,8 @@ export const mainNavItems: NavItem[] = [
             },
             {
                 title: 'Transferências',
+                href: route('bank-transfers.index'),
                 icon: Banknote,
-                disabled: true,
-                badge: 'Em breve',
             },
             {
                 title: 'Extrato Bancário',
