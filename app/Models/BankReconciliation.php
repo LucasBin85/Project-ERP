@@ -48,4 +48,9 @@ class BankReconciliation extends Model
     {
         return $this->hasMany(BankReconciliationItem::class);
     }
+
+    public function statementItems(): HasMany
+    {
+        return $this->hasMany(BankReconciliationStatementItem::class);
+    }
 }
