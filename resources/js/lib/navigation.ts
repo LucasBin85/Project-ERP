@@ -92,9 +92,8 @@ export const mainNavItems: NavItem[] = [
             },
             {
                 title: 'Conciliação',
+                href: route('bank-reconciliations.index'),
                 icon: ClipboardCheck,
-                disabled: true,
-                badge: 'Em breve',
             },
             {
                 title: 'Contas a Pagar',
