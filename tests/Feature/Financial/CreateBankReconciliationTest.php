@@ -11,7 +11,7 @@ use Tests\Helpers\FinancialTestHelper;
 
 uses(RefreshDatabase::class);
 
-it('creates a completed reconciliation when selected movements match statement balance', function () {
+it('creates a completed reconciliation when statement items match system movements', function () {
     $user = User::factory()->create();
 
     $wallet = Wallet::query()->create([
@@ -44,13 +44,13 @@ it('creates a completed reconciliation when selected movements match statement b
         [$bankAccount->chartOfAccount, 'credit', 12000],
     ]);
 
-    $bankLineIds = JournalLine::query()
+    $bankLines = JournalLine::query()
         ->where('chart_of_account_id', $bankAccount->chart_of_account_id)
         ->whereHas('journalEntry', fn ($query) => $query
             ->whereDate('entry_date', '>=', '2026-07-01')
             ->whereDate('entry_date', '<=', '2026-07-31'))
-        ->pluck('id')
-        ->all();
+        ->orderBy('id')
+        ->get();
 
     $reconciliation = app(CreateBankReconciliation::class)->execute(
         $wallet,
@@ -59,7 +59,20 @@ it('creates a completed reconciliation when selected movements match statement b
             periodStart: '2026-07-01',
             periodEnd: '2026-07-31',
             statementBalanceCents: 138000,
-            journalLineIds: $bankLineIds,
+            statementItems: [
+                [
+                    'transaction_date' => '2026-07-01',
+                    'description' => 'PIX recebido',
+                    'amount_cents' => 50000,
+                    'journal_line_id' => $bankLines[0]->id,
+                ],
+                [
+                    'transaction_date' => '2026-07-02',
+                    'description' => 'Pagamento despesa',
+                    'amount_cents' => -12000,
+                    'journal_line_id' => $bankLines[1]->id,
+                ],
+            ],
         ),
     );
 
@@ -69,7 +82,9 @@ it('creates a completed reconciliation when selected movements match statement b
         ->and($reconciliation->reconciled_balance_cents)->toBe(138000)
         ->and($reconciliation->statement_balance_cents)->toBe(138000)
         ->and($reconciliation->difference_cents)->toBe(0)
-        ->and($reconciliation->items)->toHaveCount(2);
+        ->and($reconciliation->items)->toHaveCount(2)
+        ->and($reconciliation->statementItems)->toHaveCount(2)
+        ->and($reconciliation->statementItems->pluck('status')->unique()->values()->all())->toBe(['reconciled']);
 });
 
 it('keeps reconciliation as draft when there is a difference', function () {
@@ -99,13 +114,12 @@ it('keeps reconciliation as draft when there is a difference', function () {
         [$revenue, 'credit', 50000],
     ]);
 
-    $bankLineIds = JournalLine::query()
+    $bankLine = JournalLine::query()
         ->where('chart_of_account_id', $bankAccount->chart_of_account_id)
         ->whereHas('journalEntry', fn ($query) => $query
             ->whereDate('entry_date', '>=', '2026-07-01')
             ->whereDate('entry_date', '<=', '2026-07-31'))
-        ->pluck('id')
-        ->all();
+        ->firstOrFail();
 
     $reconciliation = app(CreateBankReconciliation::class)->execute(
         $wallet,
@@ -114,7 +128,14 @@ it('keeps reconciliation as draft when there is a difference', function () {
             periodStart: '2026-07-01',
             periodEnd: '2026-07-31',
             statementBalanceCents: 140000,
-            journalLineIds: $bankLineIds,
+            statementItems: [
+                [
+                    'transaction_date' => '2026-07-01',
+                    'description' => 'PIX recebido parcial no banco',
+                    'amount_cents' => 40000,
+                    'journal_line_id' => $bankLine->id,
+                ],
+            ],
         ),
     );
 
@@ -122,5 +143,51 @@ it('keeps reconciliation as draft when there is a difference', function () {
         ->and($reconciliation->opening_balance_cents)->toBe(100000)
         ->and($reconciliation->reconciled_balance_cents)->toBe(150000)
         ->and($reconciliation->statement_balance_cents)->toBe(140000)
-        ->and($reconciliation->difference_cents)->toBe(10000);
+        ->and($reconciliation->difference_cents)->toBe(10000)
+        ->and($reconciliation->statementItems)->toHaveCount(1)
+        ->and($reconciliation->statementItems->first()->status)->toBe('reconciled');
+});
+
+it('keeps reconciliation as draft when a statement item is pending', function () {
+    $user = User::factory()->create();
+
+    $wallet = Wallet::query()->create([
+        'user_id' => $user->id,
+        'name' => 'Carteira Teste',
+    ]);
+
+    $bankAccount = FinancialTestHelper::bankAccount(
+        wallet: $wallet,
+        code: '1.1.2.001',
+        name: 'Banco Principal',
+    );
+
+    $capital = AccountingTestHelper::account($wallet, '3.1', 'Capital Social', 'patrimonio', 'credit');
+
+    AccountingTestHelper::createPostedEntry($wallet, '2026-06-30', [
+        [$bankAccount->chartOfAccount, 'debit', 100000],
+        [$capital, 'credit', 100000],
+    ]);
+
+    $reconciliation = app(CreateBankReconciliation::class)->execute(
+        $wallet,
+        new BankReconciliationDTO(
+            bankAccountId: $bankAccount->id,
+            periodStart: '2026-07-01',
+            periodEnd: '2026-07-31',
+            statementBalanceCents: 100000,
+            statementItems: [
+                [
+                    'transaction_date' => '2026-07-03',
+                    'description' => 'Tarifa não lançada no ERP',
+                    'amount_cents' => -1500,
+                    'journal_line_id' => null,
+                ],
+            ],
+        ),
+    );
+
+    expect($reconciliation->status)->toBe('draft')
+        ->and($reconciliation->statementItems)->toHaveCount(1)
+        ->and($reconciliation->statementItems->first()->status)->toBe('pending');
 });
