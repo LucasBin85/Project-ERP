@@ -122,8 +122,11 @@ class BankReconciliationController extends Controller
             'period_start' => ['required', 'date'],
             'period_end' => ['required', 'date', 'after_or_equal:period_start'],
             'statement_balance_cents' => ['required', 'integer'],
-            'journal_line_ids' => ['nullable', 'array'],
-            'journal_line_ids.*' => ['integer'],
+            'statement_items' => ['required', 'array', 'min:1'],
+            'statement_items.*.transaction_date' => ['required', 'date'],
+            'statement_items.*.description' => ['required', 'string', 'max:255'],
+            'statement_items.*.amount_cents' => ['required', 'integer', 'not_in:0'],
+            'statement_items.*.journal_line_id' => ['nullable', 'integer'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
@@ -142,6 +145,7 @@ class BankReconciliationController extends Controller
 
         $bankReconciliation->load([
             'bankAccount',
+            'statementItems.journalLine.journalEntry',
             'items.journalLine.journalEntry',
         ]);
 
