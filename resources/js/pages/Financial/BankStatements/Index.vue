@@ -2,6 +2,7 @@
 import BankStatementFilters from '@/components/financial/bankStatements/BankStatementFilters.vue';
 import BankStatementSummary from '@/components/financial/bankStatements/BankStatementSummary.vue';
 import BankStatementTable from '@/components/financial/bankStatements/BankStatementTable.vue';
+import DateRangeFilter from '@/components/filters/DateRangeFilter.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import { useBankStatementIndex } from '@/composables/financial/useBankStatementIndex';
@@ -23,6 +24,11 @@ const bankStatement = useBankStatementIndex(props.filters as any);
 <template>
     <AppLayout title="Extrato Bancário">
         <ReportPage title="Extrato Bancário" :subtitle="props.wallet?.name">
+            <DateRangeFilter
+                v-model:start="bankStatement.form.start_date"
+                v-model:end="bankStatement.form.end_date"
+            />
+
             <ReportSection>
                 <template #header>
                     <div>
@@ -31,15 +37,15 @@ const bankStatement = useBankStatementIndex(props.filters as any);
                         </h2>
 
                         <p class="mt-1 text-sm text-gray-400">
-                            Selecione uma conta bancária e um período para visualizar as movimentações.
+                            Selecione uma conta bancária. O extrato será atualizado automaticamente ao alterar os filtros.
                         </p>
                     </div>
                 </template>
 
                 <BankStatementFilters
-                    :form="bankStatement.form"
+                    v-model:bank-account-id="bankStatement.form.bank_account_id"
+                    v-model:search="bankStatement.form.search"
                     :bank-accounts="bankAccounts"
-                    @submit="bankStatement.applyFilters"
                     @clear="bankStatement.clearFilters"
                 />
             </ReportSection>
@@ -49,11 +55,11 @@ const bankStatement = useBankStatementIndex(props.filters as any);
                 class="rounded-xl border border-dashed border-gray-700 bg-gray-900/50 p-8 text-center"
             >
                 <h2 class="text-lg font-bold text-white">
-                    Informe os filtros para gerar o extrato
+                    Selecione uma conta bancária para gerar o extrato
                 </h2>
 
                 <p class="mt-2 text-sm text-gray-400">
-                    O extrato utiliza os lançamentos contábeis postados da conta bancária selecionada.
+                    As datas já vêm preenchidas automaticamente. Depois de selecionar a conta, os filtros passam a atualizar a tela de forma dinâmica.
                 </p>
             </div>
 
