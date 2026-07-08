@@ -16,6 +16,7 @@ use App\Http\Controllers\Accounting\BalanceSheetController;
 use App\Http\Controllers\Financial\BankAccountController;
 use App\Http\Controllers\Financial\BankTransferController;
 use App\Http\Controllers\Financial\BankStatementController;
+use App\Http\Controllers\Financial\BankReconciliationController;
 
 
 
@@ -92,6 +93,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('bank-statements', [BankStatementController::class, 'index'])
             ->name('bank-statements.index');
+
+        Route::resource('bank-reconciliations', BankReconciliationController::class)
+            ->only(['index', 'create', 'store', 'show']);
     });
 
 });
