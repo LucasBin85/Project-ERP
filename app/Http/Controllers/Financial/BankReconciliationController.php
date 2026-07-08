@@ -65,7 +65,7 @@ class BankReconciliationController extends Controller
             ->values();
 
         $filters = [
-            'bank_account_id' => $request->string('bank_account_id')->toString(),
+            'bank_account_id' => $request->query('bank_account_id') ?: null,
             'period_start' => $request->query('period_start') ?: now()->startOfMonth()->toDateString(),
             'period_end' => $request->query('period_end') ?: now()->toDateString(),
         ];
