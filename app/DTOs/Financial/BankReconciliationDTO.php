@@ -5,14 +5,14 @@ namespace App\DTOs\Financial;
 final readonly class BankReconciliationDTO
 {
     /**
-     * @param array<int> $journalLineIds
+     * @param array<int, array{transaction_date: string, description: string, amount_cents: int, journal_line_id?: int|null}> $statementItems
      */
     public function __construct(
         public int $bankAccountId,
         public string $periodStart,
         public string $periodEnd,
         public int $statementBalanceCents,
-        public array $journalLineIds = [],
+        public array $statementItems = [],
         public ?string $notes = null,
     ) {
     }
@@ -24,7 +24,15 @@ final readonly class BankReconciliationDTO
             periodStart: (string) $data['period_start'],
             periodEnd: (string) $data['period_end'],
             statementBalanceCents: (int) $data['statement_balance_cents'],
-            journalLineIds: array_values(array_map('intval', $data['journal_line_ids'] ?? [])),
+            statementItems: collect($data['statement_items'] ?? [])
+                ->map(fn (array $item) => [
+                    'transaction_date' => (string) $item['transaction_date'],
+                    'description' => trim((string) $item['description']),
+                    'amount_cents' => (int) $item['amount_cents'],
+                    'journal_line_id' => filled($item['journal_line_id'] ?? null) ? (int) $item['journal_line_id'] : null,
+                ])
+                ->values()
+                ->all(),
             notes: isset($data['notes']) ? trim((string) $data['notes']) : null,
         );
     }
