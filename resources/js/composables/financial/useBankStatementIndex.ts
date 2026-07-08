@@ -1,6 +1,6 @@
 import { useAutoFilters } from '@/composables/useAutoFilters';
 import { router } from '@inertiajs/vue3';
-import { computed, reactive, watch } from 'vue';
+import { reactive, watch } from 'vue';
 import { route } from 'ziggy-js';
 
 type BankStatementFilters = {
@@ -28,24 +28,6 @@ function startOfMonthLocal(): string {
     return formatLocalDate(new Date(today.getFullYear(), today.getMonth(), 1));
 }
 
-function endOfMonthLocal(value: string): string {
-    const [year, month] = value.split('-').map(Number);
-
-    if (!year || !month) {
-        return todayLocal();
-    }
-
-    return formatLocalDate(new Date(year, month, 0));
-}
-
-function minDate(first: string, second: string): string {
-    return first <= second ? first : second;
-}
-
-function sameMonth(first: string, second: string): boolean {
-    return first.substring(0, 7) === second.substring(0, 7);
-}
-
 export function useBankStatementIndex(filters: BankStatementFilters) {
     const form = reactive({
         bank_account_id: filters.bank_account_id ?? '',
@@ -54,8 +36,6 @@ export function useBankStatementIndex(filters: BankStatementFilters) {
         search: filters.search ?? '',
     });
 
-    const maxEndDate = computed(() => minDate(endOfMonthLocal(form.start_date), todayLocal()));
-
     watch(
         () => form.start_date,
         () => {
@@ -63,12 +43,8 @@ export function useBankStatementIndex(filters: BankStatementFilters) {
                 form.start_date = startOfMonthLocal();
             }
 
-            if (!sameMonth(form.start_date, form.end_date) || form.end_date < form.start_date) {
-                form.end_date = minDate(maxEndDate.value, todayLocal());
-            }
-
-            if (form.end_date > maxEndDate.value) {
-                form.end_date = maxEndDate.value;
+            if (form.start_date > form.end_date) {
+                form.end_date = form.start_date;
             }
         },
     );
@@ -80,16 +56,8 @@ export function useBankStatementIndex(filters: BankStatementFilters) {
                 form.end_date = form.start_date;
             }
 
-            if (!sameMonth(form.start_date, form.end_date)) {
-                form.end_date = maxEndDate.value;
-            }
-
             if (form.end_date < form.start_date) {
-                form.end_date = form.start_date;
-            }
-
-            if (form.end_date > maxEndDate.value) {
-                form.end_date = maxEndDate.value;
+                form.start_date = form.end_date;
             }
         },
     );
@@ -115,7 +83,6 @@ export function useBankStatementIndex(filters: BankStatementFilters) {
 
     return {
         form,
-        maxEndDate,
         clearFilters,
     };
 }
