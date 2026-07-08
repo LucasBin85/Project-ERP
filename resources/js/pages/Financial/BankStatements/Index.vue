@@ -48,7 +48,6 @@ const bankStatement = useBankStatementIndex(props.filters as any);
             <BankStatementDateRangeFilter
                 v-model:start="bankStatement.form.start_date"
                 v-model:end="bankStatement.form.end_date"
-                :max-end="bankStatement.maxEndDate.value"
             />
 
             <div
