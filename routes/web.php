@@ -15,6 +15,7 @@ use App\Http\Controllers\Accounting\IncomeStatementController;
 use App\Http\Controllers\Accounting\BalanceSheetController;
 use App\Http\Controllers\Financial\BankAccountController;
 use App\Http\Controllers\Financial\BankTransferController;
+use App\Http\Controllers\Financial\BankStatementController;
 
 
 
@@ -88,6 +89,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::resource('bank-transfers', BankTransferController::class)
             ->only(['index', 'create', 'store', 'show']);
+
+        Route::get('bank-statements', [BankStatementController::class, 'index'])
+            ->name('bank-statements.index');
     });
 
 });
