@@ -97,9 +97,8 @@ export const mainNavItems: NavItem[] = [
             },
             {
                 title: 'Contas a Pagar',
+                href: route('accounts-payable.index'),
                 icon: FileText,
-                disabled: true,
-                badge: 'Em breve',
             },
             {
                 title: 'Contas a Receber',
