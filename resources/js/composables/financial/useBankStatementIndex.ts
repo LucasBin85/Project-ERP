@@ -1,6 +1,7 @@
 import { useAutoFilters } from '@/composables/useAutoFilters';
 import { useDateRangeFilter } from '@/composables/useDateRangeFilter';
 import { router } from '@inertiajs/vue3';
+import { reactive } from 'vue';
 import { route } from 'ziggy-js';
 
 type BankStatementFilters = {
@@ -27,10 +28,12 @@ function startOfYearLocal(): string {
 }
 
 export function useBankStatementIndex(filters: BankStatementFilters) {
-    const { form } = useDateRangeFilter(filters);
+    const { form: dateForm } = useDateRangeFilter(filters);
 
-    Object.assign(form, {
+    const form = reactive({
         bank_account_id: filters.bank_account_id ?? '',
+        start_date: dateForm.start_date,
+        end_date: dateForm.end_date,
         search: filters.search ?? '',
     });
 
