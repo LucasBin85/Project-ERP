@@ -21,7 +21,7 @@ class BankStatementController extends Controller
 
         $rawFilters = [
             'bank_account_id' => $request->string('bank_account_id')->toString(),
-            'start_date' => $request->query('start_date') ?: now()->startOfYear()->toDateString(),
+            'start_date' => $request->query('start_date') ?: now()->startOfMonth()->toDateString(),
             'end_date' => $request->query('end_date') ?: now()->toDateString(),
             'search' => $request->string('search')->toString(),
         ];
@@ -29,7 +29,16 @@ class BankStatementController extends Controller
         $validated = validator($rawFilters, [
             'bank_account_id' => ['nullable', 'integer'],
             'start_date' => ['required', 'date'],
-            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+            'end_date' => [
+                'required',
+                'date',
+                'after_or_equal:start_date',
+                function (string $attribute, mixed $value, \Closure $fail) use ($rawFilters) {
+                    if (substr((string) $rawFilters['start_date'], 0, 7) !== substr((string) $value, 0, 7)) {
+                        $fail('O período do extrato deve estar dentro do mesmo mês.');
+                    }
+                },
+            ],
             'search' => ['nullable', 'string', 'max:255'],
         ])->validate();
 
