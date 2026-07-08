@@ -11,12 +11,18 @@ type ReconciliationFilters = {
 
 type PreviewLine = {
     id: number;
+    date?: string;
+    description?: string;
     signed_amount_cents: number;
+    journal_entry_id?: number;
 };
+
+type MovementType = 'inflow' | 'outflow';
 
 type StatementItem = {
     transaction_date: string;
     description: string;
+    movement_type: MovementType;
     amount: string;
     amount_cents: number;
     journal_line_id: string;
@@ -40,6 +46,16 @@ function startOfMonthLocal(): string {
         String(today.getMonth() + 1).padStart(2, '0'),
         '01',
     ].join('-');
+}
+
+function signedCents(rawValue: unknown, movementType: MovementType): number {
+    const cents = moneyToCents(rawValue);
+
+    return movementType === 'outflow' ? cents * -1 : cents;
+}
+
+function absoluteMoney(value: number): string {
+    return formatMoneyInput(String(Math.abs(value)));
 }
 
 export function useBankReconciliationCreate(filters: ReconciliationFilters, previewLines: PreviewLine[], openingBalanceCents = 0) {
@@ -136,6 +152,7 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
         form.statement_items.push({
             transaction_date: form.period_end || todayLocal(),
             description: '',
+            movement_type: 'outflow',
             amount: '',
             amount_cents: 0,
             journal_line_id: '',
@@ -154,15 +171,27 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
             return;
         }
 
-        item.amount_cents = moneyToCents(target.value);
+        item.amount_cents = signedCents(target.value, item.movement_type);
         item.amount = formatMoneyInput(target.value);
+    }
+
+    function updateStatementItemType(index: number, movementType: MovementType) {
+        const item = form.statement_items[index];
+
+        if (!item) {
+            return;
+        }
+
+        item.movement_type = movementType;
+        item.amount_cents = signedCents(item.amount, movementType);
     }
 
     function applySuggestedStatementItems() {
         form.statement_items = previewLines.map((line) => ({
-            transaction_date: form.period_end || todayLocal(),
-            description: '',
-            amount: formatMoneyInput(String(Math.abs(Number(line.signed_amount_cents ?? 0)))),
+            transaction_date: String(line.date ?? form.period_end ?? todayLocal()).substring(0, 10),
+            description: line.description ?? '',
+            movement_type: Number(line.signed_amount_cents ?? 0) >= 0 ? 'inflow' : 'outflow',
+            amount: absoluteMoney(Number(line.signed_amount_cents ?? 0)),
             amount_cents: Number(line.signed_amount_cents ?? 0),
             journal_line_id: String(line.id),
         }));
@@ -189,6 +218,7 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
         addStatementItem,
         removeStatementItem,
         updateStatementItemAmount,
+        updateStatementItemType,
         applySuggestedStatementItems,
     };
 }
