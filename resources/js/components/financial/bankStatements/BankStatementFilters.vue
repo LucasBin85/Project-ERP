@@ -19,7 +19,7 @@ const emit = defineEmits<{
             <select
                 :value="bankAccountId"
                 class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
-                @change="emit('update:bankAccountId', ($event.target as HTMLSelectElement).value)"
+                @change="emit('update:bankAccountId', $event.target.value)"
             >
                 <option value="">Selecione uma conta</option>
                 <option
@@ -40,7 +40,7 @@ const emit = defineEmits<{
                     type="text"
                     class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
                     placeholder="Descrição..."
-                    @input="emit('update:search', ($event.target as HTMLInputElement).value)"
+                    @input="emit('update:search', $event.target.value)"
                 />
 
                 <button
