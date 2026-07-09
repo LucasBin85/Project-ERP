@@ -31,29 +31,39 @@ class CreditCardController extends Controller
 
         $cards = CreditCard::query()
             ->where('wallet_id', $wallet->id)
-            ->with(['liabilityAccount:id,code,name', 'parentCard:id,name'])
-            ->orderBy('card_type')
+            ->where('card_type', 'main')
+            ->whereNull('parent_card_id')
+            ->with([
+                'liabilityAccount:id,code,name',
+                'bankAccount:id,name,bank_name,bank_code,agency,account_number',
+                'childCards:id,parent_card_id,name,card_type,last_four,is_active',
+            ])
             ->orderBy('issuer_name')
             ->orderBy('name')
             ->get()
-            ->map(fn (CreditCard $card) => [
-                'id' => $card->id,
-                'name' => $card->name,
-                'issuer_name' => $card->issuer_name,
-                'network' => $card->network,
-                'card_type' => $card->card_type,
-                'holder_name' => $card->holder_name,
-                'last_four' => $card->last_four,
-                'closing_day' => $card->closing_day,
-                'due_day' => $card->due_day,
-                'best_purchase_day' => $card->best_purchase_day,
-                'credit_limit_cents' => $card->credit_limit_cents,
-                'current_balance_cents' => $this->currentBalanceCents($wallet->id, $card->liability_account_id),
-                'available_limit_cents' => $card->credit_limit_cents - $this->currentBalanceCents($wallet->id, $card->liability_account_id),
-                'is_active' => $card->is_active,
-                'liability_account' => $card->liabilityAccount,
-                'parent_card' => $card->parentCard,
-            ])
+            ->map(function (CreditCard $card) use ($wallet) {
+                $currentBalance = $this->currentBalanceCents($wallet->id, $card->liability_account_id);
+
+                return [
+                    'id' => $card->id,
+                    'name' => $card->name,
+                    'issuer_name' => $card->issuer_name,
+                    'network' => $card->network,
+                    'card_type' => $card->card_type,
+                    'holder_name' => $card->holder_name,
+                    'last_four' => $card->last_four,
+                    'closing_day' => $card->closing_day,
+                    'due_day' => $card->due_day,
+                    'best_purchase_day' => $card->best_purchase_day,
+                    'credit_limit_cents' => $card->credit_limit_cents,
+                    'current_balance_cents' => $currentBalance,
+                    'available_limit_cents' => $card->credit_limit_cents - $currentBalance,
+                    'is_active' => $card->is_active,
+                    'liability_account' => $card->liabilityAccount,
+                    'bank_account' => $card->bankAccount,
+                    'child_cards' => $card->childCards,
+                ];
+            })
             ->values();
 
         return Inertia::render('Financial/CreditCards/Index', [
@@ -75,6 +85,7 @@ class CreditCardController extends Controller
                 'name' => $wallet->name,
             ],
             'parentCards' => $this->parentCards($wallet->id),
+            'bankAccounts' => $this->bankAccounts($wallet->id),
         ]);
     }
 
@@ -85,9 +96,17 @@ class CreditCardController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'issuer_name' => ['required', 'string', 'max:255'],
+            'bank_account_id' => [
+                'nullable',
+                'required_if:card_type,main',
+                'integer',
+                Rule::exists('bank_accounts', 'id')
+                    ->where('wallet_id', $wallet->id)
+                    ->where('is_active', true),
+            ],
             'network' => ['required', Rule::in(['visa', 'mastercard', 'elo', 'amex', 'hipercard', 'other'])],
             'card_type' => ['required', Rule::in(['main', 'additional', 'virtual'])],
-            'parent_card_id' => ['nullable', 'integer', Rule::exists('credit_cards', 'id')->where('wallet_id', $wallet->id)->where('card_type', 'main')],
+            'parent_card_id' => ['nullable', 'required_unless:card_type,main', 'integer', Rule::exists('credit_cards', 'id')->where('wallet_id', $wallet->id)->where('card_type', 'main')],
             'holder_name' => ['nullable', 'string', 'max:255'],
             'last_four' => ['nullable', 'string', 'size:4'],
             'closing_day' => ['required', 'integer', 'min:1', 'max:31'],
@@ -98,9 +117,10 @@ class CreditCardController extends Controller
         ]);
 
         $creditCard = $service->execute($wallet, CreditCardDTO::fromArray($data));
+        $showCard = $creditCard->parentCard ?: $creditCard;
 
         return redirect()
-            ->route('credit-cards.show', $creditCard)
+            ->route('credit-cards.show', $showCard)
             ->with('success', 'Cartão de crédito cadastrado com sucesso.');
     }
 
@@ -110,16 +130,22 @@ class CreditCardController extends Controller
 
         abort_unless($creditCard->wallet_id === $wallet->id, 404);
 
+        if ($creditCard->parent_card_id) {
+            return redirect()->route('credit-cards.show', $creditCard->parent_card_id);
+        }
+
         $creditCard->load([
             'liabilityAccount',
-            'parentCard',
-            'childCards',
+            'bankAccount',
+            'childCards' => fn ($query) => $query->orderBy('card_type')->orderBy('name'),
         ]);
+
+        $familyCardIds = $this->familyCardIds($creditCard);
 
         $transactions = CreditCardTransaction::query()
             ->where('wallet_id', $wallet->id)
-            ->where('credit_card_id', $creditCard->id)
-            ->with(['expenseAccount:id,code,name', 'journalEntry:id,status'])
+            ->whereIn('credit_card_id', $familyCardIds)
+            ->with(['creditCard:id,name,card_type,last_four', 'expenseAccount:id,code,name', 'journalEntry:id,status'])
             ->orderByDesc('purchase_date')
             ->orderByDesc('id')
             ->limit(50)
@@ -142,6 +168,8 @@ class CreditCardController extends Controller
                 'name' => $wallet->name,
             ],
             'creditCard' => $creditCard,
+            'familyCards' => $this->familyCards($creditCard),
+            'summaryByCard' => $this->summaryByCard($wallet->id, $familyCardIds),
             'summary' => [
                 'current_balance_cents' => $currentBalance,
                 'available_limit_cents' => $creditCard->credit_limit_cents - $currentBalance,
@@ -159,7 +187,14 @@ class CreditCardController extends Controller
 
         abort_unless($creditCard->wallet_id === $wallet->id, 404);
 
+        if ($creditCard->parent_card_id) {
+            return redirect()->route('credit-cards.show', $creditCard->parent_card_id);
+        }
+
+        $familyCardIds = $this->familyCardIds($creditCard);
+
         $data = $request->validate([
+            'credit_card_id' => ['required', 'integer', Rule::in($familyCardIds)],
             'expense_account_id' => [
                 'required',
                 'integer',
@@ -177,8 +212,6 @@ class CreditCardController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $data['credit_card_id'] = $creditCard->id;
-
         $service->execute($wallet, CreditCardTransactionDTO::fromArray($data));
 
         return redirect()
@@ -191,6 +224,10 @@ class CreditCardController extends Controller
         $wallet = $this->resolveActiveWallet($request);
 
         abort_unless($creditCard->wallet_id === $wallet->id, 404);
+
+        if ($creditCard->parent_card_id) {
+            return redirect()->route('credit-cards.show', $creditCard->parent_card_id);
+        }
 
         $data = $request->validate([
             'bank_account_id' => [
@@ -232,11 +269,61 @@ class CreditCardController extends Controller
         return (int) $transactions - (int) $payments;
     }
 
+    private function familyCardIds(CreditCard $creditCard): array
+    {
+        return collect([$creditCard->id])
+            ->merge($creditCard->childCards()->pluck('id'))
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    private function familyCards(CreditCard $creditCard): array
+    {
+        return collect([$creditCard])
+            ->merge($creditCard->childCards)
+            ->map(fn (CreditCard $card) => [
+                'id' => $card->id,
+                'name' => $card->name,
+                'card_type' => $card->card_type,
+                'last_four' => $card->last_four,
+                'is_active' => $card->is_active,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function summaryByCard(int $walletId, array $cardIds): array
+    {
+        return CreditCard::query()
+            ->where('wallet_id', $walletId)
+            ->whereIn('id', $cardIds)
+            ->get(['id', 'name', 'card_type', 'last_four'])
+            ->map(function (CreditCard $card) use ($walletId) {
+                $amount = CreditCardTransaction::query()
+                    ->where('wallet_id', $walletId)
+                    ->where('credit_card_id', $card->id)
+                    ->where('status', 'posted')
+                    ->sum('amount_cents');
+
+                return [
+                    'id' => $card->id,
+                    'name' => $card->name,
+                    'card_type' => $card->card_type,
+                    'last_four' => $card->last_four,
+                    'amount_cents' => (int) $amount,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
     private function parentCards(int $walletId): array
     {
         return CreditCard::query()
             ->where('wallet_id', $walletId)
             ->where('card_type', 'main')
+            ->whereNull('parent_card_id')
             ->where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'name', 'issuer_name'])
