@@ -17,6 +17,7 @@ class CreateCreditCardTransaction
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
         private readonly PostJournalEntry $postJournalEntry,
+        private readonly ResolveCreditCardInvoice $resolveCreditCardInvoice,
     ) {
     }
 
@@ -26,8 +27,11 @@ class CreateCreditCardTransaction
             $creditCard = CreditCard::query()
                 ->where('wallet_id', $wallet->id)
                 ->where('is_active', true)
-                ->with('liabilityAccount')
+                ->with(['liabilityAccount', 'parentCard'])
                 ->findOrFail($dto->creditCardId);
+
+            $mainCard = $this->resolveCreditCardInvoice->mainCard($creditCard);
+            $invoice = $this->resolveCreditCardInvoice->forPurchaseDate($wallet, $creditCard, $dto->purchaseDate);
 
             $expenseAccount = ChartOfAccount::query()
                 ->where('wallet_id', $wallet->id)
@@ -52,7 +56,7 @@ class CreateCreditCardTransaction
                         'amount_cents' => $dto->amountCents,
                     ],
                     [
-                        'chart_of_account_id' => $creditCard->liability_account_id,
+                        'chart_of_account_id' => $mainCard->liability_account_id,
                         'type' => 'credit',
                         'amount_cents' => $dto->amountCents,
                     ],
@@ -61,9 +65,10 @@ class CreateCreditCardTransaction
 
             $journalEntry = $this->postJournalEntry->handle($journalEntry);
 
-            return CreditCardTransaction::query()->create([
+            $transaction = CreditCardTransaction::query()->create([
                 'wallet_id' => $wallet->id,
                 'credit_card_id' => $creditCard->id,
+                'credit_card_invoice_id' => $invoice->id,
                 'expense_account_id' => $expenseAccount->id,
                 'journal_entry_id' => $journalEntry->id,
                 'purchase_date' => $dto->purchaseDate,
@@ -74,7 +79,16 @@ class CreateCreditCardTransaction
                 'installment_number' => $dto->installmentNumber,
                 'status' => 'posted',
                 'notes' => $dto->notes,
-            ])->fresh(['creditCard', 'expenseAccount', 'journalEntry.lines.chartOfAccount']);
+            ]);
+
+            $this->resolveCreditCardInvoice->refreshTotals($invoice);
+
+            return $transaction->fresh([
+                'creditCard',
+                'creditCardInvoice',
+                'expenseAccount',
+                'journalEntry.lines.chartOfAccount',
+            ]);
         });
     }
 }
