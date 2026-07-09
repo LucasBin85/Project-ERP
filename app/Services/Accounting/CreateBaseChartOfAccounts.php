@@ -147,6 +147,12 @@ class CreateBaseChartOfAccounts
                             ],
                         ],
                     ],
+                    [
+                        'code' => '2.2',
+                        'name' => 'Cartões de Crédito',
+                        'type' => 'passivo',
+                        'financial_group' => 'accounts_payable',
+                    ],
                 ],
             ],
             [
