@@ -34,9 +34,9 @@ const cardTypes: Record<string, string> = {
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">Cartões cadastrados</h2>
+                        <h2 class="text-lg font-bold text-white">Faturas de cartão</h2>
                         <p class="text-sm text-gray-400">
-                            Cartões principais, adicionais e virtuais vinculados a uma conta passiva contábil.
+                            A lista mostra somente cartões principais. Virtuais e adicionais aparecem dentro da mesma fatura.
                         </p>
                     </div>
                 </template>
@@ -44,14 +44,14 @@ const cardTypes: Record<string, string> = {
                 <ReportTable :empty="cards.length === 0" empty-message="Nenhum cartão cadastrado." :empty-colspan="9">
                     <template #head>
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Cartão</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Operadora/Banco</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Tipo</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Fatura</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Conta vinculada</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Cartões</th>
                             <th class="px-4 py-3 text-center text-xs font-bold uppercase text-gray-400">Fechamento</th>
                             <th class="px-4 py-3 text-center text-xs font-bold uppercase text-gray-400">Vencimento</th>
                             <th class="px-4 py-3 text-center text-xs font-bold uppercase text-gray-400">Melhor compra</th>
                             <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Limite</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Utilizado</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Fatura atual</th>
                             <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Ações</th>
                         </tr>
                     </template>
@@ -60,15 +60,21 @@ const cardTypes: Record<string, string> = {
                         <td class="px-4 py-3 text-sm">
                             <div class="font-semibold text-white">{{ card.name }}</div>
                             <div class="text-xs text-gray-500">
-                                {{ card.network }} {{ card.last_four ? '•••• ' + card.last_four : '' }}
-                            </div>
-                            <div v-if="card.parent_card" class="text-xs text-gray-500">
-                                Vinculado a {{ card.parent_card.name }}
+                                {{ card.issuer_name }} · {{ card.network }} {{ card.last_four ? '•••• ' + card.last_four : '' }}
                             </div>
                         </td>
 
-                        <td class="px-4 py-3 text-sm text-gray-300">{{ card.issuer_name }}</td>
-                        <td class="px-4 py-3 text-sm text-gray-300">{{ cardTypes[card.card_type] ?? card.card_type }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300">
+                            {{ card.bank_account?.name ?? '-' }}
+                        </td>
+
+                        <td class="px-4 py-3 text-sm text-gray-300">
+                            <div>Principal</div>
+                            <div v-for="child in card.child_cards" :key="child.id" class="text-xs text-gray-500">
+                                {{ cardTypes[child.card_type] ?? child.card_type }} · {{ child.name }} {{ child.last_four ? '•••• ' + child.last_four : '' }}
+                            </div>
+                        </td>
+
                         <td class="px-4 py-3 text-center text-sm text-gray-300">dia {{ card.closing_day }}</td>
                         <td class="px-4 py-3 text-center text-sm text-gray-300">dia {{ card.due_day }}</td>
                         <td class="px-4 py-3 text-center text-sm text-green-300">dia {{ card.best_purchase_day }}</td>
@@ -79,7 +85,7 @@ const cardTypes: Record<string, string> = {
                                 :href="route('credit-cards.show', [card.id])"
                                 class="inline-flex items-center rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-medium text-gray-200 transition hover:bg-gray-700"
                             >
-                                Ver
+                                Ver fatura
                             </Link>
                         </td>
                     </tr>
