@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCard;
+use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPayment;
 use App\Models\CreditCardTransaction;
 use App\Services\Financial\CreateCreditCard;
@@ -142,10 +143,24 @@ class CreditCardController extends Controller
 
         $familyCardIds = $this->familyCardIds($creditCard);
 
+        $invoices = CreditCardInvoice::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('credit_card_id', $creditCard->id)
+            ->withCount(['transactions', 'payments'])
+            ->orderByDesc('reference_year')
+            ->orderByDesc('reference_month')
+            ->limit(12)
+            ->get();
+
         $transactions = CreditCardTransaction::query()
             ->where('wallet_id', $wallet->id)
             ->whereIn('credit_card_id', $familyCardIds)
-            ->with(['creditCard:id,name,card_type,last_four', 'expenseAccount:id,code,name', 'journalEntry:id,status'])
+            ->with([
+                'creditCard:id,name,card_type,last_four',
+                'creditCardInvoice:id,reference_month,reference_year,status,due_at',
+                'expenseAccount:id,code,name',
+                'journalEntry:id,status',
+            ])
             ->orderByDesc('purchase_date')
             ->orderByDesc('id')
             ->limit(50)
@@ -154,7 +169,11 @@ class CreditCardController extends Controller
         $payments = CreditCardPayment::query()
             ->where('wallet_id', $wallet->id)
             ->where('credit_card_id', $creditCard->id)
-            ->with(['bankAccount:id,name,bank_name', 'journalEntry:id,status'])
+            ->with([
+                'creditCardInvoice:id,reference_month,reference_year,status',
+                'bankAccount:id,name,bank_name',
+                'journalEntry:id,status',
+            ])
             ->orderByDesc('payment_date')
             ->orderByDesc('id')
             ->limit(50)
@@ -174,6 +193,7 @@ class CreditCardController extends Controller
                 'current_balance_cents' => $currentBalance,
                 'available_limit_cents' => $creditCard->credit_limit_cents - $currentBalance,
             ],
+            'invoices' => $invoices,
             'transactions' => $transactions,
             'payments' => $payments,
             'expenseAccounts' => $this->expenseAccounts($wallet->id),
@@ -230,6 +250,13 @@ class CreditCardController extends Controller
         }
 
         $data = $request->validate([
+            'credit_card_invoice_id' => [
+                'required',
+                'integer',
+                Rule::exists('credit_card_invoices', 'id')
+                    ->where('wallet_id', $wallet->id)
+                    ->where('credit_card_id', $creditCard->id),
+            ],
             'bank_account_id' => [
                 'required',
                 'integer',
