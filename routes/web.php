@@ -19,6 +19,7 @@ use App\Http\Controllers\Financial\BankStatementController;
 use App\Http\Controllers\Financial\BankReconciliationController;
 use App\Http\Controllers\Financial\AccountPayableController;
 use App\Http\Controllers\Financial\AccountReceivableController;
+use App\Http\Controllers\Financial\CreditCardController;
 
 
 
@@ -109,6 +110,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('accounts-receivable.receive');
 
         Route::resource('accounts-receivable', AccountReceivableController::class)
+            ->only(['index', 'create', 'store', 'show']);
+
+        Route::post('credit-cards/{creditCard}/transactions', [CreditCardController::class, 'storeTransaction'])
+            ->name('credit-cards.transactions.store');
+
+        Route::post('credit-cards/{creditCard}/payments', [CreditCardController::class, 'payInvoice'])
+            ->name('credit-cards.payments.store');
+
+        Route::resource('credit-cards', CreditCardController::class)
             ->only(['index', 'create', 'store', 'show']);
     });
 
