@@ -86,6 +86,10 @@ class AccountingDemoSeeder extends Seeder
 
     private function entry(Wallet $wallet, string $date, string $description, array $lines): void
     {
+        if (JournalEntry::query()->where('wallet_id', $wallet->id)->where('description', $description)->whereDate('entry_date', $date)->exists()) {
+            return;
+        }
+
         $debit = collect($lines)->where('type', 'debit')->sum('amount');
         $credit = collect($lines)->where('type', 'credit')->sum('amount');
 
@@ -97,9 +101,7 @@ class AccountingDemoSeeder extends Seeder
             'status' => 'posted',
             'posted_at' => now(),
             'is_balanced' => $debit === $credit,
-            'debit_total' => $debit,
-            'credit_total' => $credit,
-            'diff_total' => $debit - $credit,
+            'balance_diff_cents' => $debit - $credit,
         ]);
 
         foreach ($lines as $line) {
