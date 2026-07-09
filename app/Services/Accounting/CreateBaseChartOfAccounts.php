@@ -85,15 +85,6 @@ class CreateBaseChartOfAccounts
                                 'name' => 'Bancos',
                                 'type' => 'ativo',
                                 'financial_group' => 'available',
-                                'children' => [
-                                    [
-                                        'code' => '1.1.2.001',
-                                        'name' => 'Conta Transitória Bancária',
-                                        'type' => 'ativo',
-                                        'allows_posting' => true,
-                                        'financial_group' => 'available',
-                                    ],
-                                ],
                             ],
                             [
                                 'code' => '1.1.99',
