@@ -311,6 +311,7 @@ class JournalEntryTestSeeder extends Seeder
                     dueDay: 15,
                     bestPurchaseDay: 6,
                     creditLimitCents: 600000,
+                    bankAccountId: $bankAccount->id,
                     holderName: 'Usuário Demo',
                     lastFour: '1234',
                 ),
@@ -351,10 +352,15 @@ class JournalEntryTestSeeder extends Seeder
         }
 
         if (! CreditCardTransaction::query()->where('wallet_id', $wallet->id)->where('description', 'Notebook acessórios')->exists()) {
+            $virtualCard = CreditCard::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('name', 'Nubank Virtual')
+                ->first();
+
             app(CreateCreditCardTransaction::class)->execute(
                 $wallet,
                 new CreditCardTransactionDTO(
-                    creditCardId: $mainCard->id,
+                    creditCardId: $virtualCard?->id ?? $mainCard->id,
                     expenseAccountId: $expense->id,
                     purchaseDate: now()->subDays(2)->toDateString(),
                     merchantName: 'Loja Tech',
