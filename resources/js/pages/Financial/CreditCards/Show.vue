@@ -17,6 +17,7 @@ const props = defineProps<{
     familyCards: Array<Record<string, any>>;
     summaryByCard: Array<Record<string, any>>;
     summary: Record<string, number>;
+    invoices: Array<Record<string, any>>;
     transactions: Array<Record<string, any>>;
     payments: Array<Record<string, any>>;
     expenseAccounts: Array<Record<string, any>>;
@@ -24,13 +25,17 @@ const props = defineProps<{
 }>();
 
 const transaction = useCreditCardTransactionForm(props.creditCard.id);
-const payment = useCreditCardPaymentForm();
+const payment = useCreditCardPaymentForm(props.invoices?.[0]?.id ?? null);
 
 const cardTypes: Record<string, string> = {
     main: 'Principal',
     additional: 'Adicional',
     virtual: 'Virtual',
 };
+
+function invoiceLabel(invoice: Record<string, any>): string {
+    return `${String(invoice.reference_month).padStart(2, '0')}/${invoice.reference_year}`;
+}
 
 function submitTransaction() {
     if (!transaction.canSubmit.value) return;
@@ -68,7 +73,7 @@ function submitPayment() {
 
                 <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-5">
                     <ReportSummaryCard label="Limite compartilhado" :value="formatCurrency(creditCard.credit_limit_cents)" tone="neutral" />
-                    <ReportSummaryCard label="Fatura atual" :value="formatCurrency(summary.current_balance_cents)" tone="yellow" />
+                    <ReportSummaryCard label="Saldo em aberto" :value="formatCurrency(summary.current_balance_cents)" tone="yellow" />
                     <ReportSummaryCard label="Limite disponível" :value="formatCurrency(summary.available_limit_cents)" :tone="summary.available_limit_cents >= 0 ? 'green' : 'red'" />
                     <ReportSummaryCard label="Fechamento" :value="`Dia ${creditCard.closing_day}`" tone="blue" />
                     <ReportSummaryCard label="Vencimento" :value="`Dia ${creditCard.due_day}`" tone="blue" />
@@ -92,6 +97,41 @@ function submitPayment() {
                         <p class="mt-1 text-sm text-gray-200">{{ familyCards.length }}</p>
                     </div>
                 </div>
+            </ReportSection>
+
+            <ReportSection>
+                <template #header>
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Faturas mensais</h2>
+                        <p class="text-sm text-gray-400">As compras entram automaticamente na fatura conforme a data de fechamento do cartão.</p>
+                    </div>
+                </template>
+
+                <ReportTable :empty="invoices.length === 0" empty-message="Nenhuma fatura mensal gerada ainda." :empty-colspan="8">
+                    <template #head>
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Referência</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Período</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Vencimento</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Total</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Pago</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Saldo</th>
+                            <th class="px-4 py-3 text-center text-xs font-bold uppercase text-gray-400">Itens</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Status</th>
+                        </tr>
+                    </template>
+
+                    <tr v-for="invoice in invoices" :key="invoice.id" class="hover:bg-gray-800/50">
+                        <td class="whitespace-nowrap px-4 py-3 text-sm font-semibold text-white">{{ invoiceLabel(invoice) }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(invoice.starts_at) }} até {{ formatDate(invoice.closes_at) }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(invoice.due_at) }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">{{ formatCurrency(invoice.total_cents) }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-green-300">{{ formatCurrency(invoice.paid_cents) }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-yellow-300">{{ formatCurrency(invoice.balance_cents) }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-300">{{ invoice.transactions_count }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-sm"><StatusBadge :status="invoice.status" /></td>
+                    </tr>
+                </ReportTable>
             </ReportSection>
 
             <ReportSection>
@@ -121,7 +161,7 @@ function submitPayment() {
                 <template #header>
                     <div>
                         <h2 class="text-lg font-bold text-white">Registrar compra</h2>
-                        <p class="text-sm text-gray-400">Escolha o cartão usado. O lançamento entra na mesma fatura principal.</p>
+                        <p class="text-sm text-gray-400">Escolha o cartão usado. A fatura mensal será definida automaticamente pela data da compra.</p>
                     </div>
                 </template>
 
@@ -183,11 +223,21 @@ function submitPayment() {
                 <template #header>
                     <div>
                         <h2 class="text-lg font-bold text-white">Pagar fatura</h2>
-                        <p class="text-sm text-gray-400">O pagamento baixa a fatura principal: débito no cartão e crédito no banco.</p>
+                        <p class="text-sm text-gray-400">Selecione a fatura mensal que será baixada contra a conta bancária.</p>
                     </div>
                 </template>
 
-                <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4" @submit.prevent="submitPayment">
+                <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-5" @submit.prevent="submitPayment">
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Fatura</label>
+                        <select v-model="payment.form.credit_card_invoice_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
+                            <option value="">Selecione uma fatura</option>
+                            <option v-for="invoice in invoices" :key="invoice.id" :value="invoice.id">
+                                {{ invoiceLabel(invoice) }} · saldo {{ formatCurrency(invoice.balance_cents) }}
+                            </option>
+                        </select>
+                    </div>
+
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Conta bancária</label>
                         <select v-model="payment.form.bank_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
@@ -222,10 +272,11 @@ function submitPayment() {
                     </div>
                 </template>
 
-                <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma compra registrada." :empty-colspan="8">
+                <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma compra registrada." :empty-colspan="9">
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Data</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Fatura</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Cartão</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Estabelecimento</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição</th>
@@ -238,6 +289,12 @@ function submitPayment() {
 
                     <tr v-for="item in transactions" :key="item.id" class="hover:bg-gray-800/50">
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(item.purchase_date) }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                            <span v-if="item.credit_card_invoice">
+                                {{ String(item.credit_card_invoice.reference_month).padStart(2, '0') }}/{{ item.credit_card_invoice.reference_year }}
+                            </span>
+                            <span v-else>-</span>
+                        </td>
                         <td class="px-4 py-3 text-sm text-gray-300">
                             {{ item.credit_card?.name ?? '-' }}
                             <span v-if="item.credit_card?.last_four" class="text-xs text-gray-500">•••• {{ item.credit_card.last_four }}</span>
@@ -264,10 +321,11 @@ function submitPayment() {
                     </div>
                 </template>
 
-                <ReportTable :empty="payments.length === 0" empty-message="Nenhum pagamento registrado." :empty-colspan="5">
+                <ReportTable :empty="payments.length === 0" empty-message="Nenhum pagamento registrado." :empty-colspan="6">
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Data</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Fatura</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Banco</th>
                             <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Valor</th>
@@ -277,6 +335,12 @@ function submitPayment() {
 
                     <tr v-for="item in payments" :key="item.id" class="hover:bg-gray-800/50">
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(item.payment_date) }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                            <span v-if="item.credit_card_invoice">
+                                {{ String(item.credit_card_invoice.reference_month).padStart(2, '0') }}/{{ item.credit_card_invoice.reference_year }}
+                            </span>
+                            <span v-else>-</span>
+                        </td>
                         <td class="px-4 py-3 text-sm text-gray-300">{{ item.description }}</td>
                         <td class="px-4 py-3 text-sm text-gray-300">{{ item.bank_account?.name ?? '-' }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-green-300">{{ formatCurrency(item.amount_cents) }}</td>
