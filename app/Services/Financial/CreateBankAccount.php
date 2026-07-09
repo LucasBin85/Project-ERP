@@ -121,6 +121,6 @@ class CreateBankAccount
 
         $lastSegment = (int) str($lastCode)->afterLast('.')->toString();
 
-        return $parent->code . '.' . str_pad((string) ($lastSegment + 1), 3, STR_PAD_LEFT);
+        return $parent->code . '.' . str_pad((string) ($lastSegment + 1), 3, '0', STR_PAD_LEFT);
     }
 }
