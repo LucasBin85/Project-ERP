@@ -3,6 +3,7 @@
 namespace App\Services\Financial;
 
 use App\DTOs\Financial\CreditCardDTO;
+use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCard;
 use App\Models\Wallet;
@@ -15,11 +16,13 @@ class CreateCreditCard
     {
         return DB::transaction(function () use ($wallet, $dto) {
             $parentCard = null;
+            $bankAccount = null;
 
             if ($dto->cardType !== 'main') {
                 $parentCard = CreditCard::query()
                     ->where('wallet_id', $wallet->id)
                     ->where('card_type', 'main')
+                    ->with(['liabilityAccount', 'bankAccount'])
                     ->find($dto->parentCardId);
 
                 if (! $parentCard) {
@@ -29,25 +32,39 @@ class CreateCreditCard
                 }
             }
 
+            if ($dto->cardType === 'main') {
+                $bankAccount = BankAccount::query()
+                    ->where('wallet_id', $wallet->id)
+                    ->where('is_active', true)
+                    ->find($dto->bankAccountId);
+
+                if (! $bankAccount) {
+                    throw ValidationException::withMessages([
+                        'bank_account_id' => 'Informe a conta bancária vinculada ao cartão principal.',
+                    ]);
+                }
+            }
+
             $liabilityAccount = $parentCard?->liabilityAccount ?? $this->createLiabilityAccount($wallet, $dto->name);
 
             return CreditCard::query()->create([
                 'wallet_id' => $wallet->id,
                 'liability_account_id' => $liabilityAccount->id,
+                'bank_account_id' => $parentCard?->bank_account_id ?? $bankAccount?->id,
                 'parent_card_id' => $parentCard?->id,
                 'name' => $dto->name,
-                'issuer_name' => $dto->issuerName,
-                'network' => $dto->network,
+                'issuer_name' => $parentCard?->issuer_name ?? $dto->issuerName,
+                'network' => $parentCard?->network ?? $dto->network,
                 'card_type' => $dto->cardType,
                 'holder_name' => $dto->holderName,
                 'last_four' => $dto->lastFour,
-                'closing_day' => $dto->closingDay,
-                'due_day' => $dto->dueDay,
-                'best_purchase_day' => $dto->bestPurchaseDay,
-                'credit_limit_cents' => $dto->creditLimitCents,
+                'closing_day' => $parentCard?->closing_day ?? $dto->closingDay,
+                'due_day' => $parentCard?->due_day ?? $dto->dueDay,
+                'best_purchase_day' => $parentCard?->best_purchase_day ?? $dto->bestPurchaseDay,
+                'credit_limit_cents' => $parentCard?->credit_limit_cents ?? $dto->creditLimitCents,
                 'is_active' => true,
                 'notes' => $dto->notes,
-            ])->fresh(['liabilityAccount', 'parentCard']);
+            ])->fresh(['liabilityAccount', 'bankAccount', 'parentCard']);
         });
     }
 
