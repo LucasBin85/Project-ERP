@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\DTOs\Financial\CreditCardPaymentDTO;
 use App\Models\BankAccount;
 use App\Models\CreditCard;
+use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPayment;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
@@ -17,6 +18,7 @@ class PayCreditCardInvoice
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
         private readonly PostJournalEntry $postJournalEntry,
+        private readonly ResolveCreditCardInvoice $resolveCreditCardInvoice,
     ) {
     }
 
@@ -28,6 +30,23 @@ class PayCreditCardInvoice
                 ->where('is_active', true)
                 ->with('liabilityAccount')
                 ->findOrFail($dto->creditCardId);
+
+            if ($creditCard->parent_card_id) {
+                throw ValidationException::withMessages([
+                    'credit_card_id' => 'O pagamento deve ser registrado na fatura do cartão principal.',
+                ]);
+            }
+
+            $invoice = CreditCardInvoice::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('credit_card_id', $creditCard->id)
+                ->findOrFail($dto->creditCardInvoiceId);
+
+            if (in_array($invoice->status, ['paid', 'cancelled'], true)) {
+                throw ValidationException::withMessages([
+                    'credit_card_invoice_id' => 'Esta fatura não aceita novos pagamentos.',
+                ]);
+            }
 
             $bankAccount = BankAccount::query()
                 ->where('wallet_id', $wallet->id)
@@ -41,7 +60,12 @@ class PayCreditCardInvoice
                 ]);
             }
 
-            $description = $dto->description ?: 'Pagamento fatura: ' . $creditCard->name;
+            $description = $dto->description ?: sprintf(
+                'Pagamento fatura %02d/%d: %s',
+                $invoice->reference_month,
+                $invoice->reference_year,
+                $creditCard->name,
+            );
 
             $journalEntry = $this->createJournalEntry->execute([
                 'wallet_id' => $wallet->id,
@@ -63,9 +87,10 @@ class PayCreditCardInvoice
 
             $journalEntry = $this->postJournalEntry->handle($journalEntry);
 
-            return CreditCardPayment::query()->create([
+            $payment = CreditCardPayment::query()->create([
                 'wallet_id' => $wallet->id,
                 'credit_card_id' => $creditCard->id,
+                'credit_card_invoice_id' => $invoice->id,
                 'bank_account_id' => $bankAccount->id,
                 'journal_entry_id' => $journalEntry->id,
                 'payment_date' => $dto->paymentDate,
@@ -73,7 +98,16 @@ class PayCreditCardInvoice
                 'description' => $description,
                 'status' => 'posted',
                 'notes' => $dto->notes,
-            ])->fresh(['creditCard', 'bankAccount', 'journalEntry.lines.chartOfAccount']);
+            ]);
+
+            $this->resolveCreditCardInvoice->refreshTotals($invoice);
+
+            return $payment->fresh([
+                'creditCard',
+                'creditCardInvoice',
+                'bankAccount',
+                'journalEntry.lines.chartOfAccount',
+            ]);
         });
     }
 }
