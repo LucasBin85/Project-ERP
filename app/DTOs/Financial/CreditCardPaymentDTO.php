@@ -6,6 +6,7 @@ final readonly class CreditCardPaymentDTO
 {
     public function __construct(
         public int $creditCardId,
+        public int $creditCardInvoiceId,
         public int $bankAccountId,
         public string $paymentDate,
         public int $amountCents,
@@ -18,6 +19,7 @@ final readonly class CreditCardPaymentDTO
     {
         return new self(
             creditCardId: (int) $data['credit_card_id'],
+            creditCardInvoiceId: (int) $data['credit_card_invoice_id'],
             bankAccountId: (int) $data['bank_account_id'],
             paymentDate: (string) $data['payment_date'],
             amountCents: (int) $data['amount_cents'],
