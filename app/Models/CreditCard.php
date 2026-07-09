@@ -69,4 +69,9 @@ class CreditCard extends Model
     {
         return $this->hasMany(CreditCardPayment::class);
     }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(CreditCardInvoice::class);
+    }
 }
