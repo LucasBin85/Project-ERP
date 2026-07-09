@@ -49,6 +49,7 @@ export function formatAccount(
 
 export function formatStatus(status?: string | null): string {
     const statuses: Record<string, string> = {
+        active: 'Ativo',
         posted: 'Postado',
         draft: 'Rascunho',
         pending: 'Pendente',
