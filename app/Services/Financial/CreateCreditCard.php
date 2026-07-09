@@ -1,0 +1,93 @@
+<?php
+
+namespace App\Services\Financial;
+
+use App\DTOs\Financial\CreditCardDTO;
+use App\Models\ChartOfAccount;
+use App\Models\CreditCard;
+use App\Models\Wallet;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class CreateCreditCard
+{
+    public function execute(Wallet $wallet, CreditCardDTO $dto): CreditCard
+    {
+        return DB::transaction(function () use ($wallet, $dto) {
+            $parentCard = null;
+
+            if ($dto->cardType !== 'main') {
+                $parentCard = CreditCard::query()
+                    ->where('wallet_id', $wallet->id)
+                    ->where('card_type', 'main')
+                    ->find($dto->parentCardId);
+
+                if (! $parentCard) {
+                    throw ValidationException::withMessages([
+                        'parent_card_id' => 'Cartões adicionais ou virtuais precisam estar vinculados a um cartão principal.',
+                    ]);
+                }
+            }
+
+            $liabilityAccount = $parentCard?->liabilityAccount ?? $this->createLiabilityAccount($wallet, $dto->name);
+
+            return CreditCard::query()->create([
+                'wallet_id' => $wallet->id,
+                'liability_account_id' => $liabilityAccount->id,
+                'parent_card_id' => $parentCard?->id,
+                'name' => $dto->name,
+                'issuer_name' => $dto->issuerName,
+                'network' => $dto->network,
+                'card_type' => $dto->cardType,
+                'holder_name' => $dto->holderName,
+                'last_four' => $dto->lastFour,
+                'closing_day' => $dto->closingDay,
+                'due_day' => $dto->dueDay,
+                'best_purchase_day' => $dto->bestPurchaseDay,
+                'credit_limit_cents' => $dto->creditLimitCents,
+                'is_active' => true,
+                'notes' => $dto->notes,
+            ])->fresh(['liabilityAccount', 'parentCard']);
+        });
+    }
+
+    private function createLiabilityAccount(Wallet $wallet, string $cardName): ChartOfAccount
+    {
+        $parent = ChartOfAccount::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('code', '2.2')
+            ->where('type', 'passivo')
+            ->firstOrFail();
+
+        return ChartOfAccount::query()->create([
+            'wallet_id' => $wallet->id,
+            'parent_id' => $parent->id,
+            'code' => $this->nextChildCode($wallet, $parent),
+            'name' => $cardName,
+            'type' => 'passivo',
+            'normal_balance' => 'credit',
+            'allows_posting' => true,
+            'is_system' => false,
+            'financial_group' => 'accounts_payable',
+        ]);
+    }
+
+    private function nextChildCode(Wallet $wallet, ChartOfAccount $parent): string
+    {
+        $lastCode = ChartOfAccount::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('parent_id', $parent->id)
+            ->where('code', 'like', $parent->code . '.%')
+            ->orderByRaw('LENGTH(code) DESC')
+            ->orderByDesc('code')
+            ->value('code');
+
+        if (! $lastCode) {
+            return $parent->code . '.001';
+        }
+
+        $lastSegment = (int) str($lastCode)->afterLast('.')->toString();
+
+        return $parent->code . '.' . str_pad((string) ($lastSegment + 1), 3, '0', STR_PAD_LEFT);
+    }
+}
