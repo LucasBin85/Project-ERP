@@ -102,9 +102,8 @@ export const mainNavItems: NavItem[] = [
             },
             {
                 title: 'Contas a Receber',
+                href: route('accounts-receivable.index'),
                 icon: FileText,
-                disabled: true,
-                badge: 'Em breve',
             },
             {
                 title: 'Cartões de Crédito',
