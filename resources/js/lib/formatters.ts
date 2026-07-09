@@ -53,6 +53,7 @@ export function formatStatus(status?: string | null): string {
         draft: 'Rascunho',
         pending: 'Pendente',
         paid: 'Pago',
+        received: 'Recebido',
         reconciled: 'Conciliado',
         completed: 'Concluído',
         cancelled: 'Cancelado',
