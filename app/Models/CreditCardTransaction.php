@@ -10,6 +10,7 @@ class CreditCardTransaction extends Model
     protected $fillable = [
         'wallet_id',
         'credit_card_id',
+        'credit_card_invoice_id',
         'expense_account_id',
         'journal_entry_id',
         'purchase_date',
@@ -37,6 +38,11 @@ class CreditCardTransaction extends Model
     public function creditCard(): BelongsTo
     {
         return $this->belongsTo(CreditCard::class);
+    }
+
+    public function creditCardInvoice(): BelongsTo
+    {
+        return $this->belongsTo(CreditCardInvoice::class);
     }
 
     public function expenseAccount(): BelongsTo
