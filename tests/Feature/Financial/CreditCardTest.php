@@ -4,6 +4,7 @@ use App\DTOs\Financial\CreditCardDTO;
 use App\DTOs\Financial\CreditCardPaymentDTO;
 use App\DTOs\Financial\CreditCardTransactionDTO;
 use App\Models\ChartOfAccount;
+use App\Models\CreditCardInvoice;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
@@ -143,7 +144,7 @@ it('creates a virtual credit card sharing parent invoice settings', function () 
         ->and($virtualCard->credit_limit_cents)->toBe($mainCard->credit_limit_cents);
 });
 
-it('creates a posted journal entry when registering a credit card purchase', function () {
+it('creates a posted journal entry and monthly invoice when registering a credit card purchase', function () {
     $wallet = createTestWalletWithCardGroup();
 
     $expenseAccount = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
@@ -181,9 +182,19 @@ it('creates a posted journal entry when registering a credit card purchase', fun
         ),
     );
 
+    $invoice = $transaction->creditCardInvoice;
+
     expect($transaction->status)->toBe('posted')
         ->and($transaction->journalEntry->status)->toBe('posted')
-        ->and($transaction->journalEntry->is_balanced)->toBeTrue();
+        ->and($transaction->journalEntry->is_balanced)->toBeTrue()
+        ->and($invoice->reference_year)->toBe(2026)
+        ->and($invoice->reference_month)->toBe(8)
+        ->and($invoice->starts_at->toDateString())->toBe('2026-07-06')
+        ->and($invoice->closes_at->toDateString())->toBe('2026-08-05')
+        ->and($invoice->due_at->toDateString())->toBe('2026-08-15')
+        ->and($invoice->total_cents)->toBe(12590)
+        ->and($invoice->balance_cents)->toBe(12590)
+        ->and($invoice->status)->toBe('open');
 
     $this->assertDatabaseHas('journal_lines', [
         'journal_entry_id' => $transaction->journal_entry_id,
@@ -200,7 +211,7 @@ it('creates a posted journal entry when registering a credit card purchase', fun
     ]);
 });
 
-it('creates a posted journal entry when paying a credit card invoice', function () {
+it('creates a posted journal entry when paying a specific credit card invoice', function () {
     $wallet = createTestWalletWithCardGroup();
 
     $expenseAccount = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
@@ -226,7 +237,7 @@ it('creates a posted journal entry when paying a credit card invoice', function 
         ),
     );
 
-    app(CreateCreditCardTransaction::class)->execute(
+    $transaction = app(CreateCreditCardTransaction::class)->execute(
         $wallet,
         new CreditCardTransactionDTO(
             creditCardId: $creditCard->id,
@@ -242,17 +253,24 @@ it('creates a posted journal entry when paying a credit card invoice', function 
         $wallet,
         new CreditCardPaymentDTO(
             creditCardId: $creditCard->id,
+            creditCardInvoiceId: $transaction->credit_card_invoice_id,
             bankAccountId: $bankAccount->id,
-            paymentDate: '2026-07-15',
+            paymentDate: '2026-08-15',
             amountCents: 12590,
             description: 'Pagamento fatura Nubank',
         ),
     );
 
+    $invoice = CreditCardInvoice::query()->findOrFail($transaction->credit_card_invoice_id);
+
     expect(JournalEntry::query()->count())->toBe(2)
         ->and(JournalLine::query()->count())->toBe(4)
+        ->and($payment->credit_card_invoice_id)->toBe($invoice->id)
         ->and($payment->journalEntry->status)->toBe('posted')
-        ->and($payment->journalEntry->is_balanced)->toBeTrue();
+        ->and($payment->journalEntry->is_balanced)->toBeTrue()
+        ->and($invoice->paid_cents)->toBe(12590)
+        ->and($invoice->balance_cents)->toBe(0)
+        ->and($invoice->status)->toBe('paid');
 
     $this->assertDatabaseHas('journal_lines', [
         'journal_entry_id' => $payment->journal_entry_id,
