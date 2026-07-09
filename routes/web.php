@@ -18,6 +18,7 @@ use App\Http\Controllers\Financial\BankTransferController;
 use App\Http\Controllers\Financial\BankStatementController;
 use App\Http\Controllers\Financial\BankReconciliationController;
 use App\Http\Controllers\Financial\AccountPayableController;
+use App\Http\Controllers\Financial\AccountReceivableController;
 
 
 
@@ -102,6 +103,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('accounts-payable.pay');
 
         Route::resource('accounts-payable', AccountPayableController::class)
+            ->only(['index', 'create', 'store', 'show']);
+
+        Route::post('accounts-receivable/{accountReceivable}/receive', [AccountReceivableController::class, 'receive'])
+            ->name('accounts-receivable.receive');
+
+        Route::resource('accounts-receivable', AccountReceivableController::class)
             ->only(['index', 'create', 'store', 'show']);
     });
 
