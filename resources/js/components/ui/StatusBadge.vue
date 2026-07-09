@@ -10,6 +10,7 @@ const classes: Record<string, string> = {
     completed: 'bg-green-950 text-green-300',
     reconciled: 'bg-green-950 text-green-300',
     paid: 'bg-green-950 text-green-300',
+    received: 'bg-green-950 text-green-300',
     draft: 'bg-yellow-950 text-yellow-300',
     pending: 'bg-blue-950 text-blue-300',
     cancelled: 'bg-red-950 text-red-300',
