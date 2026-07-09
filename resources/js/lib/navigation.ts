@@ -107,9 +107,8 @@ export const mainNavItems: NavItem[] = [
             },
             {
                 title: 'Cartões de Crédito',
+                href: route('credit-cards.index'),
                 icon: CreditCard,
-                disabled: true,
-                badge: 'Em breve',
             },
         ],
     },
