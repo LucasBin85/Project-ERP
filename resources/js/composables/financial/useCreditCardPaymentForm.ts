@@ -8,8 +8,9 @@ function todayLocal(): string {
     return [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
 }
 
-export function useCreditCardPaymentForm() {
+export function useCreditCardPaymentForm(defaultInvoiceId: number | string | null = null) {
     const form = useForm({
+        credit_card_invoice_id: defaultInvoiceId ? String(defaultInvoiceId) : '',
         bank_account_id: '',
         payment_date: todayLocal(),
         amount: '',
@@ -19,7 +20,7 @@ export function useCreditCardPaymentForm() {
     });
 
     const canSubmit = computed(() => {
-        return Boolean(form.bank_account_id && form.payment_date && form.amount_cents > 0);
+        return Boolean(form.credit_card_invoice_id && form.bank_account_id && form.payment_date && form.amount_cents > 0);
     });
 
     function updateAmount(event: Event) {
