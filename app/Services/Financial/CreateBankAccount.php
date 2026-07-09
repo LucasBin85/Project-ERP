@@ -29,6 +29,7 @@ class CreateBankAccount
                 'normal_balance' => 'debit',
                 'allows_posting' => true,
                 'is_system' => false,
+                'financial_group' => 'available',
             ]);
 
             $bankAccount = BankAccount::query()->create([
@@ -77,9 +78,7 @@ class CreateBankAccount
             'status' => 'posted',
             'posted_at' => now(),
             'is_balanced' => true,
-            'debit_total' => $amountCents,
-            'credit_total' => $amountCents,
-            'diff_total' => 0,
+            'balance_diff_cents' => 0,
         ]);
 
         JournalLine::query()->create([
@@ -122,6 +121,6 @@ class CreateBankAccount
 
         $lastSegment = (int) str($lastCode)->afterLast('.')->toString();
 
-        return $parent->code . '.' . str_pad((string) ($lastSegment + 1), 3, '0', STR_PAD_LEFT);
+        return $parent->code . '.' . str_pad((string) ($lastSegment + 1), 3, STR_PAD_LEFT);
     }
 }
