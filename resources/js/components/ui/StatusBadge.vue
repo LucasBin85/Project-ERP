@@ -6,6 +6,7 @@ const props = defineProps<{
 }>()
 
 const classes: Record<string, string> = {
+    active: 'bg-green-950 text-green-300',
     posted: 'bg-green-950 text-green-300',
     completed: 'bg-green-950 text-green-300',
     reconciled: 'bg-green-950 text-green-300',
