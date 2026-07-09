@@ -14,6 +14,8 @@ import { route } from 'ziggy-js';
 const props = defineProps<{
     wallet: Record<string, any>;
     creditCard: Record<string, any>;
+    familyCards: Array<Record<string, any>>;
+    summaryByCard: Array<Record<string, any>>;
     summary: Record<string, number>;
     transactions: Array<Record<string, any>>;
     payments: Array<Record<string, any>>;
@@ -21,7 +23,7 @@ const props = defineProps<{
     bankAccounts: Array<Record<string, any>>;
 }>();
 
-const transaction = useCreditCardTransactionForm();
+const transaction = useCreditCardTransactionForm(props.creditCard.id);
 const payment = useCreditCardPaymentForm();
 
 const cardTypes: Record<string, string> = {
@@ -42,10 +44,11 @@ function submitPayment() {
 </script>
 
 <template>
-    <AppLayout title="Cartão de Crédito">
-        <ReportPage title="Cartão de Crédito" :subtitle="wallet.name">
+    <AppLayout title="Fatura do Cartão">
+        <ReportPage title="Fatura do Cartão" :subtitle="wallet.name">
             <div class="flex justify-end gap-3">
                 <Link :href="route('credit-cards.index')" class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800">Voltar</Link>
+                <Link :href="route('credit-cards.create')" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Adicionar virtual/adicional</Link>
             </div>
 
             <ReportSection>
@@ -54,7 +57,7 @@ function submitPayment() {
                         <div>
                             <h2 class="text-lg font-bold text-white">{{ creditCard.name }}</h2>
                             <p class="text-sm text-gray-400">
-                                {{ creditCard.issuer_name }} · {{ creditCard.network }} · {{ cardTypes[creditCard.card_type] ?? creditCard.card_type }}
+                                {{ creditCard.issuer_name }} · {{ creditCard.network }} · Fatura única
                                 <span v-if="creditCard.last_four"> · •••• {{ creditCard.last_four }}</span>
                             </p>
                         </div>
@@ -64,25 +67,52 @@ function submitPayment() {
                 </template>
 
                 <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-5">
-                    <ReportSummaryCard label="Limite" :value="formatCurrency(creditCard.credit_limit_cents)" tone="neutral" />
-                    <ReportSummaryCard label="Utilizado" :value="formatCurrency(summary.current_balance_cents)" tone="yellow" />
-                    <ReportSummaryCard label="Disponível" :value="formatCurrency(summary.available_limit_cents)" :tone="summary.available_limit_cents >= 0 ? 'green' : 'red'" />
+                    <ReportSummaryCard label="Limite compartilhado" :value="formatCurrency(creditCard.credit_limit_cents)" tone="neutral" />
+                    <ReportSummaryCard label="Fatura atual" :value="formatCurrency(summary.current_balance_cents)" tone="yellow" />
+                    <ReportSummaryCard label="Limite disponível" :value="formatCurrency(summary.available_limit_cents)" :tone="summary.available_limit_cents >= 0 ? 'green' : 'red'" />
                     <ReportSummaryCard label="Fechamento" :value="`Dia ${creditCard.closing_day}`" tone="blue" />
                     <ReportSummaryCard label="Vencimento" :value="`Dia ${creditCard.due_day}`" tone="blue" />
                 </div>
 
-                <div class="grid grid-cols-1 gap-4 border-t border-gray-700 p-6 md:grid-cols-3">
+                <div class="grid grid-cols-1 gap-4 border-t border-gray-700 p-6 md:grid-cols-4">
                     <div>
                         <p class="text-xs uppercase text-gray-500">Melhor data de compra</p>
                         <p class="mt-1 text-sm font-semibold text-green-300">Dia {{ creditCard.best_purchase_day }}</p>
                     </div>
                     <div>
-                        <p class="text-xs uppercase text-gray-500">Conta contábil do cartão</p>
+                        <p class="text-xs uppercase text-gray-500">Conta bancária vinculada</p>
+                        <p class="mt-1 text-sm text-gray-200">{{ creditCard.bank_account?.name ?? '-' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500">Conta contábil da fatura</p>
                         <p class="mt-1 text-sm text-gray-200">{{ formatAccount(creditCard.liability_account?.code, creditCard.liability_account?.name) }}</p>
                     </div>
                     <div>
-                        <p class="text-xs uppercase text-gray-500">Cartão principal</p>
-                        <p class="mt-1 text-sm text-gray-200">{{ creditCard.parent_card?.name ?? '-' }}</p>
+                        <p class="text-xs uppercase text-gray-500">Cartões vinculados</p>
+                        <p class="mt-1 text-sm text-gray-200">{{ familyCards.length }}</p>
+                    </div>
+                </div>
+            </ReportSection>
+
+            <ReportSection>
+                <template #header>
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Cartões desta fatura</h2>
+                        <p class="text-sm text-gray-400">Todos compartilham limite, fechamento, vencimento e conta passiva.</p>
+                    </div>
+                </template>
+
+                <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
+                    <div v-for="card in summaryByCard" :key="card.id" class="rounded-xl border border-gray-700 bg-gray-900/40 p-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-semibold text-white">{{ card.name }}</p>
+                                <p class="text-xs text-gray-500">
+                                    {{ cardTypes[card.card_type] ?? card.card_type }} {{ card.last_four ? '· •••• ' + card.last_four : '' }}
+                                </p>
+                            </div>
+                            <p class="text-sm font-semibold text-yellow-300">{{ formatCurrency(card.amount_cents) }}</p>
+                        </div>
                     </div>
                 </div>
             </ReportSection>
@@ -91,11 +121,20 @@ function submitPayment() {
                 <template #header>
                     <div>
                         <h2 class="text-lg font-bold text-white">Registrar compra</h2>
-                        <p class="text-sm text-gray-400">Gera lançamento contábil: débito na despesa e crédito no cartão.</p>
+                        <p class="text-sm text-gray-400">Escolha o cartão usado. O lançamento entra na mesma fatura principal.</p>
                     </div>
                 </template>
 
                 <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-3" @submit.prevent="submitTransaction">
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Cartão usado</label>
+                        <select v-model="transaction.form.credit_card_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
+                            <option v-for="card in familyCards" :key="card.id" :value="card.id">
+                                {{ cardTypes[card.card_type] ?? card.card_type }} · {{ card.name }} {{ card.last_four ? '•••• ' + card.last_four : '' }}
+                            </option>
+                        </select>
+                    </div>
+
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Data da compra</label>
                         <input v-model="transaction.form.purchase_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" />
@@ -111,11 +150,6 @@ function submitPayment() {
                         <input :value="transaction.form.amount" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="R$ 0,00" inputmode="numeric" @input="transaction.updateAmount" />
                     </div>
 
-                    <div class="md:col-span-2">
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Descrição</label>
-                        <input v-model="transaction.form.description" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="Ex: Compra de materiais" />
-                    </div>
-
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de despesa</label>
                         <select v-model="transaction.form.expense_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
@@ -126,12 +160,15 @@ function submitPayment() {
 
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Parcelas</label>
-                        <input v-model="transaction.form.installments_total" type="number" min="1" max="60" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
+                        <div class="grid grid-cols-2 gap-2">
+                            <input v-model="transaction.form.installment_number" type="number" min="1" :max="transaction.form.installments_total" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
+                            <input v-model="transaction.form.installments_total" type="number" min="1" max="60" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
+                        </div>
                     </div>
 
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Parcela atual</label>
-                        <input v-model="transaction.form.installment_number" type="number" min="1" :max="transaction.form.installments_total" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
+                    <div class="md:col-span-2 xl:col-span-3">
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Descrição</label>
+                        <input v-model="transaction.form.description" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="Ex: Compra de materiais" />
                     </div>
 
                     <div class="md:col-span-2 xl:col-span-3 flex justify-end">
@@ -146,7 +183,7 @@ function submitPayment() {
                 <template #header>
                     <div>
                         <h2 class="text-lg font-bold text-white">Pagar fatura</h2>
-                        <p class="text-sm text-gray-400">Gera lançamento contábil: débito no cartão e crédito no banco.</p>
+                        <p class="text-sm text-gray-400">O pagamento baixa a fatura principal: débito no cartão e crédito no banco.</p>
                     </div>
                 </template>
 
@@ -180,15 +217,16 @@ function submitPayment() {
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">Compras registradas</h2>
-                        <p class="text-sm text-gray-400">Últimas compras lançadas neste cartão.</p>
+                        <h2 class="text-lg font-bold text-white">Lançamentos da fatura</h2>
+                        <p class="text-sm text-gray-400">Todas as compras do cartão principal, adicionais e virtuais.</p>
                     </div>
                 </template>
 
-                <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma compra registrada." :empty-colspan="7">
+                <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma compra registrada." :empty-colspan="8">
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Data</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Cartão</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Estabelecimento</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Despesa</th>
@@ -200,6 +238,10 @@ function submitPayment() {
 
                     <tr v-for="item in transactions" :key="item.id" class="hover:bg-gray-800/50">
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(item.purchase_date) }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300">
+                            {{ item.credit_card?.name ?? '-' }}
+                            <span v-if="item.credit_card?.last_four" class="text-xs text-gray-500">•••• {{ item.credit_card.last_four }}</span>
+                        </td>
                         <td class="px-4 py-3 text-sm font-semibold text-white">{{ item.merchant_name }}</td>
                         <td class="px-4 py-3 text-sm text-gray-300">{{ item.description }}</td>
                         <td class="px-4 py-3 text-sm text-gray-400">{{ formatAccount(item.expense_account?.code, item.expense_account?.name) }}</td>
@@ -217,7 +259,7 @@ function submitPayment() {
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">Pagamentos de fatura</h2>
+                        <h2 class="text-lg font-bold text-white">Pagamentos da fatura</h2>
                         <p class="text-sm text-gray-400">Pagamentos registrados contra contas bancárias.</p>
                     </div>
                 </template>
