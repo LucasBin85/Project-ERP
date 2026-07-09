@@ -46,9 +46,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::table('chart_of_accounts')
-            ->where('code', '2.2')
-            ->where('name', 'Cartões de Crédito')
-            ->delete();
+        // Mantém o grupo contábil para evitar quebrar carteiras que já tenham
+        // contas filhas de cartão vinculadas a lançamentos ou cartões.
     }
 };
