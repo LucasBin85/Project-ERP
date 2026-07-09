@@ -15,6 +15,7 @@ use App\Models\AccountReceivable;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCard;
+use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPayment;
 use App\Models\CreditCardTransaction;
 use App\Models\JournalEntry;
@@ -373,13 +374,25 @@ class JournalEntryTestSeeder extends Seeder
         }
 
         if (! CreditCardPayment::query()->where('wallet_id', $wallet->id)->where('description', 'Pagamento fatura Nubank')->exists()) {
+            $invoice = CreditCardInvoice::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('credit_card_id', $mainCard->id)
+                ->where('balance_cents', '>', 0)
+                ->orderBy('due_at')
+                ->first();
+
+            if (! $invoice) {
+                return;
+            }
+
             app(PayCreditCardInvoice::class)->execute(
                 $wallet,
                 new CreditCardPaymentDTO(
                     creditCardId: $mainCard->id,
+                    creditCardInvoiceId: $invoice->id,
                     bankAccountId: $bankAccount->id,
                     paymentDate: now()->subDay()->toDateString(),
-                    amountCents: 8990,
+                    amountCents: min(8990, $invoice->balance_cents),
                     description: 'Pagamento fatura Nubank',
                 ),
             );
