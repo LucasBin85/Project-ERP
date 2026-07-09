@@ -8,8 +8,9 @@ function todayLocal(): string {
     return [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
 }
 
-export function useCreditCardTransactionForm() {
+export function useCreditCardTransactionForm(defaultCreditCardId: number | string) {
     const form = useForm({
+        credit_card_id: String(defaultCreditCardId),
         expense_account_id: '',
         purchase_date: todayLocal(),
         merchant_name: '',
@@ -23,7 +24,8 @@ export function useCreditCardTransactionForm() {
 
     const canSubmit = computed(() => {
         return Boolean(
-            form.expense_account_id &&
+            form.credit_card_id &&
+                form.expense_account_id &&
                 form.purchase_date &&
                 form.merchant_name.trim() &&
                 form.description.trim() &&
