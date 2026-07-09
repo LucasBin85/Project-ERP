@@ -50,6 +50,10 @@ export function formatAccount(
 export function formatStatus(status?: string | null): string {
     const statuses: Record<string, string> = {
         active: 'Ativo',
+        open: 'Aberta',
+        closed: 'Fechada',
+        partial: 'Parcial',
+        overdue: 'Vencida',
         posted: 'Postado',
         draft: 'Rascunho',
         pending: 'Pendente',
