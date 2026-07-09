@@ -5,12 +5,18 @@ namespace Database\Seeders;
 use App\DTOs\Financial\AccountPayableDTO;
 use App\DTOs\Financial\AccountReceivableDTO;
 use App\DTOs\Financial\BankTransferDTO;
+use App\DTOs\Financial\CreditCardDTO;
+use App\DTOs\Financial\CreditCardPaymentDTO;
+use App\DTOs\Financial\CreditCardTransactionDTO;
 use App\DTOs\Financial\PayAccountPayableDTO;
 use App\DTOs\Financial\ReceiveAccountReceivableDTO;
 use App\Models\AccountPayable;
 use App\Models\AccountReceivable;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
+use App\Models\CreditCard;
+use App\Models\CreditCardPayment;
+use App\Models\CreditCardTransaction;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
@@ -19,7 +25,10 @@ use App\Services\Financial\CreateAccountPayable;
 use App\Services\Financial\CreateAccountReceivable;
 use App\Services\Financial\CreateBankAccount;
 use App\Services\Financial\CreateBankTransfer;
+use App\Services\Financial\CreateCreditCard;
+use App\Services\Financial\CreateCreditCardTransaction;
 use App\Services\Financial\PayAccountPayable;
+use App\Services\Financial\PayCreditCardInvoice;
 use App\Services\Financial\ReceiveAccountReceivable;
 use Illuminate\Database\Seeder;
 
@@ -101,6 +110,7 @@ class JournalEntryTestSeeder extends Seeder
         $this->bankTransfer($wallet, $primaryBank, $reserveBank);
         $this->accountsPayable($wallet, $expense, $primaryBank);
         $this->accountsReceivable($wallet, $income, $primaryBank);
+        $this->creditCards($wallet, $expense, $primaryBank);
 
         $this->command?->info('JournalEntryTestSeeder executado com dados financeiros de demonstração.');
     }
@@ -277,6 +287,94 @@ class JournalEntryTestSeeder extends Seeder
                     description: 'Projeto cliente Beta',
                     dueDate: now()->addDays(7)->toDateString(),
                     amountCents: 480000,
+                ),
+            );
+        }
+    }
+
+    private function creditCards(Wallet $wallet, ChartOfAccount $expense, BankAccount $bankAccount): void
+    {
+        $mainCard = CreditCard::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('name', 'Nubank Principal')
+            ->first();
+
+        if (! $mainCard) {
+            $mainCard = app(CreateCreditCard::class)->execute(
+                $wallet,
+                new CreditCardDTO(
+                    name: 'Nubank Principal',
+                    issuerName: 'Nubank',
+                    network: 'mastercard',
+                    cardType: 'main',
+                    closingDay: 5,
+                    dueDay: 15,
+                    bestPurchaseDay: 6,
+                    creditLimitCents: 600000,
+                    holderName: 'Usuário Demo',
+                    lastFour: '1234',
+                ),
+            );
+        }
+
+        if (! CreditCard::query()->where('wallet_id', $wallet->id)->where('name', 'Nubank Virtual')->exists()) {
+            app(CreateCreditCard::class)->execute(
+                $wallet,
+                new CreditCardDTO(
+                    name: 'Nubank Virtual',
+                    issuerName: 'Nubank',
+                    network: 'mastercard',
+                    cardType: 'virtual',
+                    closingDay: 5,
+                    dueDay: 15,
+                    bestPurchaseDay: 6,
+                    creditLimitCents: 600000,
+                    parentCardId: $mainCard->id,
+                    holderName: 'Usuário Demo',
+                    lastFour: '5678',
+                ),
+            );
+        }
+
+        if (! CreditCardTransaction::query()->where('wallet_id', $wallet->id)->where('description', 'Assinatura software ERP')->exists()) {
+            app(CreateCreditCardTransaction::class)->execute(
+                $wallet,
+                new CreditCardTransactionDTO(
+                    creditCardId: $mainCard->id,
+                    expenseAccountId: $expense->id,
+                    purchaseDate: now()->subDays(9)->toDateString(),
+                    merchantName: 'SaaS Tools',
+                    description: 'Assinatura software ERP',
+                    amountCents: 8990,
+                ),
+            );
+        }
+
+        if (! CreditCardTransaction::query()->where('wallet_id', $wallet->id)->where('description', 'Notebook acessórios')->exists()) {
+            app(CreateCreditCardTransaction::class)->execute(
+                $wallet,
+                new CreditCardTransactionDTO(
+                    creditCardId: $mainCard->id,
+                    expenseAccountId: $expense->id,
+                    purchaseDate: now()->subDays(2)->toDateString(),
+                    merchantName: 'Loja Tech',
+                    description: 'Notebook acessórios',
+                    amountCents: 24990,
+                    installmentsTotal: 3,
+                    installmentNumber: 1,
+                ),
+            );
+        }
+
+        if (! CreditCardPayment::query()->where('wallet_id', $wallet->id)->where('description', 'Pagamento fatura Nubank')->exists()) {
+            app(PayCreditCardInvoice::class)->execute(
+                $wallet,
+                new CreditCardPaymentDTO(
+                    creditCardId: $mainCard->id,
+                    bankAccountId: $bankAccount->id,
+                    paymentDate: now()->subDay()->toDateString(),
+                    amountCents: 8990,
+                    description: 'Pagamento fatura Nubank',
                 ),
             );
         }
