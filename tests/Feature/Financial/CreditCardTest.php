@@ -3,6 +3,7 @@
 use App\DTOs\Financial\CreditCardDTO;
 use App\DTOs\Financial\CreditCardPaymentDTO;
 use App\DTOs\Financial\CreditCardTransactionDTO;
+use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
@@ -16,13 +17,58 @@ use Tests\Helpers\FinancialTestHelper;
 
 uses(RefreshDatabase::class);
 
-it('creates a main credit card with a liability account', function () {
+function createCreditCardLiabilityGroup(Wallet $wallet): void
+{
+    $passivo = ChartOfAccount::query()->updateOrCreate(
+        [
+            'wallet_id' => $wallet->id,
+            'code' => '2',
+        ],
+        [
+            'name' => 'Passivo',
+            'type' => 'passivo',
+            'normal_balance' => 'credit',
+            'allows_posting' => false,
+        ],
+    );
+
+    ChartOfAccount::query()->updateOrCreate(
+        [
+            'wallet_id' => $wallet->id,
+            'code' => '2.2',
+        ],
+        [
+            'parent_id' => $passivo->id,
+            'name' => 'Cartões de Crédito',
+            'type' => 'passivo',
+            'normal_balance' => 'credit',
+            'allows_posting' => false,
+        ],
+    );
+}
+
+function createTestWalletWithCardGroup(): Wallet
+{
     $user = User::factory()->create();
 
     $wallet = Wallet::query()->create([
         'user_id' => $user->id,
         'name' => 'Carteira Teste',
     ]);
+
+    createCreditCardLiabilityGroup($wallet);
+
+    return $wallet;
+}
+
+it('creates a main credit card with a liability account and linked bank account', function () {
+    $wallet = createTestWalletWithCardGroup();
+
+    $bankAccount = FinancialTestHelper::bankAccount(
+        wallet: $wallet,
+        code: '1.1.2.001',
+        name: 'Banco Principal',
+    );
 
     $creditCard = app(CreateCreditCard::class)->execute(
         $wallet,
@@ -35,24 +81,27 @@ it('creates a main credit card with a liability account', function () {
             dueDay: 15,
             bestPurchaseDay: 6,
             creditLimitCents: 500000,
+            bankAccountId: $bankAccount->id,
             holderName: 'Lucas',
             lastFour: '1234',
         ),
     );
 
     expect($creditCard->card_type)->toBe('main')
+        ->and($creditCard->bank_account_id)->toBe($bankAccount->id)
         ->and($creditCard->liabilityAccount->code)->toBe('2.2.001')
         ->and($creditCard->liabilityAccount->type)->toBe('passivo')
         ->and($creditCard->liabilityAccount->allows_posting)->toBeTrue();
 });
 
-it('creates an additional credit card sharing parent liability account', function () {
-    $user = User::factory()->create();
+it('creates a virtual credit card sharing parent invoice settings', function () {
+    $wallet = createTestWalletWithCardGroup();
 
-    $wallet = Wallet::query()->create([
-        'user_id' => $user->id,
-        'name' => 'Carteira Teste',
-    ]);
+    $bankAccount = FinancialTestHelper::bankAccount(
+        wallet: $wallet,
+        code: '1.1.2.001',
+        name: 'Banco Principal',
+    );
 
     $mainCard = app(CreateCreditCard::class)->execute(
         $wallet,
@@ -65,38 +114,45 @@ it('creates an additional credit card sharing parent liability account', functio
             dueDay: 15,
             bestPurchaseDay: 6,
             creditLimitCents: 500000,
+            bankAccountId: $bankAccount->id,
         ),
     );
 
-    $additionalCard = app(CreateCreditCard::class)->execute(
+    $virtualCard = app(CreateCreditCard::class)->execute(
         $wallet,
         new CreditCardDTO(
             name: 'Nubank Virtual',
             issuerName: 'Nubank',
             network: 'mastercard',
             cardType: 'virtual',
-            closingDay: 5,
-            dueDay: 15,
-            bestPurchaseDay: 6,
-            creditLimitCents: 500000,
+            closingDay: 20,
+            dueDay: 28,
+            bestPurchaseDay: 21,
+            creditLimitCents: 100000,
             parentCardId: $mainCard->id,
             lastFour: '9999',
         ),
     );
 
-    expect($additionalCard->parent_card_id)->toBe($mainCard->id)
-        ->and($additionalCard->liability_account_id)->toBe($mainCard->liability_account_id);
+    expect($virtualCard->parent_card_id)->toBe($mainCard->id)
+        ->and($virtualCard->liability_account_id)->toBe($mainCard->liability_account_id)
+        ->and($virtualCard->bank_account_id)->toBe($mainCard->bank_account_id)
+        ->and($virtualCard->closing_day)->toBe($mainCard->closing_day)
+        ->and($virtualCard->due_day)->toBe($mainCard->due_day)
+        ->and($virtualCard->best_purchase_day)->toBe($mainCard->best_purchase_day)
+        ->and($virtualCard->credit_limit_cents)->toBe($mainCard->credit_limit_cents);
 });
 
 it('creates a posted journal entry when registering a credit card purchase', function () {
-    $user = User::factory()->create();
-
-    $wallet = Wallet::query()->create([
-        'user_id' => $user->id,
-        'name' => 'Carteira Teste',
-    ]);
+    $wallet = createTestWalletWithCardGroup();
 
     $expenseAccount = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
+
+    $bankAccount = FinancialTestHelper::bankAccount(
+        wallet: $wallet,
+        code: '1.1.2.001',
+        name: 'Banco Principal',
+    );
 
     $creditCard = app(CreateCreditCard::class)->execute(
         $wallet,
@@ -109,6 +165,7 @@ it('creates a posted journal entry when registering a credit card purchase', fun
             dueDay: 15,
             bestPurchaseDay: 6,
             creditLimitCents: 500000,
+            bankAccountId: $bankAccount->id,
         ),
     );
 
@@ -144,12 +201,7 @@ it('creates a posted journal entry when registering a credit card purchase', fun
 });
 
 it('creates a posted journal entry when paying a credit card invoice', function () {
-    $user = User::factory()->create();
-
-    $wallet = Wallet::query()->create([
-        'user_id' => $user->id,
-        'name' => 'Carteira Teste',
-    ]);
+    $wallet = createTestWalletWithCardGroup();
 
     $expenseAccount = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
 
@@ -170,6 +222,7 @@ it('creates a posted journal entry when paying a credit card invoice', function 
             dueDay: 15,
             bestPurchaseDay: 6,
             creditLimitCents: 500000,
+            bankAccountId: $bankAccount->id,
         ),
     );
 
