@@ -14,6 +14,10 @@ class BuildOfxReconciliationStatementItems
     {
         $alreadyReconciledIds = BankReconciliationStatementItem::query()
             ->whereNotNull('bank_statement_import_transaction_id')
+            ->whereHas('bankReconciliation', function ($query) use ($wallet, $bankAccount) {
+                $query->where('wallet_id', $wallet->id)
+                    ->where('bank_account_id', $bankAccount->id);
+            })
             ->pluck('bank_statement_import_transaction_id')
             ->map(fn ($id) => (int) $id)
             ->all();
