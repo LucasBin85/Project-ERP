@@ -76,6 +76,11 @@ export const mainNavItems: NavItem[] = [
                 icon: CircleDollarSign,
             },
             {
+                title: 'Fluxo de Caixa',
+                href: route('cash-flow.index'),
+                icon: ChartColumn,
+            },
+            {
                 title: 'Contas Bancárias',
                 href: route('bank-accounts.index'),
                 icon: Building2,
