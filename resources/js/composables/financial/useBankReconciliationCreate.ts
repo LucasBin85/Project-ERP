@@ -79,6 +79,10 @@ function absoluteMoney(value: number): string {
     return formatMoneyInput(String(Math.abs(value)));
 }
 
+function normalizeMovementType(value: string): MovementType {
+    return value === 'inflow' ? 'inflow' : 'outflow';
+}
+
 function movementTypeFromAmount(amountCents: number): MovementType {
     return Number(amountCents) >= 0 ? 'inflow' : 'outflow';
 }
@@ -234,15 +238,17 @@ export function useBankReconciliationCreate(
         item.amount = formatMoneyInput(target.value);
     }
 
-    function updateStatementItemType(index: number, movementType: MovementType) {
+    function updateStatementItemType(index: number, movementType: string) {
         const item = form.statement_items[index];
 
         if (!item || item.source === 'ofx') {
             return;
         }
 
-        item.movement_type = movementType;
-        item.amount_cents = signedCents(item.amount, movementType);
+        const normalizedType = normalizeMovementType(movementType);
+
+        item.movement_type = normalizedType;
+        item.amount_cents = signedCents(item.amount, normalizedType);
     }
 
     function applySuggestedStatementItems() {
