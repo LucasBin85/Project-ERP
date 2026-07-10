@@ -15,12 +15,14 @@ const props = defineProps<{
     bankAccounts: Array<Record<string, any>>;
     filters: Record<string, string>;
     preview: Record<string, any>;
+    ofxStatementItems: Array<Record<string, any>>;
 }>();
 
 const reconciliation = useBankReconciliationCreate(
     props.filters,
     props.preview.lines ?? [],
     Number(props.preview.opening_balance_cents ?? 0),
+    props.ofxStatementItems ?? [],
 );
 
 function lineLabel(line: Record<string, any>): string {
@@ -47,7 +49,7 @@ function submit() {
                         </h2>
 
                         <p class="mt-1 text-sm text-gray-400">
-                            Selecione a conta e o período. Os lançamentos do sistema são carregados automaticamente.
+                            Selecione a conta e o período. O sistema carrega o OFX importado e os lançamentos internos automaticamente.
                         </p>
                     </div>
                 </template>
@@ -95,11 +97,17 @@ function submit() {
                 </div>
             </ReportSection>
 
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
                 <ReportSummaryCard
                     label="Saldo inicial"
                     :value="formatCurrency(preview.opening_balance_cents)"
                     tone="blue"
+                />
+
+                <ReportSummaryCard
+                    label="Itens OFX"
+                    :value="String(reconciliation.ofxItemsCount.value)"
+                    :tone="reconciliation.ofxItemsCount.value > 0 ? 'green' : 'yellow'"
                 />
 
                 <ReportSummaryCard
@@ -132,15 +140,23 @@ function submit() {
                     <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
                             <h2 class="text-lg font-bold text-white">
-                                Extrato do banco × lançamentos do sistema
+                                OFX importado × lançamentos do sistema
                             </h2>
 
                             <p class="text-sm text-gray-400">
-                                Cadastre as linhas do extrato bancário e vincule cada uma a um lançamento postado no ERP.
+                                As transações OFX importadas aparecem como extrato externo. Vincule cada item a um lançamento postado no ERP.
                             </p>
                         </div>
 
                         <div class="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                class="rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                                @click="reconciliation.applyOfxStatementItems"
+                            >
+                                Recarregar OFX
+                            </button>
+
                             <button
                                 type="button"
                                 class="rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-semibold text-gray-300 hover:bg-gray-800"
@@ -154,7 +170,7 @@ function submit() {
                                 class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
                                 @click="reconciliation.addStatementItem"
                             >
-                                Adicionar item do extrato
+                                Adicionar item manual
                             </button>
                         </div>
                     </div>
@@ -162,12 +178,13 @@ function submit() {
 
                 <ReportTable
                     :empty="reconciliation.form.statement_items.length === 0"
-                    empty-message="Adicione itens do extrato bancário para iniciar a conciliação."
-                    :empty-colspan="7"
+                    empty-message="Nenhum item OFX encontrado no período. Importe um OFX ou adicione itens manuais para iniciar a conciliação."
+                    :empty-colspan="8"
                 >
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Fonte</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Data extrato</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição extrato</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Tipo</th>
@@ -179,11 +196,20 @@ function submit() {
 
                     <tr
                         v-for="(item, index) in reconciliation.form.statement_items"
-                        :key="index"
+                        :key="item.bank_statement_import_transaction_id ?? index"
                         class="hover:bg-gray-800/50"
                     >
                         <td class="whitespace-nowrap px-4 py-3 text-sm">
                             <StatusBadge :status="item.journal_line_id ? 'reconciled' : 'pending'" />
+                        </td>
+
+                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                            <div class="font-semibold" :class="item.source === 'ofx' ? 'text-green-300' : 'text-gray-200'">
+                                {{ item.source_label }}
+                            </div>
+                            <div v-if="item.external_id" class="max-w-[140px] truncate text-xs text-gray-500">
+                                {{ item.external_id }}
+                            </div>
                         </td>
 
                         <td class="px-4 py-3 text-sm">
@@ -192,22 +218,28 @@ function submit() {
                                 type="date"
                                 :min="reconciliation.form.period_start"
                                 :max="reconciliation.form.period_end"
-                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]"
+                                :disabled="item.source === 'ofx'"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white disabled:opacity-60 [color-scheme:dark]"
                             />
                         </td>
 
                         <td class="px-4 py-3 text-sm">
                             <input
                                 v-model="item.description"
-                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                                :disabled="item.source === 'ofx'"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white disabled:opacity-60"
                                 placeholder="Descrição no extrato"
                             />
+                            <p v-if="item.match_reason" class="mt-1 text-xs text-green-300">
+                                {{ item.match_reason }}
+                            </p>
                         </td>
 
                         <td class="px-4 py-3 text-sm">
                             <select
                                 v-model="item.movement_type"
-                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                                :disabled="item.source === 'ofx'"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white disabled:opacity-60"
                                 @change="reconciliation.updateStatementItemType(index, item.movement_type)"
                             >
                                 <option value="inflow">Entrada</option>
@@ -218,7 +250,8 @@ function submit() {
                         <td class="px-4 py-3 text-right text-sm">
                             <input
                                 :value="item.amount"
-                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-right text-white"
+                                :disabled="item.source === 'ofx'"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-right text-white disabled:opacity-60"
                                 placeholder="R$ 0,00"
                                 inputmode="numeric"
                                 @input="reconciliation.updateStatementItemAmount(index, $event)"
@@ -273,7 +306,7 @@ function submit() {
 
                 <ReportTable
                     :empty="(preview.lines ?? []).length === 0"
-                    empty-message="Nenhum lançamento postado encontrado para a conta e período."
+                    empty-message="Nenhum lançamento postado encontrado para a conta e período. Reclassifique e poste os lançamentos importados antes de concluir a conciliação."
                     :empty-colspan="4"
                 >
                     <template #head>
@@ -320,7 +353,7 @@ function submit() {
                         </h2>
 
                         <p class="text-sm text-gray-400">
-                            A diferença compara o saldo calculado pelo extrato bancário com o saldo dos lançamentos vinculados.
+                            A diferença compara o saldo calculado pelo OFX/extrato externo com o saldo dos lançamentos internos vinculados.
                         </p>
                     </div>
                 </template>
