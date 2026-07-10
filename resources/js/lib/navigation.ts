@@ -123,9 +123,8 @@ export const mainNavItems: NavItem[] = [
         items: [
             {
                 title: 'OFX',
+                href: route('ofx-imports.index'),
                 icon: Upload,
-                disabled: true,
-                badge: 'Em breve',
             },
             {
                 title: 'Open Finance',
