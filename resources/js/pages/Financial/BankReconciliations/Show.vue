@@ -99,11 +99,11 @@ defineProps<{
                 <template #header>
                     <div>
                         <h2 class="text-lg font-bold text-white">
-                            Extrato do banco × lançamento do sistema
+                            OFX/extrato do banco × lançamento do sistema
                         </h2>
 
                         <p class="text-sm text-gray-400">
-                            Vínculos registrados entre cada linha do extrato externo e os lançamentos internos do ERP.
+                            Vínculos registrados entre cada transação externa importada e os lançamentos internos do ERP.
                         </p>
                     </div>
                 </template>
@@ -111,11 +111,12 @@ defineProps<{
                 <ReportTable
                     :empty="(reconciliation.statement_items ?? []).length === 0"
                     empty-message="Nenhum item de extrato registrado."
-                    :empty-colspan="6"
+                    :empty-colspan="7"
                 >
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Fonte</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Data extrato</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição extrato</th>
                             <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Valor extrato</th>
@@ -131,6 +132,21 @@ defineProps<{
                     >
                         <td class="whitespace-nowrap px-4 py-3 text-sm">
                             <StatusBadge :status="item.status" />
+                        </td>
+
+                        <td class="whitespace-nowrap px-4 py-3 text-sm">
+                            <div v-if="item.bank_statement_import_transaction" class="font-semibold text-green-300">
+                                OFX
+                            </div>
+                            <div v-else class="font-semibold text-gray-300">
+                                Manual
+                            </div>
+                            <div v-if="item.bank_statement_import_transaction?.fit_id" class="max-w-[140px] truncate text-xs text-gray-500">
+                                {{ item.bank_statement_import_transaction.fit_id }}
+                            </div>
+                            <div v-if="item.bank_statement_import_transaction?.import?.original_filename" class="max-w-[140px] truncate text-xs text-gray-500">
+                                {{ item.bank_statement_import_transaction.import.original_filename }}
+                            </div>
                         </td>
 
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
