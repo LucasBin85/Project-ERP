@@ -46,9 +46,7 @@ class AccountingTestHelper
             'status' => 'posted',
             'posted_at' => now(),
             'is_balanced' => $debit === $credit,
-            'debit_total' => $debit,
-            'credit_total' => $credit,
-            'diff_total' => $debit - $credit,
+            'balance_diff_cents' => $debit - $credit,
         ]);
 
         foreach ($lines as [$account, $type, $amount]) {
