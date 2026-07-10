@@ -5,6 +5,7 @@ use App\DTOs\Financial\CreditCardPaymentDTO;
 use App\DTOs\Financial\CreditCardTransactionDTO;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCardInvoice;
+use App\Models\CreditCardTransaction;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
@@ -209,6 +210,77 @@ it('creates a posted journal entry and monthly invoice when registering a credit
         'type' => 'credit',
         'amount_cents' => 12590,
     ]);
+});
+
+it('splits a credit card purchase into installments across monthly invoices', function () {
+    $wallet = createTestWalletWithCardGroup();
+
+    $expenseAccount = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
+
+    $bankAccount = FinancialTestHelper::bankAccount(
+        wallet: $wallet,
+        code: '1.1.2.001',
+        name: 'Banco Principal',
+    );
+
+    $creditCard = app(CreateCreditCard::class)->execute(
+        $wallet,
+        new CreditCardDTO(
+            name: 'Nubank Principal',
+            issuerName: 'Nubank',
+            network: 'mastercard',
+            cardType: 'main',
+            closingDay: 5,
+            dueDay: 15,
+            bestPurchaseDay: 6,
+            creditLimitCents: 500000,
+            bankAccountId: $bankAccount->id,
+        ),
+    );
+
+    $firstInstallment = app(CreateCreditCardTransaction::class)->execute(
+        $wallet,
+        new CreditCardTransactionDTO(
+            creditCardId: $creditCard->id,
+            expenseAccountId: $expenseAccount->id,
+            purchaseDate: '2026-07-10',
+            merchantName: 'Loja Tech',
+            description: 'Compra parcelada',
+            amountCents: 90000,
+            installmentsTotal: 3,
+            installmentNumber: 1,
+        ),
+    );
+
+    $installments = CreditCardTransaction::query()
+        ->where('wallet_id', $wallet->id)
+        ->where('description', 'Compra parcelada')
+        ->orderBy('installment_number')
+        ->get();
+
+    expect($installments)->toHaveCount(3)
+        ->and(JournalEntry::query()->count())->toBe(3)
+        ->and(JournalLine::query()->count())->toBe(6)
+        ->and($firstInstallment->parent_transaction_id)->toBeNull()
+        ->and($installments[1]->parent_transaction_id)->toBe($firstInstallment->id)
+        ->and($installments[2]->parent_transaction_id)->toBe($firstInstallment->id);
+
+    expect($installments->pluck('amount_cents')->all())->toBe([30000, 30000, 30000])
+        ->and($installments->pluck('purchase_date')->map->toDateString()->all())->toBe([
+            '2026-07-10',
+            '2026-08-10',
+            '2026-09-10',
+        ]);
+
+    $invoices = CreditCardInvoice::query()
+        ->where('credit_card_id', $creditCard->id)
+        ->orderBy('reference_month')
+        ->get();
+
+    expect($invoices)->toHaveCount(3)
+        ->and($invoices->pluck('reference_month')->all())->toBe([8, 9, 10])
+        ->and($invoices->pluck('total_cents')->all())->toBe([30000, 30000, 30000])
+        ->and($invoices->pluck('balance_cents')->all())->toBe([30000, 30000, 30000]);
 });
 
 it('creates a posted journal entry when paying a specific credit card invoice', function () {
