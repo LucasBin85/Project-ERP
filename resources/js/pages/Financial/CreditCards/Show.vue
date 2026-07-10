@@ -39,6 +39,7 @@ function invoiceLabel(invoice: Record<string, any>): string {
 
 function submitTransaction() {
     if (!transaction.canSubmit.value) return;
+    transaction.form.installment_number = 1;
     transaction.form.post(route('credit-cards.transactions.store', [props.creditCard.id]));
 }
 
@@ -161,7 +162,7 @@ function submitPayment() {
                 <template #header>
                     <div>
                         <h2 class="text-lg font-bold text-white">Registrar compra</h2>
-                        <p class="text-sm text-gray-400">Escolha o cartão usado. A fatura mensal será definida automaticamente pela data da compra.</p>
+                        <p class="text-sm text-gray-400">Informe o valor total da compra. Se houver parcelamento, cada parcela será lançada em sua fatura mensal.</p>
                     </div>
                 </template>
 
@@ -186,7 +187,7 @@ function submitPayment() {
                     </div>
 
                     <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Valor</label>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Valor total da compra</label>
                         <input :value="transaction.form.amount" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="R$ 0,00" inputmode="numeric" @input="transaction.updateAmount" />
                     </div>
 
@@ -199,11 +200,9 @@ function submitPayment() {
                     </div>
 
                     <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Parcelas</label>
-                        <div class="grid grid-cols-2 gap-2">
-                            <input v-model="transaction.form.installment_number" type="number" min="1" :max="transaction.form.installments_total" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
-                            <input v-model="transaction.form.installments_total" type="number" min="1" max="60" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
-                        </div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Número de parcelas</label>
+                        <input v-model="transaction.form.installments_total" type="number" min="1" max="60" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
+                        <p class="mt-1 text-xs text-gray-500">Ex: R$ 900 em 3x cria R$ 300 nas próximas 3 faturas.</p>
                     </div>
 
                     <div class="md:col-span-2 xl:col-span-3">
@@ -268,7 +267,7 @@ function submitPayment() {
                 <template #header>
                     <div>
                         <h2 class="text-lg font-bold text-white">Lançamentos da fatura</h2>
-                        <p class="text-sm text-gray-400">Todas as compras do cartão principal, adicionais e virtuais.</p>
+                        <p class="text-sm text-gray-400">Compras à vista e parcelas do cartão principal, adicionais e virtuais.</p>
                     </div>
                 </template>
 
