@@ -1,10 +1,13 @@
 <script setup>
 import AppLayout from '@/layouts/AppLayout.vue'
+import DashboardAlerts from '@/components/dashboard/DashboardAlerts.vue'
+import DashboardBankBalances from '@/components/dashboard/DashboardBankBalances.vue'
 import DashboardCards from '@/components/dashboard/DashboardCards.vue'
 import DashboardChart from '@/components/dashboard/DashboardChart.vue'
 import DashboardHero from '@/components/dashboard/DashboardHero.vue'
 import DashboardLatestEntries from '@/components/dashboard/DashboardLatestEntries.vue'
 import DashboardSummary from '@/components/dashboard/DashboardSummary.vue'
+import DashboardUpcoming from '@/components/dashboard/DashboardUpcoming.vue'
 import { useDashboard } from '@/composables/dashboard/useDashboard'
 
 const props = defineProps({
@@ -13,6 +16,9 @@ const props = defineProps({
     kpis: Object,
     chart: Array,
     latestEntries: Array,
+    bankBalances: Array,
+    upcoming: Array,
+    alerts: Array,
 })
 
 const dashboard = useDashboard(props)
@@ -29,6 +35,8 @@ const dashboard = useDashboard(props)
                 @clear-filters="dashboard.clearFilters"
                 @open-date-picker="dashboard.openDatePicker"
             />
+
+            <DashboardAlerts :alerts="alerts" />
 
             <DashboardCards :cards="dashboard.dashboardCards.value" />
 
@@ -50,7 +58,16 @@ const dashboard = useDashboard(props)
                     :result-margin="dashboard.resultMargin.value"
                     :latest-entries-count="latestEntries.length"
                     @open-journal="dashboard.goToGeneralJournal"
+                    @open-cash-flow="dashboard.goToCashFlow"
+                    @open-payables="dashboard.goToAccountsPayable"
+                    @open-receivables="dashboard.goToAccountsReceivable"
+                    @open-credit-cards="dashboard.goToCreditCards"
                 />
+            </section>
+
+            <section class="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1.4fr]">
+                <DashboardBankBalances :bank-balances="bankBalances" />
+                <DashboardUpcoming :upcoming="upcoming" @open-item="dashboard.visit" />
             </section>
 
             <DashboardLatestEntries
