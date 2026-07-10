@@ -21,7 +21,12 @@ defineProps({
 
                     <p
                         class="mt-3 text-2xl font-bold"
-                        :class="card.tone === 'negative' ? 'text-red-300' : 'text-green-300'"
+                        :class="{
+                            'text-green-300': card.tone === 'positive',
+                            'text-red-300': card.tone === 'negative',
+                            'text-yellow-300': card.tone === 'warning',
+                            'text-white': !['positive', 'negative', 'warning'].includes(card.tone),
+                        }"
                     >
                         {{ card.value }}
                     </p>
@@ -29,11 +34,14 @@ defineProps({
 
                 <span
                     class="rounded-full px-3 py-1 text-xs font-bold"
-                    :class="card.tone === 'negative'
-                        ? 'bg-red-950/60 text-red-300'
-                        : 'bg-green-950/60 text-green-300'"
+                    :class="{
+                        'bg-green-950/60 text-green-300': card.tone === 'positive',
+                        'bg-red-950/60 text-red-300': card.tone === 'negative',
+                        'bg-yellow-950/60 text-yellow-300': card.tone === 'warning',
+                        'bg-blue-950/60 text-blue-300': !['positive', 'negative', 'warning'].includes(card.tone),
+                    }"
                 >
-                    {{ card.tone === 'negative' ? 'Saída' : 'Entrada' }}
+                    {{ card.badge ?? (card.tone === 'negative' ? 'Saída' : 'Entrada') }}
                 </span>
             </div>
 
