@@ -42,6 +42,41 @@ export function useDashboard(props) {
         })
     }
 
+    function goToCashFlow() {
+        router.get(route('cash-flow.index'), {
+            start_date: form.start_date,
+            end_date: form.end_date,
+            type: 'both',
+        })
+    }
+
+    function goToBankStatements() {
+        router.get(route('bank-statements.index'), {
+            start_date: form.start_date,
+            end_date: form.end_date,
+        })
+    }
+
+    function goToAccountsReceivable() {
+        router.get(route('accounts-receivable.index'), {
+            start_date: form.start_date,
+            end_date: form.end_date,
+            status: 'pending',
+        })
+    }
+
+    function goToAccountsPayable() {
+        router.get(route('accounts-payable.index'), {
+            start_date: form.start_date,
+            end_date: form.end_date,
+            status: 'pending',
+        })
+    }
+
+    function goToCreditCards() {
+        router.get(route('credit-cards.index'))
+    }
+
     function goToDate(date) {
         router.get(route('general-journal.index'), {
             start_date: date,
@@ -51,6 +86,11 @@ export function useDashboard(props) {
 
     function goToEntry(entryUrl) {
         router.visit(entryUrl)
+    }
+
+    function visit(url) {
+        if (!url) return
+        router.visit(url)
     }
 
     const periodLabel = computed(() => {
@@ -70,32 +110,68 @@ export function useDashboard(props) {
 
     const dashboardCards = computed(() => [
         {
-            label: 'Saldo',
-            value: formatCurrency(props.kpis.balance_cents),
-            helper: 'Resultado acumulado da carteira',
-            tone: Number(props.kpis.balance_cents || 0) >= 0 ? 'positive' : 'negative',
-            action: () => goToGeneralJournal(),
+            label: 'Saldo bancário',
+            value: formatCurrency(props.kpis.cash_balance_cents),
+            helper: 'Disponível nas contas bancárias até a data final',
+            tone: Number(props.kpis.cash_balance_cents || 0) >= 0 ? 'positive' : 'negative',
+            badge: 'Caixa',
+            action: () => goToBankStatements(),
         },
         {
-            label: 'Receitas',
-            value: formatCurrency(props.kpis.revenue_cents),
-            helper: 'Entradas reconhecidas no período',
+            label: 'Caixa projetado',
+            value: formatCurrency(props.kpis.projected_cash_balance_cents),
+            helper: 'Saldo bancário + previsões do período',
+            tone: Number(props.kpis.projected_cash_balance_cents || 0) >= 0 ? 'positive' : 'negative',
+            badge: 'Projetado',
+            action: () => goToCashFlow(),
+        },
+        {
+            label: 'Entradas previstas',
+            value: formatCurrency(props.kpis.projected_inflow_cents),
+            helper: 'Contas a receber pendentes no período',
             tone: 'positive',
+            badge: 'Receber',
+            action: () => goToAccountsReceivable(),
+        },
+        {
+            label: 'Saídas previstas',
+            value: formatCurrency(props.kpis.projected_outflow_cents),
+            helper: 'Contas a pagar e faturas de cartão',
+            tone: 'negative',
+            badge: 'Pagar',
+            action: () => goToAccountsPayable(),
+        },
+        {
+            label: 'Receitas realizadas',
+            value: formatCurrency(props.kpis.revenue_cents),
+            helper: 'Receitas reconhecidas no período',
+            tone: 'positive',
+            badge: 'DRE',
             action: () => goToGeneralJournal({ search: 'receita' }),
         },
         {
-            label: 'Despesas',
+            label: 'Despesas realizadas',
             value: formatCurrency(props.kpis.expense_cents),
-            helper: 'Saídas reconhecidas no período',
+            helper: 'Despesas reconhecidas no período',
             tone: 'negative',
+            badge: 'DRE',
             action: () => goToGeneralJournal({ search: 'despesa' }),
         },
         {
-            label: 'Resultado',
+            label: 'Resultado contábil',
             value: formatCurrency(props.kpis.result_cents),
             helper: `${resultMargin.value} sobre receitas`,
             tone: resultTone.value,
+            badge: 'Resultado',
             action: () => goToGeneralJournal(),
+        },
+        {
+            label: 'Vencidos',
+            value: formatCurrency(Number(props.kpis.overdue_inflow_cents || 0) + Number(props.kpis.overdue_outflow_cents || 0)),
+            helper: 'Recebimentos e pagamentos vencidos',
+            tone: Number(props.kpis.overdue_outflow_cents || 0) > 0 ? 'negative' : 'warning',
+            badge: 'Atenção',
+            action: () => goToCashFlow(),
         },
     ])
 
@@ -138,8 +214,14 @@ export function useDashboard(props) {
         openDatePicker,
         clearFilters,
         goToGeneralJournal,
+        goToCashFlow,
+        goToBankStatements,
+        goToAccountsReceivable,
+        goToAccountsPayable,
+        goToCreditCards,
         goToDate,
         goToEntry,
+        visit,
         periodLabel,
         resultTone,
         resultMargin,
