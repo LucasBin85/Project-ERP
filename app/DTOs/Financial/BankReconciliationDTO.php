@@ -5,7 +5,7 @@ namespace App\DTOs\Financial;
 final readonly class BankReconciliationDTO
 {
     /**
-     * @param array<int, array{transaction_date: string, description: string, amount_cents: int, journal_line_id?: int|null}> $statementItems
+     * @param array<int, array{transaction_date: string, description: string, amount_cents: int, journal_line_id?: int|null, bank_statement_import_transaction_id?: int|null}> $statementItems
      */
     public function __construct(
         public int $bankAccountId,
@@ -26,6 +26,7 @@ final readonly class BankReconciliationDTO
             statementBalanceCents: (int) $data['statement_balance_cents'],
             statementItems: collect($data['statement_items'] ?? [])
                 ->map(fn (array $item) => [
+                    'bank_statement_import_transaction_id' => filled($item['bank_statement_import_transaction_id'] ?? null) ? (int) $item['bank_statement_import_transaction_id'] : null,
                     'transaction_date' => (string) $item['transaction_date'],
                     'description' => trim((string) $item['description']),
                     'amount_cents' => (int) $item['amount_cents'],
