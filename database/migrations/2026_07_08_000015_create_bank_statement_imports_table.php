@@ -36,7 +36,7 @@ return new class extends Migration
 
             $table->index(['wallet_id', 'source', 'created_at']);
             $table->index(['bank_account_id', 'created_at']);
-            $table->unique(['wallet_id', 'bank_account_id', 'source', 'file_hash'], 'bank_statement_import_unique_file');
+            $table->index(['wallet_id', 'bank_account_id', 'source', 'file_hash'], 'bank_statement_import_file_idx');
         });
     }
 
