@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankReconciliation;
 use App\Services\Financial\BankReconciliationPreviewService;
+use App\Services\Financial\BuildOfxReconciliationStatementItems;
 use App\Services\Financial\CreateBankReconciliation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -40,8 +41,11 @@ class BankReconciliationController extends Controller
         ]);
     }
 
-    public function create(Request $request, BankReconciliationPreviewService $previewService): Response
-    {
+    public function create(
+        Request $request,
+        BankReconciliationPreviewService $previewService,
+        BuildOfxReconciliationStatementItems $ofxStatementItems,
+    ): Response {
         $wallet = $this->resolveActiveWallet($request);
 
         $bankAccounts = BankAccount::query()
@@ -82,6 +86,8 @@ class BankReconciliationController extends Controller
             'lines' => [],
         ];
 
+        $ofxItems = [];
+
         if ($validated['bank_account_id']) {
             $bankAccount = BankAccount::query()
                 ->where('wallet_id', $wallet->id)
@@ -94,6 +100,14 @@ class BankReconciliationController extends Controller
                 periodStart: $validated['period_start'],
                 periodEnd: $validated['period_end'],
             );
+
+            $ofxItems = $ofxStatementItems->build(
+                wallet: $wallet,
+                bankAccount: $bankAccount,
+                periodStart: $validated['period_start'],
+                periodEnd: $validated['period_end'],
+                availableLineIds: collect($preview['lines'])->pluck('id')->all(),
+            );
         }
 
         return Inertia::render('Financial/BankReconciliations/Create', [
@@ -104,6 +118,7 @@ class BankReconciliationController extends Controller
             'bankAccounts' => $bankAccounts,
             'filters' => $validated,
             'preview' => $preview,
+            'ofxStatementItems' => $ofxItems,
         ]);
     }
 
@@ -123,6 +138,7 @@ class BankReconciliationController extends Controller
             'period_end' => ['required', 'date', 'after_or_equal:period_start'],
             'statement_balance_cents' => ['required', 'integer'],
             'statement_items' => ['required', 'array', 'min:1'],
+            'statement_items.*.bank_statement_import_transaction_id' => ['nullable', 'integer'],
             'statement_items.*.transaction_date' => ['required', 'date'],
             'statement_items.*.description' => ['required', 'string', 'max:255'],
             'statement_items.*.amount_cents' => ['required', 'integer', 'not_in:0'],
@@ -145,6 +161,7 @@ class BankReconciliationController extends Controller
 
         $bankReconciliation->load([
             'bankAccount',
+            'statementItems.bankStatementImportTransaction.import',
             'statementItems.journalLine.journalEntry',
             'items.journalLine.journalEntry',
         ]);
