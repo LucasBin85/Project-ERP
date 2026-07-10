@@ -5,6 +5,8 @@ namespace App\Services\Financial;
 use App\DTOs\Financial\BankReconciliationDTO;
 use App\Models\BankAccount;
 use App\Models\BankReconciliation;
+use App\Models\BankReconciliationStatementItem;
+use App\Models\BankStatementImportTransaction;
 use App\Models\Wallet;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -32,7 +34,17 @@ class CreateBankReconciliation
             );
 
             $availableLines = collect($preview['lines'])->keyBy('id');
-            $linkedLineIds = collect($dto->statementItems)
+            $statementItems = collect($dto->statementItems);
+
+            $this->validateOfxTransactions(
+                wallet: $wallet,
+                bankAccount: $bankAccount,
+                periodStart: $dto->periodStart,
+                periodEnd: $dto->periodEnd,
+                statementItems: $statementItems,
+            );
+
+            $linkedLineIds = $statementItems
                 ->pluck('journal_line_id')
                 ->filter()
                 ->map(fn ($id) => (int) $id)
@@ -58,7 +70,7 @@ class CreateBankReconciliation
                 ]);
             }
 
-            $statementMovementCents = collect($dto->statementItems)
+            $statementMovementCents = $statementItems
                 ->sum('amount_cents');
 
             $statementBalanceCents = (int) $preview['opening_balance_cents'] + (int) $statementMovementCents;
@@ -71,7 +83,7 @@ class CreateBankReconciliation
             $reconciledBalanceCents = (int) $preview['opening_balance_cents'] + (int) $reconciledMovementCents;
             $differenceCents = $reconciledBalanceCents - $statementBalanceCents;
 
-            $hasPendingItems = collect($dto->statementItems)
+            $hasPendingItems = $statementItems
                 ->contains(fn (array $item) => empty($item['journal_line_id']));
 
             $status = $differenceCents === 0 && ! $hasPendingItems ? 'completed' : 'draft';
@@ -96,6 +108,7 @@ class CreateBankReconciliation
                 $status = $linkedLineId ? 'reconciled' : 'pending';
 
                 $reconciliation->statementItems()->create([
+                    'bank_statement_import_transaction_id' => $statementItem['bank_statement_import_transaction_id'] ?? null,
                     'journal_line_id' => $linkedLineId,
                     'transaction_date' => $statementItem['transaction_date'],
                     'description' => $statementItem['description'],
@@ -115,9 +128,74 @@ class CreateBankReconciliation
 
             return $reconciliation->fresh([
                 'bankAccount',
+                'statementItems.bankStatementImportTransaction.import',
                 'statementItems.journalLine.journalEntry',
                 'items.journalLine.journalEntry',
             ]);
         });
+    }
+
+    private function validateOfxTransactions(Wallet $wallet, BankAccount $bankAccount, string $periodStart, string $periodEnd, $statementItems): void
+    {
+        $ofxIds = $statementItems
+            ->pluck('bank_statement_import_transaction_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        if ($ofxIds->isEmpty()) {
+            return;
+        }
+
+        if ($ofxIds->duplicates()->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'statement_items' => 'Uma mesma transação OFX não pode aparecer mais de uma vez na conciliação.',
+            ]);
+        }
+
+        $transactions = BankStatementImportTransaction::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('bank_account_id', $bankAccount->id)
+            ->where('status', 'imported')
+            ->whereDate('posted_at', '>=', $periodStart)
+            ->whereDate('posted_at', '<=', $periodEnd)
+            ->whereIn('id', $ofxIds)
+            ->get()
+            ->keyBy('id');
+
+        if ($transactions->count() !== $ofxIds->unique()->count()) {
+            throw ValidationException::withMessages([
+                'statement_items' => 'Uma ou mais transações OFX não pertencem à conta, período ou carteira informados.',
+            ]);
+        }
+
+        $alreadyReconciled = BankReconciliationStatementItem::query()
+            ->whereIn('bank_statement_import_transaction_id', $ofxIds)
+            ->exists();
+
+        if ($alreadyReconciled) {
+            throw ValidationException::withMessages([
+                'statement_items' => 'Uma ou mais transações OFX já foram conciliadas.',
+            ]);
+        }
+
+        foreach ($statementItems as $item) {
+            $ofxId = $item['bank_statement_import_transaction_id'] ?? null;
+
+            if (! $ofxId) {
+                continue;
+            }
+
+            $transaction = $transactions->get((int) $ofxId);
+            $signedAmount = $transaction->direction === 'in'
+                ? (int) $transaction->amount_cents
+                : -1 * (int) $transaction->amount_cents;
+
+            if ($signedAmount !== (int) $item['amount_cents']) {
+                throw ValidationException::withMessages([
+                    'statement_items' => 'O valor de uma transação OFX foi alterado e não confere com o extrato importado.',
+                ]);
+            }
+        }
     }
 }
