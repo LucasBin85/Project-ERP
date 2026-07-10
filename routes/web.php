@@ -20,6 +20,7 @@ use App\Http\Controllers\Financial\BankReconciliationController;
 use App\Http\Controllers\Financial\AccountPayableController;
 use App\Http\Controllers\Financial\AccountReceivableController;
 use App\Http\Controllers\Financial\CreditCardController;
+use App\Http\Controllers\Financial\CashFlowController;
 
 
 
@@ -96,6 +97,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('bank-statements', [BankStatementController::class, 'index'])
             ->name('bank-statements.index');
+
+        Route::get('cash-flow', [CashFlowController::class, 'index'])
+            ->name('cash-flow.index');
 
         Route::resource('bank-reconciliations', BankReconciliationController::class)
             ->only(['index', 'create', 'store', 'show']);
