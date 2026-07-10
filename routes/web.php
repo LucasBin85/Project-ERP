@@ -21,6 +21,7 @@ use App\Http\Controllers\Financial\AccountPayableController;
 use App\Http\Controllers\Financial\AccountReceivableController;
 use App\Http\Controllers\Financial\CreditCardController;
 use App\Http\Controllers\Financial\CashFlowController;
+use App\Http\Controllers\Financial\OfxImportController;
 
 
 
@@ -100,6 +101,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('cash-flow', [CashFlowController::class, 'index'])
             ->name('cash-flow.index');
+
+        Route::get('ofx-imports', [OfxImportController::class, 'index'])
+            ->name('ofx-imports.index');
+
+        Route::post('ofx-imports', [OfxImportController::class, 'store'])
+            ->name('ofx-imports.store');
 
         Route::resource('bank-reconciliations', BankReconciliationController::class)
             ->only(['index', 'create', 'store', 'show']);
