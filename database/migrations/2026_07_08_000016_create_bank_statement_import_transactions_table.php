@@ -40,7 +40,7 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->unique(['wallet_id', 'bank_account_id', 'external_id'], 'bank_statement_import_transaction_unique_external');
+            $table->index(['wallet_id', 'bank_account_id', 'external_id'], 'bank_statement_import_transaction_external_idx');
             $table->index(['bank_statement_import_id', 'status']);
             $table->index(['bank_account_id', 'posted_at']);
         });
