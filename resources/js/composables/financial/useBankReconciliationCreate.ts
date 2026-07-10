@@ -17,15 +17,36 @@ type PreviewLine = {
     journal_entry_id?: number;
 };
 
+type OfxStatementItem = {
+    bank_statement_import_transaction_id?: number | null;
+    source?: string | null;
+    source_label?: string | null;
+    external_id?: string | null;
+    fit_id?: string | null;
+    transaction_date?: string | null;
+    description?: string | null;
+    amount_cents: number;
+    direction?: 'in' | 'out' | null;
+    journal_entry_id?: number | null;
+    journal_line_id?: number | null;
+    match_reason?: string | null;
+};
+
 type MovementType = 'inflow' | 'outflow';
+type StatementSource = 'manual' | 'ofx';
 
 type StatementItem = {
+    bank_statement_import_transaction_id: number | null;
+    source: StatementSource;
+    source_label: string;
+    external_id: string | null;
     transaction_date: string;
     description: string;
     movement_type: MovementType;
     amount: string;
     amount_cents: number;
     journal_line_id: string;
+    match_reason: string | null;
 };
 
 function todayLocal(): string {
@@ -58,18 +79,51 @@ function absoluteMoney(value: number): string {
     return formatMoneyInput(String(Math.abs(value)));
 }
 
-export function useBankReconciliationCreate(filters: ReconciliationFilters, previewLines: PreviewLine[], openingBalanceCents = 0) {
+function movementTypeFromAmount(amountCents: number): MovementType {
+    return Number(amountCents) >= 0 ? 'inflow' : 'outflow';
+}
+
+function makeOfxStatementItem(item: OfxStatementItem, fallbackDate: string): StatementItem {
+    const amountCents = Number(item.amount_cents ?? 0);
+
+    return {
+        bank_statement_import_transaction_id: item.bank_statement_import_transaction_id ? Number(item.bank_statement_import_transaction_id) : null,
+        source: 'ofx',
+        source_label: item.source_label ?? 'OFX',
+        external_id: item.external_id ?? item.fit_id ?? null,
+        transaction_date: String(item.transaction_date ?? fallbackDate).substring(0, 10),
+        description: item.description ?? '',
+        movement_type: movementTypeFromAmount(amountCents),
+        amount: absoluteMoney(amountCents),
+        amount_cents: amountCents,
+        journal_line_id: item.journal_line_id ? String(item.journal_line_id) : '',
+        match_reason: item.match_reason ?? null,
+    };
+}
+
+export function useBankReconciliationCreate(
+    filters: ReconciliationFilters,
+    previewLines: PreviewLine[],
+    openingBalanceCents = 0,
+    ofxStatementItems: OfxStatementItem[] = [],
+) {
+    const defaultPeriodEnd = filters.period_end ?? todayLocal();
+
     const form = useForm({
         bank_account_id: filters.bank_account_id ?? '',
         period_start: filters.period_start ?? startOfMonthLocal(),
-        period_end: filters.period_end ?? todayLocal(),
+        period_end: defaultPeriodEnd,
         statement_balance_cents: openingBalanceCents,
-        statement_items: [] as StatementItem[],
+        statement_items: ofxStatementItems.map((item) => makeOfxStatementItem(item, defaultPeriodEnd)) as StatementItem[],
         notes: '',
     });
 
     const systemLineById = computed(() => {
         return new Map(previewLines.map((line) => [Number(line.id), line]));
+    });
+
+    const ofxItemsCount = computed(() => {
+        return form.statement_items.filter((item) => item.source === 'ofx').length;
     });
 
     const statementMovementCents = computed(() => {
@@ -140,7 +194,7 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
                     period_end: form.period_end,
                 },
                 {
-                    preserveState: true,
+                    preserveState: false,
                     preserveScroll: true,
                     replace: true,
                 },
@@ -150,12 +204,17 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
 
     function addStatementItem() {
         form.statement_items.push({
+            bank_statement_import_transaction_id: null,
+            source: 'manual',
+            source_label: 'Manual',
+            external_id: null,
             transaction_date: form.period_end || todayLocal(),
             description: '',
             movement_type: 'outflow',
             amount: '',
             amount_cents: 0,
             journal_line_id: '',
+            match_reason: null,
         });
     }
 
@@ -167,7 +226,7 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
         const target = event.target as HTMLInputElement;
         const item = form.statement_items[index];
 
-        if (!item) {
+        if (!item || item.source === 'ofx') {
             return;
         }
 
@@ -178,7 +237,7 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
     function updateStatementItemType(index: number, movementType: MovementType) {
         const item = form.statement_items[index];
 
-        if (!item) {
+        if (!item || item.source === 'ofx') {
             return;
         }
 
@@ -188,13 +247,22 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
 
     function applySuggestedStatementItems() {
         form.statement_items = previewLines.map((line) => ({
+            bank_statement_import_transaction_id: null,
+            source: 'manual',
+            source_label: 'Sistema',
+            external_id: null,
             transaction_date: String(line.date ?? form.period_end ?? todayLocal()).substring(0, 10),
             description: line.description ?? '',
-            movement_type: Number(line.signed_amount_cents ?? 0) >= 0 ? 'inflow' : 'outflow',
+            movement_type: movementTypeFromAmount(Number(line.signed_amount_cents ?? 0)),
             amount: absoluteMoney(Number(line.signed_amount_cents ?? 0)),
             amount_cents: Number(line.signed_amount_cents ?? 0),
             journal_line_id: String(line.id),
+            match_reason: 'Sugerido pelos lançamentos do sistema',
         }));
+    }
+
+    function applyOfxStatementItems() {
+        form.statement_items = ofxStatementItems.map((item) => makeOfxStatementItem(item, form.period_end || todayLocal()));
     }
 
     watch(
@@ -213,6 +281,7 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
         reconciledBalanceCents,
         differenceCents,
         pendingItemsCount,
+        ofxItemsCount,
         canPreview,
         canSubmit,
         addStatementItem,
@@ -220,5 +289,6 @@ export function useBankReconciliationCreate(filters: ReconciliationFilters, prev
         updateStatementItemAmount,
         updateStatementItemType,
         applySuggestedStatementItems,
+        applyOfxStatementItems,
     };
 }
