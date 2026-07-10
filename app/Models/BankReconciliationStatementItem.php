@@ -9,6 +9,7 @@ class BankReconciliationStatementItem extends Model
 {
     protected $fillable = [
         'bank_reconciliation_id',
+        'bank_statement_import_transaction_id',
         'journal_line_id',
         'transaction_date',
         'description',
@@ -24,6 +25,11 @@ class BankReconciliationStatementItem extends Model
     public function bankReconciliation(): BelongsTo
     {
         return $this->belongsTo(BankReconciliation::class);
+    }
+
+    public function bankStatementImportTransaction(): BelongsTo
+    {
+        return $this->belongsTo(BankStatementImportTransaction::class);
     }
 
     public function journalLine(): BelongsTo
