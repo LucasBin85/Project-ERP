@@ -5,10 +5,10 @@ namespace App\Services\Financial;
 use App\Models\BankAccount;
 use App\Models\BankReconciliation;
 use App\Models\BankReconciliationStatementItem;
-use App\Models\BankStatementImport;
 use App\Models\BankStatementImportTransaction;
 use App\Models\BankTransfer;
 use App\Models\CreditCard;
+use App\Models\CreditCardInvoice;
 use App\Models\JournalLine;
 use App\Models\Wallet;
 use Illuminate\Support\Carbon;
@@ -45,29 +45,24 @@ class BuildBankAccountWorkspace
 
         $currentMonthStart = now()->startOfMonth()->toDateString();
         $today = now()->toDateString();
-        $currentBalance = $this->currentBalanceCents($wallet, $bankAccount);
         $monthMovements = $this->periodMovementTotals($wallet, $bankAccount, $currentMonthStart, $today);
+        $creditCards = $this->linkedCreditCards($wallet, $bankAccount);
 
         return [
             'account' => $this->accountOverview($wallet, $bankAccount),
             'summary' => [
-                'current_balance_cents' => $currentBalance,
+                'current_balance_cents' => $this->currentBalanceCents($wallet, $bankAccount),
                 'month_inflows_cents' => $monthMovements['inflows_cents'],
                 'month_outflows_cents' => $monthMovements['outflows_cents'],
                 'month_result_cents' => $monthMovements['inflows_cents'] - $monthMovements['outflows_cents'],
+                'current_card_invoice_cents' => collect($creditCards)->sum(fn (array $card) => (int) ($card['current_invoice']['balance_cents'] ?? 0)),
                 'pending_ofx_transactions' => $this->pendingOfxTransactionsCount($wallet, $bankAccount),
                 'open_reconciliations' => $this->openReconciliationsCount($wallet, $bankAccount),
-                'linked_credit_cards' => CreditCard::query()
-                    ->where('wallet_id', $wallet->id)
-                    ->where('bank_account_id', $bankAccount->id)
-                    ->whereNull('parent_card_id')
-                    ->count(),
+                'linked_credit_cards' => count($creditCards),
             ],
             'recent_transactions' => $this->recentTransactions($wallet, $bankAccount),
-            'recent_imports' => $this->recentImports($wallet, $bankAccount),
-            'recent_reconciliations' => $this->recentReconciliations($wallet, $bankAccount),
             'recent_transfers' => $this->recentTransfers($wallet, $bankAccount),
-            'credit_cards' => $this->linkedCreditCards($wallet, $bankAccount),
+            'credit_cards' => $creditCards,
             'actions' => $this->actions($bankAccount),
         ];
     }
@@ -137,7 +132,7 @@ class BuildBankAccountWorkspace
             ->orderByDesc('journal_entries.id')
             ->orderByDesc('journal_lines.id')
             ->select('journal_lines.*')
-            ->limit(15)
+            ->limit(5)
             ->get()
             ->map(function (JournalLine $line) use (&$runningBalance) {
                 $signedAmount = $line->type === 'debit'
@@ -163,54 +158,6 @@ class BuildBankAccountWorkspace
             ->all();
     }
 
-    private function recentImports(Wallet $wallet, BankAccount $bankAccount): array
-    {
-        return BankStatementImport::query()
-            ->where('wallet_id', $wallet->id)
-            ->where('bank_account_id', $bankAccount->id)
-            ->orderByDesc('created_at')
-            ->limit(5)
-            ->get()
-            ->map(fn (BankStatementImport $import) => [
-                'id' => $import->id,
-                'source' => $import->source,
-                'original_filename' => $import->original_filename,
-                'statement_started_at' => $import->statement_started_at,
-                'statement_ended_at' => $import->statement_ended_at,
-                'total_transactions' => $import->total_transactions,
-                'imported_transactions' => $import->imported_transactions,
-                'skipped_duplicates' => $import->skipped_duplicates,
-                'total_in_cents' => $import->total_in_cents,
-                'total_out_cents' => $import->total_out_cents,
-                'status' => $import->status,
-                'created_at' => $import->created_at,
-            ])
-            ->values()
-            ->all();
-    }
-
-    private function recentReconciliations(Wallet $wallet, BankAccount $bankAccount): array
-    {
-        return BankReconciliation::query()
-            ->where('wallet_id', $wallet->id)
-            ->where('bank_account_id', $bankAccount->id)
-            ->orderByDesc('period_end')
-            ->orderByDesc('id')
-            ->limit(5)
-            ->get()
-            ->map(fn (BankReconciliation $reconciliation) => [
-                'id' => $reconciliation->id,
-                'period_start' => $reconciliation->period_start,
-                'period_end' => $reconciliation->period_end,
-                'statement_balance_cents' => $reconciliation->statement_balance_cents,
-                'book_balance_cents' => $reconciliation->book_balance_cents,
-                'difference_cents' => $reconciliation->difference_cents,
-                'status' => $reconciliation->status,
-            ])
-            ->values()
-            ->all();
-    }
-
     private function recentTransfers(Wallet $wallet, BankAccount $bankAccount): array
     {
         return BankTransfer::query()
@@ -222,7 +169,7 @@ class BuildBankAccountWorkspace
             ->with(['fromBankAccount:id,name', 'toBankAccount:id,name'])
             ->orderByDesc('transfer_date')
             ->orderByDesc('id')
-            ->limit(5)
+            ->limit(3)
             ->get()
             ->map(fn (BankTransfer $transfer) => [
                 'id' => $transfer->id,
@@ -248,19 +195,54 @@ class BuildBankAccountWorkspace
             ->with('childCards:id,parent_card_id,name,card_type,last_four,is_active')
             ->orderBy('name')
             ->get()
-            ->map(fn (CreditCard $card) => [
-                'id' => $card->id,
-                'name' => $card->name,
-                'issuer_name' => $card->issuer_name,
-                'network' => $card->network,
-                'last_four' => $card->last_four,
-                'closing_day' => $card->closing_day,
-                'due_day' => $card->due_day,
-                'credit_limit_cents' => $card->credit_limit_cents,
-                'child_cards' => $card->childCards,
-            ])
+            ->map(function (CreditCard $card) use ($wallet) {
+                $invoice = $this->currentInvoice($wallet, $card);
+
+                return [
+                    'id' => $card->id,
+                    'name' => $card->name,
+                    'issuer_name' => $card->issuer_name,
+                    'network' => $card->network,
+                    'last_four' => $card->last_four,
+                    'closing_day' => $card->closing_day,
+                    'due_day' => $card->due_day,
+                    'credit_limit_cents' => $card->credit_limit_cents,
+                    'child_cards' => $card->childCards,
+                    'current_invoice' => $invoice ? [
+                        'id' => $invoice->id,
+                        'reference_month' => $invoice->reference_month,
+                        'reference_year' => $invoice->reference_year,
+                        'due_at' => $invoice->due_at,
+                        'total_cents' => $invoice->total_cents,
+                        'paid_cents' => $invoice->paid_cents,
+                        'balance_cents' => $invoice->balance_cents,
+                        'status' => $invoice->status,
+                    ] : null,
+                ];
+            })
             ->values()
             ->all();
+    }
+
+    private function currentInvoice(Wallet $wallet, CreditCard $card): ?CreditCardInvoice
+    {
+        $unpaid = CreditCardInvoice::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('credit_card_id', $card->id)
+            ->whereIn('status', ['open', 'closed', 'partial', 'overdue'])
+            ->orderBy('due_at')
+            ->first();
+
+        if ($unpaid) {
+            return $unpaid;
+        }
+
+        return CreditCardInvoice::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('credit_card_id', $card->id)
+            ->orderByDesc('reference_year')
+            ->orderByDesc('reference_month')
+            ->first();
     }
 
     private function pendingOfxTransactionsCount(Wallet $wallet, BankAccount $bankAccount): int
