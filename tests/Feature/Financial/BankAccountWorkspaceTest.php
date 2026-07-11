@@ -77,7 +77,7 @@ it('builds a bank account workspace with recent transactions and actions', funct
         ->and($data['summary']['month_inflows_cents'])->toBe(100000)
         ->and($data['summary']['month_outflows_cents'])->toBe(25000)
         ->and($data['recent_transactions'])->toHaveCount(2)
-        ->and($data['actions']['statement_url'])->toContain('bank_account_id=' . $bankAccount->id)
+        ->and($data['actions']['statement_url'])->toContain('/bank-accounts/' . $bankAccount->id . '/statement')
         ->and($data['actions']['ofx_import_url'])->toContain('bank_account_id=' . $bankAccount->id)
         ->and($data['actions']['reconciliation_url'])->toContain('bank_account_id=' . $bankAccount->id);
 });
