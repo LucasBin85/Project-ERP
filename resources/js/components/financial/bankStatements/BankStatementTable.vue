@@ -13,12 +13,14 @@ defineProps<{
     <ReportTable
         :empty="transactions.length === 0"
         empty-message="Nenhuma movimentação encontrada para os filtros informados."
-        :empty-colspan="6"
+        :empty-colspan="8"
     >
         <template #head>
             <tr>
                 <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Data</th>
                 <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição</th>
+                <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Origem</th>
+                <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Conciliação</th>
                 <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Entrada</th>
                 <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Saída</th>
                 <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Saldo</th>
@@ -44,6 +46,14 @@ defineProps<{
                     <span>#{{ transaction.id }}</span>
                     <StatusBadge :status="transaction.status" />
                 </div>
+            </td>
+
+            <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                {{ transaction.source_label || transaction.source || 'Manual' }}
+            </td>
+
+            <td class="whitespace-nowrap px-4 py-3 text-sm">
+                <StatusBadge :status="transaction.reconciliation_status || 'pending'" />
             </td>
 
             <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-green-300">
