@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
-import ReportSummaryCard from '@/components/reports/ReportSummaryCard.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCurrency, formatDate } from '@/lib/formatters';
@@ -36,20 +35,6 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                 >
                     Voltar
                 </Link>
-
-                <Link
-                    :href="actions.statement_url"
-                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-                >
-                    Ver extrato
-                </Link>
-
-                <Link
-                    :href="actions.transfer_url"
-                    class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
-                >
-                    Transferir
-                </Link>
             </div>
 
             <ReportSection>
@@ -66,18 +51,29 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                     </div>
                 </template>
 
-                <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
-                    <ReportSummaryCard
-                        label="Saldo da conta"
-                        :value="formatCurrency(summary.current_balance_cents)"
-                        :tone="Number(summary.current_balance_cents) >= 0 ? 'green' : 'red'"
-                    />
+                <div class="p-6">
+                    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-400">Saldo da conta</p>
+                            <p
+                                class="mt-2 text-3xl font-bold"
+                                :class="Number(summary.current_balance_cents) >= 0 ? 'text-green-300' : 'text-red-300'"
+                            >
+                                {{ formatCurrency(summary.current_balance_cents) }}
+                            </p>
+                        </div>
 
-                    <ReportSummaryCard
-                        label="Última atualização"
-                        :value="formatDate(account.last_transaction_at)"
-                        tone="blue"
-                    />
+                        <Link
+                            :href="actions.statement_url"
+                            class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                        >
+                            Extrato
+                        </Link>
+                    </div>
+                </div>
+
+                <div class="border-t border-gray-700 px-6 py-3 text-sm text-gray-400">
+                    Última atualização: {{ formatDate(account.last_transaction_at) }}
                 </div>
             </ReportSection>
 
