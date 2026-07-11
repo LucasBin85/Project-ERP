@@ -2,9 +2,9 @@ import { useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { route } from 'ziggy-js';
 
-export function useOfxImport() {
+export function useOfxImport(defaultBankAccountId: number | string | null = null) {
     const form = useForm({
-        bank_account_id: '',
+        bank_account_id: defaultBankAccountId ? String(defaultBankAccountId) : '',
         ofx_file: null as File | null,
     });
 
