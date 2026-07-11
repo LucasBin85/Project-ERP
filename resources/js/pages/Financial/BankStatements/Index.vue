@@ -7,6 +7,8 @@ import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import { useBankStatementIndex } from '@/composables/financial/useBankStatementIndex';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { Link } from '@inertiajs/vue3';
+import { route } from 'ziggy-js';
 
 const props = defineProps<{
     wallet: Record<string, any>;
@@ -32,7 +34,7 @@ const bankStatement = useBankStatementIndex(props.filters as any);
                         </h2>
 
                         <p class="mt-1 text-sm text-gray-400">
-                            Selecione uma conta bancária. O extrato será atualizado automaticamente ao alterar os filtros.
+                            A partir do extrato você importa OFX, confere movimentos e inicia a conciliação da conta.
                         </p>
                     </div>
                 </template>
@@ -68,7 +70,7 @@ const bankStatement = useBankStatementIndex(props.filters as any);
 
                 <ReportSection>
                     <template #header>
-                        <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                             <div>
                                 <h2 class="text-lg font-bold text-white">
                                     {{ selectedBankAccount?.name }}
@@ -79,8 +81,38 @@ const bankStatement = useBankStatementIndex(props.filters as any);
                                 </p>
                             </div>
 
-                            <div class="text-sm text-gray-400">
-                                {{ transactions.length }} movimentação(ões)
+                            <div class="flex flex-wrap items-center gap-2">
+                                <Link
+                                    v-if="selectedBankAccount?.id"
+                                    :href="route('bank-accounts.show', [selectedBankAccount.id])"
+                                    class="rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                                >
+                                    Resumo da conta
+                                </Link>
+
+                                <Link
+                                    v-if="selectedBankAccount?.id"
+                                    :href="route('ofx-imports.index', { bank_account_id: selectedBankAccount.id })"
+                                    class="rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                                >
+                                    Importar OFX
+                                </Link>
+
+                                <Link
+                                    v-if="selectedBankAccount?.id"
+                                    :href="route('bank-reconciliations.create', {
+                                        bank_account_id: selectedBankAccount.id,
+                                        period_start: bankStatement.form.start_date,
+                                        period_end: bankStatement.form.end_date,
+                                    })"
+                                    class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                                >
+                                    Conciliar período
+                                </Link>
+
+                                <div class="text-sm text-gray-400">
+                                    {{ transactions.length }} movimentação(ões)
+                                </div>
                             </div>
                         </div>
                     </template>
