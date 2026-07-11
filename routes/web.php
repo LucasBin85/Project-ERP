@@ -91,7 +91,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::prefix('financial')->group(function () {
         Route::resource('bank-accounts', BankAccountController::class)
-            ->only(['index', 'create', 'store']);
+            ->only(['index', 'create', 'store', 'show']);
 
         Route::resource('bank-transfers', BankTransferController::class)
             ->only(['index', 'create', 'store', 'show']);
