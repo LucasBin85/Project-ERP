@@ -79,6 +79,14 @@ class CreditCardController extends Controller
     public function create(Request $request): Response
     {
         $wallet = $this->resolveActiveWallet($request);
+        $selectedBankAccountId = $request->query('bank_account_id');
+
+        if ($selectedBankAccountId) {
+            BankAccount::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('is_active', true)
+                ->findOrFail($selectedBankAccountId);
+        }
 
         return Inertia::render('Financial/CreditCards/Create', [
             'wallet' => [
@@ -87,6 +95,7 @@ class CreditCardController extends Controller
             ],
             'parentCards' => $this->parentCards($wallet->id),
             'bankAccounts' => $this->bankAccounts($wallet->id),
+            'selectedBankAccountId' => $selectedBankAccountId ? (int) $selectedBankAccountId : null,
         ]);
     }
 
