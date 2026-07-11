@@ -302,7 +302,7 @@ class BuildBankAccountWorkspace
     private function actions(BankAccount $bankAccount): array
     {
         return [
-            'statement_url' => route('bank-statements.index', ['bank_account_id' => $bankAccount->id]),
+            'statement_url' => route('bank-accounts.statement', $bankAccount),
             'ofx_import_url' => route('ofx-imports.index', ['bank_account_id' => $bankAccount->id]),
             'reconciliation_url' => route('bank-reconciliations.create', ['bank_account_id' => $bankAccount->id]),
             'transfer_url' => route('bank-transfers.create', ['from_bank_account_id' => $bankAccount->id]),
