@@ -13,15 +13,25 @@ import { route } from 'ziggy-js';
 const props = defineProps<{
     wallet: Record<string, any>;
     bankAccounts: Array<Record<string, any>>;
+    selectedBankAccountId?: number | null;
     imports: Array<Record<string, any>>;
 }>();
 
-const ofxImport = useOfxImport();
+const ofxImport = useOfxImport(props.selectedBankAccountId ?? null);
 </script>
 
 <template>
     <AppLayout title="Importação OFX">
         <ReportPage title="Importação OFX" :subtitle="props.wallet?.name">
+            <div v-if="selectedBankAccountId" class="flex justify-end">
+                <Link
+                    :href="route('bank-accounts.show', [selectedBankAccountId])"
+                    class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                >
+                    Voltar para a conta bancária
+                </Link>
+            </div>
+
             <ReportSection>
                 <template #header>
                     <div>
@@ -60,7 +70,9 @@ const ofxImport = useOfxImport();
                 <template #header>
                     <div>
                         <h2 class="text-lg font-bold text-white">Histórico de importações</h2>
-                        <p class="text-sm text-gray-400">Últimos arquivos OFX importados para a carteira ativa.</p>
+                        <p class="text-sm text-gray-400">
+                            {{ selectedBankAccountId ? 'Últimos arquivos OFX importados para esta conta.' : 'Últimos arquivos OFX importados para a carteira ativa.' }}
+                        </p>
                     </div>
                 </template>
 
