@@ -10,9 +10,10 @@ const props = defineProps<{
     wallet: Record<string, any>;
     parentCards: Array<Record<string, any>>;
     bankAccounts: Array<Record<string, any>>;
+    selectedBankAccountId?: number | null;
 }>();
 
-const creditCard = useCreditCardCreate();
+const creditCard = useCreditCardCreate(props.selectedBankAccountId ?? null);
 
 function submit() {
     if (!creditCard.canSubmit.value) return;
@@ -23,6 +24,15 @@ function submit() {
 <template>
     <AppLayout title="Novo Cartão de Crédito">
         <ReportPage title="Novo Cartão de Crédito" :subtitle="props.wallet?.name">
+            <div v-if="selectedBankAccountId" class="flex justify-end">
+                <Link
+                    :href="route('bank-accounts.show', [selectedBankAccountId])"
+                    class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                >
+                    Voltar para a conta bancária
+                </Link>
+            </div>
+
             <ReportSection>
                 <template #header>
                     <div>
@@ -135,7 +145,7 @@ function submit() {
                     </div>
 
                     <div class="md:col-span-2 flex justify-end gap-3">
-                        <Link :href="route('credit-cards.index')" class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800">Cancelar</Link>
+                        <Link :href="selectedBankAccountId ? route('bank-accounts.show', [selectedBankAccountId]) : route('credit-cards.index')" class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800">Cancelar</Link>
                         <button type="submit" :disabled="!creditCard.canSubmit.value || creditCard.form.processing" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
                             Salvar cartão
                         </button>
