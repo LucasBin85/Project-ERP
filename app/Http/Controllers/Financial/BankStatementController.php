@@ -10,6 +10,7 @@ use App\Models\BankReconciliation;
 use App\Models\BankReconciliationStatementItem;
 use App\Models\BankStatementImport;
 use App\Models\BankStatementImportTransaction;
+use App\Models\JournalLine;
 use App\Services\Financial\BankStatementService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,6 +47,8 @@ class BankStatementController extends Controller
         $wallet = $this->resolveActiveWallet($request);
 
         abort_unless($bankAccount->wallet_id === $wallet->id, 404);
+
+        $bankAccount->load('chartOfAccount');
 
         $rawFilters = [
             'bank_account_id' => (string) $bankAccount->id,
@@ -151,6 +154,7 @@ class BankStatementController extends Controller
             'pending_ofx_count' => $pendingOfxTransactions->count(),
             'recent_imports' => $recentImports,
             'recent_reconciliations' => $recentReconciliations,
+            'has_older_transactions' => $this->hasOlderTransactions($walletId, $bankAccount, $startDate),
             'actions' => [
                 'account_url' => route('bank-accounts.show', $bankAccount),
                 'ofx_import_url' => route('ofx-imports.index', ['bank_account_id' => $bankAccount->id]),
@@ -161,5 +165,17 @@ class BankStatementController extends Controller
                 ]),
             ],
         ];
+    }
+
+    private function hasOlderTransactions(int $walletId, BankAccount $bankAccount, string $startDate): bool
+    {
+        return JournalLine::query()
+            ->where('chart_of_account_id', $bankAccount->chart_of_account_id)
+            ->whereHas('journalEntry', function ($query) use ($walletId, $startDate) {
+                $query->where('wallet_id', $walletId)
+                    ->where('status', 'posted')
+                    ->whereDate('entry_date', '<', $startDate);
+            })
+            ->exists();
     }
 }
