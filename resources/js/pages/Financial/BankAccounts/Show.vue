@@ -37,99 +37,105 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                 </Link>
             </div>
 
-            <ReportSection>
-                <template #header>
-                    <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <h2 class="text-lg font-bold text-white">Resumo da conta</h2>
-                            <p class="text-sm text-gray-400">
-                                {{ account.bank_name || '-' }} · {{ bankAccountsView.formatType(account.account_type) }} · Agência {{ account.agency || '-' }} · Conta {{ account.account_number || '-' }}
-                            </p>
-                        </div>
-
-                        <StatusBadge :status="account.is_active ? 'active' : 'cancelled'" />
-                    </div>
-                </template>
-
-                <div class="p-6">
-                    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <p class="text-sm font-medium text-gray-400">Saldo da conta</p>
-                            <p
-                                class="mt-2 text-3xl font-bold"
-                                :class="Number(summary.current_balance_cents) >= 0 ? 'text-green-300' : 'text-red-300'"
-                            >
-                                {{ formatCurrency(summary.current_balance_cents) }}
-                            </p>
-                        </div>
-
-                        <Link
-                            :href="actions.statement_url"
-                            class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-                        >
-                            Extrato
-                        </Link>
-                    </div>
-                </div>
-
-                <div class="border-t border-gray-700 px-6 py-3 text-sm text-gray-400">
-                    Última atualização: {{ formatDate(account.last_transaction_at) }}
-                </div>
-            </ReportSection>
-
-            <ReportSection>
-                <template #header>
-                    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <h2 class="text-lg font-bold text-white">Cartão de Crédito</h2>
-                            <p class="text-sm text-gray-400">Fatura atual dos cartões ligados a esta conta.</p>
-                        </div>
-
-                        <Link :href="actions.credit_card_create_url" class="text-sm font-semibold text-indigo-300 hover:text-indigo-200">
-                            Novo cartão
-                        </Link>
-                    </div>
-                </template>
-
-                <div v-if="credit_cards.length === 0" class="p-6 text-sm text-gray-400">
-                    Nenhum cartão vinculado a esta conta.
-                </div>
-
-                <div v-else class="grid grid-cols-1 gap-4 p-6 xl:grid-cols-2">
-                    <Link
-                        v-for="card in credit_cards"
-                        :key="card.id"
-                        :href="route('credit-cards.show', [card.id])"
-                        class="rounded-xl border border-gray-700 bg-gray-900/40 p-4 transition hover:border-indigo-500 hover:bg-gray-800"
-                    >
-                        <div class="flex items-start justify-between gap-4">
+            <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <ReportSection>
+                    <template #header>
+                        <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                             <div>
-                                <p class="font-semibold text-white">{{ card.name }}</p>
-                                <p class="mt-1 text-xs text-gray-500">
-                                    {{ card.issuer_name }} · vencimento dia {{ card.due_day }} · {{ card.child_cards?.length ?? 0 }} cartão(ões) adicional/virtual
+                                <h2 class="text-lg font-bold text-white">Resumo da conta</h2>
+                                <p class="text-sm text-gray-400">
+                                    {{ account.bank_name || '-' }} · {{ bankAccountsView.formatType(account.account_type) }} · Agência {{ account.agency || '-' }} · Conta {{ account.account_number || '-' }}
                                 </p>
                             </div>
 
-                            <StatusBadge v-if="card.current_invoice" :status="card.current_invoice.status" />
+                            <StatusBadge :status="account.is_active ? 'active' : 'cancelled'" />
+                        </div>
+                    </template>
+
+                    <div class="flex min-h-[220px] flex-col justify-between">
+                        <div class="p-6">
+                            <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-400">Saldo da conta</p>
+                                    <p
+                                        class="mt-2 text-3xl font-bold"
+                                        :class="Number(summary.current_balance_cents) >= 0 ? 'text-green-300' : 'text-red-300'"
+                                    >
+                                        {{ formatCurrency(summary.current_balance_cents) }}
+                                    </p>
+                                </div>
+
+                                <Link
+                                    :href="actions.statement_url"
+                                    class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                                >
+                                    Extrato
+                                </Link>
+                            </div>
                         </div>
 
-                        <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                            <div>
-                                <p class="text-xs uppercase text-gray-500">Fatura</p>
-                                <p class="mt-1 text-sm font-semibold text-gray-100">{{ invoiceLabel(card.current_invoice) }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase text-gray-500">Vencimento</p>
-                                <p class="mt-1 text-sm text-gray-200">{{ formatDate(card.current_invoice?.due_at) }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase text-gray-500">Saldo da fatura</p>
-                                <p class="mt-1 text-sm font-semibold text-yellow-300">{{ formatCurrency(card.current_invoice?.balance_cents ?? 0) }}</p>
-                            </div>
+                        <div class="border-t border-gray-700 px-6 py-3 text-sm text-gray-400">
+                            Última atualização: {{ formatDate(account.last_transaction_at) }}
                         </div>
-                    </Link>
-                </div>
-            </ReportSection>
+                    </div>
+                </ReportSection>
+
+                <ReportSection>
+                    <template #header>
+                        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <h2 class="text-lg font-bold text-white">Cartão de Crédito</h2>
+                                <p class="text-sm text-gray-400">Fatura atual dos cartões ligados a esta conta.</p>
+                            </div>
+
+                            <Link :href="actions.credit_card_create_url" class="text-sm font-semibold text-indigo-300 hover:text-indigo-200">
+                                Novo cartão
+                            </Link>
+                        </div>
+                    </template>
+
+                    <div class="min-h-[220px]">
+                        <div v-if="credit_cards.length === 0" class="p-6 text-sm text-gray-400">
+                            Nenhum cartão vinculado a esta conta.
+                        </div>
+
+                        <div v-else class="grid grid-cols-1 gap-4 p-6">
+                            <Link
+                                v-for="card in credit_cards"
+                                :key="card.id"
+                                :href="route('credit-cards.show', [card.id])"
+                                class="rounded-xl border border-gray-700 bg-gray-900/40 p-4 transition hover:border-indigo-500 hover:bg-gray-800"
+                            >
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p class="font-semibold text-white">{{ card.name }}</p>
+                                        <p class="mt-1 text-xs text-gray-500">
+                                            {{ card.issuer_name }} · vencimento dia {{ card.due_day }} · {{ card.child_cards?.length ?? 0 }} cartão(ões) adicional/virtual
+                                        </p>
+                                    </div>
+
+                                    <StatusBadge v-if="card.current_invoice" :status="card.current_invoice.status" />
+                                </div>
+
+                                <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                                    <div>
+                                        <p class="text-xs uppercase text-gray-500">Fatura</p>
+                                        <p class="mt-1 text-sm font-semibold text-gray-100">{{ invoiceLabel(card.current_invoice) }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs uppercase text-gray-500">Vencimento</p>
+                                        <p class="mt-1 text-sm text-gray-200">{{ formatDate(card.current_invoice?.due_at) }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs uppercase text-gray-500">Saldo da fatura</p>
+                                        <p class="mt-1 text-sm font-semibold text-yellow-300">{{ formatCurrency(card.current_invoice?.balance_cents ?? 0) }}</p>
+                                    </div>
+                                </div>
+                            </Link>
+                        </div>
+                    </div>
+                </ReportSection>
+            </div>
         </ReportPage>
     </AppLayout>
 </template>
