@@ -25,14 +25,18 @@ function createWalletForOfxReconciliation(): Wallet
         'name' => 'Carteira Teste',
     ]);
 
-    $suspense = ChartOfAccount::query()->create([
-        'wallet_id' => $wallet->id,
-        'code' => '1.1.99',
-        'name' => 'A classificar',
-        'type' => 'ativo',
-        'normal_balance' => 'debit',
-        'allows_posting' => true,
-    ]);
+    $suspense = ChartOfAccount::query()->updateOrCreate(
+        [
+            'wallet_id' => $wallet->id,
+            'code' => '1.1.99',
+        ],
+        [
+            'name' => 'A classificar',
+            'type' => 'ativo',
+            'normal_balance' => 'debit',
+            'allows_posting' => true,
+        ],
+    );
 
     $wallet->update(['suspense_account_id' => $suspense->id]);
 
