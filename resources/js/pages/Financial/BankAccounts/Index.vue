@@ -6,7 +6,7 @@ import ReportTable from '@/components/reports/ReportTable.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAccount, formatCurrency, formatDate } from '@/lib/formatters';
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import { useBankAccountsIndex } from '@/composables/financial/useBankAccountsIndex';
 
@@ -17,6 +17,10 @@ const props = defineProps<{
 }>();
 
 const bankAccountsView = useBankAccountsIndex();
+
+function openAccount(accountId: number | string) {
+    router.visit(route('bank-accounts.show', [accountId]));
+}
 </script>
 
 <template>
@@ -103,7 +107,7 @@ const bankAccountsView = useBankAccountsIndex();
                         v-for="account in bankAccounts"
                         :key="account.id"
                         class="cursor-pointer hover:bg-gray-800/50"
-                        @click="$inertia.visit(route('bank-accounts.show', [account.id]))"
+                        @click="openAccount(account.id)"
                     >
                         <td class="px-4 py-3 text-sm">
                             <Link
