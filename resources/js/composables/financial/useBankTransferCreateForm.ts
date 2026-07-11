@@ -2,9 +2,9 @@ import { formatMoneyInput, moneyToCents } from '@/lib/input';
 import { useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
-export function useBankTransferCreateForm() {
+export function useBankTransferCreateForm(defaultFromBankAccountId: number | string | null = null) {
     const form = useForm({
-        from_bank_account_id: '',
+        from_bank_account_id: defaultFromBankAccountId ? String(defaultFromBankAccountId) : '',
         to_bank_account_id: '',
         amount: '',
         amount_cents: 0,
