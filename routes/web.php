@@ -90,6 +90,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 
     Route::prefix('financial')->group(function () {
+        Route::get('bank-accounts/{bankAccount}/statement', [BankStatementController::class, 'show'])
+            ->name('bank-accounts.statement');
+
         Route::resource('bank-accounts', BankAccountController::class)
             ->only(['index', 'create', 'store', 'show']);
 
