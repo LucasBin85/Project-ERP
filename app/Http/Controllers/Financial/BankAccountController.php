@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Financial;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Models\BankAccount;
-use App\Models\ChartOfAccount;
+use App\Services\Financial\BuildBankAccountWorkspace;
 use App\Services\Financial\CreateBankAccount;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,22 +16,18 @@ class BankAccountController extends Controller
 {
     use ResolvesActiveWallet;
 
-    public function index(Request $request): Response
+    public function index(Request $request, BuildBankAccountWorkspace $workspace): Response
     {
         $wallet = $this->resolveActiveWallet($request);
-
-        $accounts = BankAccount::query()
-            ->where('wallet_id', $wallet->id)
-            ->with('chartOfAccount')
-            ->orderBy('name')
-            ->get();
+        $data = $workspace->index($wallet);
 
         return Inertia::render('Financial/BankAccounts/Index', [
             'wallet' => [
                 'id' => $wallet->id,
                 'name' => $wallet->name,
             ],
-            'bankAccounts' => $accounts,
+            'bankAccounts' => $data['accounts'],
+            'summary' => $data['summary'],
         ]);
     }
 
@@ -121,7 +117,21 @@ class BankAccountController extends Controller
         $bankAccount = $service->execute($wallet, $data);
 
         return redirect()
-            ->route('bank-accounts.index')
+            ->route('bank-accounts.show', $bankAccount)
             ->with('success', 'Conta bancária criada com sucesso.');
+    }
+
+    public function show(Request $request, BankAccount $bankAccount, BuildBankAccountWorkspace $workspace): Response
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        $data = $workspace->show($wallet, $bankAccount);
+
+        return Inertia::render('Financial/BankAccounts/Show', [
+            'wallet' => [
+                'id' => $wallet->id,
+                'name' => $wallet->name,
+            ],
+            ...$data,
+        ]);
     }
 }
