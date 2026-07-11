@@ -4,14 +4,16 @@ import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import { useBankTransferCreateForm } from '@/composables/financial/useBankTransferCreateForm';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 
 const props = defineProps<{
     wallet: Record<string, any>;
     bankAccounts: Array<Record<string, any>>;
+    selectedFromBankAccountId?: number | null;
 }>();
 
-const bankTransfer = useBankTransferCreateForm();
+const bankTransfer = useBankTransferCreateForm(props.selectedFromBankAccountId ?? null);
 
 function submit() {
     if (!bankTransfer.canSubmit.value) {
@@ -25,6 +27,15 @@ function submit() {
 <template>
     <AppLayout title="Nova Transferência">
         <ReportPage title="Nova Transferência" :subtitle="props.wallet?.name">
+            <div v-if="selectedFromBankAccountId" class="flex justify-end">
+                <Link
+                    :href="route('bank-accounts.show', [selectedFromBankAccountId])"
+                    class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                >
+                    Voltar para a conta bancária
+                </Link>
+            </div>
+
             <ReportSection>
                 <template #header>
                     <div>
