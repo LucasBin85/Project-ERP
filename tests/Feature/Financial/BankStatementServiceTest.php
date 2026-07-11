@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\JournalEntry;
+use App\Models\JournalLine;
 use App\Models\User;
 use App\Models\Wallet;
 use App\DTOs\Financial\BankStatementFiltersDTO;
@@ -10,7 +12,7 @@ use Tests\Helpers\FinancialTestHelper;
 
 uses(RefreshDatabase::class);
 
-it('builds a bank statement with opening balance transactions and closing balance', function () {
+it('builds a bank statement with all entries ordered from latest to oldest', function () {
     $user = User::factory()->create();
 
     $wallet = Wallet::query()->create([
@@ -43,6 +45,30 @@ it('builds a bank statement with opening balance transactions and closing balanc
         [$bankAccount->chartOfAccount, 'credit', 12000],
     ]);
 
+    $draftEntry = JournalEntry::query()->create([
+        'wallet_id' => $wallet->id,
+        'source' => 'ofx',
+        'entry_date' => '2026-07-03',
+        'description' => 'OFX pendente',
+        'status' => 'draft',
+        'is_balanced' => true,
+        'balance_diff_cents' => 0,
+    ]);
+
+    JournalLine::query()->create([
+        'journal_entry_id' => $draftEntry->id,
+        'chart_of_account_id' => $expense->id,
+        'type' => 'debit',
+        'amount_cents' => 8000,
+    ]);
+
+    JournalLine::query()->create([
+        'journal_entry_id' => $draftEntry->id,
+        'chart_of_account_id' => $bankAccount->chart_of_account_id,
+        'type' => 'credit',
+        'amount_cents' => 8000,
+    ]);
+
     $statement = app(BankStatementService::class)->build(
         $wallet,
         new BankStatementFiltersDTO(
@@ -55,11 +81,16 @@ it('builds a bank statement with opening balance transactions and closing balanc
     expect($statement->ready)->toBeTrue()
         ->and($statement->openingBalanceCents)->toBe(100000)
         ->and($statement->totalInflowsCents)->toBe(50000)
-        ->and($statement->totalOutflowsCents)->toBe(12000)
-        ->and($statement->closingBalanceCents)->toBe(138000)
-        ->and($statement->transactions)->toHaveCount(2)
-        ->and($statement->transactions[0]['running_balance_cents'])->toBe(150000)
-        ->and($statement->transactions[1]['running_balance_cents'])->toBe(138000);
+        ->and($statement->totalOutflowsCents)->toBe(20000)
+        ->and($statement->closingBalanceCents)->toBe(130000)
+        ->and($statement->transactions)->toHaveCount(3)
+        ->and($statement->transactions[0]['date']->toDateString())->toBe('2026-07-03')
+        ->and($statement->transactions[0]['status'])->toBe('draft')
+        ->and($statement->transactions[0]['source_label'])->toBe('OFX')
+        ->and($statement->transactions[0]['reconciliation_status'])->toBe('pending')
+        ->and($statement->transactions[0]['running_balance_cents'])->toBe(130000)
+        ->and($statement->transactions[1]['running_balance_cents'])->toBe(138000)
+        ->and($statement->transactions[2]['running_balance_cents'])->toBe(150000);
 });
 
 it('is not ready without required filters', function () {
