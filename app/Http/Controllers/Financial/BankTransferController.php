@@ -46,6 +46,14 @@ class BankTransferController extends Controller
     public function create(Request $request): Response
     {
         $wallet = $this->resolveActiveWallet($request);
+        $selectedFromBankAccountId = $request->query('from_bank_account_id');
+
+        if ($selectedFromBankAccountId) {
+            BankAccount::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('is_active', true)
+                ->findOrFail($selectedFromBankAccountId);
+        }
 
         $bankAccounts = BankAccount::query()
             ->where('wallet_id', $wallet->id)
@@ -67,6 +75,7 @@ class BankTransferController extends Controller
                 'name' => $wallet->name,
             ],
             'bankAccounts' => $bankAccounts,
+            'selectedFromBankAccountId' => $selectedFromBankAccountId ? (int) $selectedFromBankAccountId : null,
         ]);
     }
 
