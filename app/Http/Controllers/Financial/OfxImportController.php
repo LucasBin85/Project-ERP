@@ -22,6 +22,15 @@ class OfxImportController extends Controller
     {
         $wallet = $this->resolveActiveWallet($request);
 
+        $selectedBankAccountId = $request->query('bank_account_id');
+
+        if ($selectedBankAccountId) {
+            BankAccount::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('is_active', true)
+                ->findOrFail($selectedBankAccountId);
+        }
+
         $bankAccounts = BankAccount::query()
             ->where('wallet_id', $wallet->id)
             ->where('is_active', true)
@@ -36,6 +45,7 @@ class OfxImportController extends Controller
         $imports = BankStatementImport::query()
             ->where('wallet_id', $wallet->id)
             ->where('source', 'ofx')
+            ->when($selectedBankAccountId, fn ($query) => $query->where('bank_account_id', $selectedBankAccountId))
             ->with([
                 'bankAccount:id,name,bank_name',
                 'transactions' => fn ($query) => $query
@@ -54,6 +64,7 @@ class OfxImportController extends Controller
                 'name' => $wallet->name,
             ],
             'bankAccounts' => $bankAccounts,
+            'selectedBankAccountId' => $selectedBankAccountId ? (int) $selectedBankAccountId : null,
             'imports' => $imports,
         ]);
     }
@@ -94,7 +105,7 @@ class OfxImportController extends Controller
         }
 
         return redirect()
-            ->route('ofx-imports.index')
+            ->route('ofx-imports.index', ['bank_account_id' => $bankAccount->id])
             ->with('success', sprintf(
                 'OFX importado: %d lançamentos criados e %d duplicados ignorados.',
                 $import->imported_transactions,
