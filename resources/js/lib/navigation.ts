@@ -1,20 +1,16 @@
 import type { NavItem } from '@/types';
 import {
-    Banknote,
     BookOpen,
     Building2,
     ChartColumn,
     CircleDollarSign,
-    ClipboardCheck,
     CreditCard,
     FileChartColumn,
     FileText,
     FolderTree,
     Landmark,
     LayoutDashboard,
-    Receipt,
     Scale,
-    Upload,
     WalletCards,
 } from 'lucide-vue-next';
 import { route } from 'ziggy-js';
@@ -86,21 +82,6 @@ export const mainNavItems: NavItem[] = [
                 icon: Building2,
             },
             {
-                title: 'Transferências',
-                href: route('bank-transfers.index'),
-                icon: Banknote,
-            },
-            {
-                title: 'Extrato Bancário',
-                href: route('bank-statements.index'),
-                icon: Receipt,
-            },
-            {
-                title: 'Conciliação',
-                href: route('bank-reconciliations.index'),
-                icon: ClipboardCheck,
-            },
-            {
                 title: 'Contas a Pagar',
                 href: route('accounts-payable.index'),
                 icon: FileText,
@@ -114,23 +95,6 @@ export const mainNavItems: NavItem[] = [
                 title: 'Cartões de Crédito',
                 href: route('credit-cards.index'),
                 icon: CreditCard,
-            },
-        ],
-    },
-    {
-        title: 'Importação',
-        icon: Upload,
-        items: [
-            {
-                title: 'OFX',
-                href: route('ofx-imports.index'),
-                icon: Upload,
-            },
-            {
-                title: 'Open Finance',
-                icon: Landmark,
-                disabled: true,
-                badge: 'Em breve',
             },
         ],
     },
