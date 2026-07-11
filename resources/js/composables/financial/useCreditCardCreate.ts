@@ -6,11 +6,11 @@ function suggestedBestPurchaseDay(closingDay: number): number {
     return closingDay >= 28 ? 1 : closingDay + 1;
 }
 
-export function useCreditCardCreate() {
+export function useCreditCardCreate(defaultBankAccountId: number | string | null = null) {
     const form = useForm({
         name: '',
         issuer_name: '',
-        bank_account_id: '',
+        bank_account_id: defaultBankAccountId ? String(defaultBankAccountId) : '',
         network: 'mastercard',
         card_type: 'main',
         parent_card_id: '',
@@ -36,6 +36,7 @@ export function useCreditCardCreate() {
         (value) => {
             if (value === 'main') {
                 form.parent_card_id = '';
+                form.bank_account_id = defaultBankAccountId ? String(defaultBankAccountId) : form.bank_account_id;
                 return;
             }
 
