@@ -12,6 +12,7 @@ class BankStatementImportTransaction extends Model
         'wallet_id',
         'bank_account_id',
         'journal_entry_id',
+        'journal_line_id',
         'external_id',
         'fit_id',
         'posted_at',
@@ -47,5 +48,10 @@ class BankStatementImportTransaction extends Model
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function journalLine(): BelongsTo
+    {
+        return $this->belongsTo(JournalLine::class);
     }
 }

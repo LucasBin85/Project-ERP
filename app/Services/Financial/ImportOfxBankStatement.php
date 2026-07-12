@@ -15,9 +15,9 @@ class ImportOfxBankStatement
 {
     public function __construct(
         private readonly ParseOfxStatement $parser,
+        private readonly FindMatchingOfxJournalLine $findMatchingOfxJournalLine,
         private readonly CreateBankImportEntry $createBankImportEntry,
-    ) {
-    }
+    ) {}
 
     public function execute(Wallet $wallet, BankAccount $bankAccount, string $contents, string $originalFilename): BankStatementImport
     {
@@ -53,20 +53,22 @@ class ImportOfxBankStatement
             foreach ($parsed['transactions'] as $transaction) {
                 $externalId = $this->externalId($bankAccount, $transaction->fitId);
 
-                $existing = JournalEntry::query()
+                $existingTransaction = BankStatementImportTransaction::query()
                     ->where('wallet_id', $wallet->id)
-                    ->where('source', 'ofx')
+                    ->where('bank_account_id', $bankAccount->id)
                     ->where('external_id', $externalId)
+                    ->where('status', 'imported')
                     ->first();
 
-                if ($existing) {
+                if ($existingTransaction) {
                     $skipped++;
 
                     BankStatementImportTransaction::query()->create([
                         'bank_statement_import_id' => $import->id,
                         'wallet_id' => $wallet->id,
                         'bank_account_id' => $bankAccount->id,
-                        'journal_entry_id' => $existing->id,
+                        'journal_entry_id' => $existingTransaction->journal_entry_id,
+                        'journal_line_id' => $existingTransaction->journal_line_id,
                         'external_id' => $externalId,
                         'fit_id' => $transaction->fitId,
                         'posted_at' => $transaction->postedAt,
@@ -80,23 +82,75 @@ class ImportOfxBankStatement
                     continue;
                 }
 
-                $entry = $this->createBankImportEntry->handle(
+                $legacyEntry = JournalEntry::query()
+                    ->where('wallet_id', $wallet->id)
+                    ->where('source', 'ofx')
+                    ->where('external_id', $externalId)
+                    ->with('lines')
+                    ->first();
+
+                if ($legacyEntry) {
+                    $legacyLine = $legacyEntry->lines
+                        ->firstWhere('chart_of_account_id', $bankAccount->chart_of_account_id);
+
+                    $skipped++;
+
+                    BankStatementImportTransaction::query()->create([
+                        'bank_statement_import_id' => $import->id,
+                        'wallet_id' => $wallet->id,
+                        'bank_account_id' => $bankAccount->id,
+                        'journal_entry_id' => $legacyEntry->id,
+                        'journal_line_id' => $legacyLine?->id,
+                        'external_id' => $externalId,
+                        'fit_id' => $transaction->fitId,
+                        'posted_at' => $transaction->postedAt,
+                        'description' => $transaction->description,
+                        'amount_cents' => $transaction->amountCents,
+                        'direction' => $transaction->direction,
+                        'status' => 'skipped_duplicate',
+                        'raw_payload' => $transaction->raw,
+                    ]);
+
+                    continue;
+                }
+
+                $journalLine = $this->findMatchingOfxJournalLine->find(
                     wallet: $wallet,
-                    bankAccountId: $bankAccount->chart_of_account_id,
+                    bankAccount: $bankAccount,
+                    entryDate: $transaction->postedAt,
                     amountCents: $transaction->amountCents,
                     direction: $transaction->direction,
-                    entryDate: $transaction->postedAt,
-                    description: $transaction->description,
-                    source: 'ofx',
-                    externalId: $externalId,
-                    autoPostIfBalanced: false,
                 );
+
+                if ($journalLine) {
+                    $entry = $journalLine->journalEntry;
+                } else {
+                    $entry = $this->createBankImportEntry->handle(
+                        wallet: $wallet,
+                        bankAccountId: $bankAccount->chart_of_account_id,
+                        amountCents: $transaction->amountCents,
+                        direction: $transaction->direction,
+                        entryDate: $transaction->postedAt,
+                        description: $transaction->description,
+                        source: 'ofx',
+                        externalId: $externalId,
+                        autoPostIfBalanced: false,
+                    );
+
+                    $journalLine = $entry->lines
+                        ->firstWhere('chart_of_account_id', $bankAccount->chart_of_account_id);
+                }
+
+                if (! $journalLine) {
+                    throw new RuntimeException('Não foi possível identificar a linha da conta bancária no lançamento importado.');
+                }
 
                 BankStatementImportTransaction::query()->create([
                     'bank_statement_import_id' => $import->id,
                     'wallet_id' => $wallet->id,
                     'bank_account_id' => $bankAccount->id,
                     'journal_entry_id' => $entry->id,
+                    'journal_line_id' => $journalLine->id,
                     'external_id' => $externalId,
                     'fit_id' => $transaction->fitId,
                     'posted_at' => $transaction->postedAt,
@@ -123,12 +177,12 @@ class ImportOfxBankStatement
                 'total_out_cents' => $totalOut,
             ]);
 
-            return $import->fresh(['bankAccount', 'transactions.journalEntry']);
+            return $import->fresh(['bankAccount', 'transactions.journalEntry', 'transactions.journalLine']);
         });
     }
 
     private function externalId(BankAccount $bankAccount, string $fitId): string
     {
-        return 'ofx:bank-account:' . $bankAccount->id . ':' . $fitId;
+        return 'ofx:bank-account:'.$bankAccount->id.':'.$fitId;
     }
 }

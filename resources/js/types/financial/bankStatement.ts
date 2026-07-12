@@ -1,5 +1,6 @@
 export type JournalEntryStatus = 'draft' | 'posted';
-export type ReconciliationStatus = 'pending' | 'reconciled';
+export type ReconciliationStatus = 'pending' | 'reconciled' | 'reconciled_via_ofx';
+export type ClassificationStatus = 'classified' | 'unclassified';
 
 export interface BankStatementWallet {
     id: number;
@@ -23,10 +24,12 @@ export interface BankStatementTransaction {
     date: string | null;
     journal_entry_id: number | null;
     description: string | null;
-    status: JournalEntryStatus;
+    accounting_status: JournalEntryStatus;
     source: string | null;
     source_label: string;
     reconciliation_status: ReconciliationStatus;
+    classification_status: ClassificationStatus;
+    classification_label: string;
     type: 'inflow' | 'outflow';
     inflow_cents: number | null;
     outflow_cents: number | null;

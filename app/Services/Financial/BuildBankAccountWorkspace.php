@@ -4,8 +4,6 @@ namespace App\Services\Financial;
 
 use App\Models\BankAccount;
 use App\Models\BankReconciliation;
-use App\Models\BankReconciliationStatementItem;
-use App\Models\BankStatementImportTransaction;
 use App\Models\BankTransfer;
 use App\Models\CreditCard;
 use App\Models\CreditCardInvoice;
@@ -56,7 +54,6 @@ class BuildBankAccountWorkspace
                 'month_outflows_cents' => $monthMovements['outflows_cents'],
                 'month_result_cents' => $monthMovements['inflows_cents'] - $monthMovements['outflows_cents'],
                 'current_card_invoice_cents' => collect($creditCards)->sum(fn (array $card) => (int) ($card['current_invoice']['balance_cents'] ?? 0)),
-                'pending_ofx_transactions' => $this->pendingOfxTransactionsCount($wallet, $bankAccount),
                 'open_reconciliations' => $this->openReconciliationsCount($wallet, $bankAccount),
                 'linked_credit_cards' => count($creditCards),
             ],
@@ -245,25 +242,6 @@ class BuildBankAccountWorkspace
             ->first();
     }
 
-    private function pendingOfxTransactionsCount(Wallet $wallet, BankAccount $bankAccount): int
-    {
-        $alreadyReconciledIds = BankReconciliationStatementItem::query()
-            ->whereNotNull('bank_statement_import_transaction_id')
-            ->whereHas('bankReconciliation', function ($query) use ($wallet, $bankAccount) {
-                $query->where('wallet_id', $wallet->id)
-                    ->where('bank_account_id', $bankAccount->id);
-            })
-            ->pluck('bank_statement_import_transaction_id')
-            ->all();
-
-        return BankStatementImportTransaction::query()
-            ->where('wallet_id', $wallet->id)
-            ->where('bank_account_id', $bankAccount->id)
-            ->where('status', 'imported')
-            ->when($alreadyReconciledIds !== [], fn ($query) => $query->whereNotIn('id', $alreadyReconciledIds))
-            ->count();
-    }
-
     private function openReconciliationsCount(Wallet $wallet, BankAccount $bankAccount): int
     {
         return BankReconciliation::query()
@@ -303,7 +281,6 @@ class BuildBankAccountWorkspace
     {
         return [
             'statement_url' => route('bank-accounts.statement', $bankAccount),
-            'ofx_import_url' => route('ofx-imports.index', ['bank_account_id' => $bankAccount->id]),
             'reconciliation_url' => route('bank-reconciliations.create', ['bank_account_id' => $bankAccount->id]),
             'transfer_url' => route('bank-transfers.create', ['from_bank_account_id' => $bankAccount->id]),
             'credit_card_create_url' => route('credit-cards.create', ['bank_account_id' => $bankAccount->id]),

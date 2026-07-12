@@ -12,17 +12,18 @@ defineProps<{
 </script>
 
 <template>
-    <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma movimentação encontrada para os filtros informados." :empty-colspan="9">
+    <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma movimentação encontrada para os filtros informados." :empty-colspan="10">
         <template #head>
             <tr>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Data</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Descrição</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Origem</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Conciliação</th>
                 <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Entrada</th>
                 <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saída</th>
                 <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Origem</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status contábil</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Validação / conciliação</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Classificação</th>
                 <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Lançamento</th>
             </tr>
         </template>
@@ -42,18 +43,6 @@ defineProps<{
                 </div>
             </td>
 
-            <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-300">
-                {{ transaction.source_label || transaction.source || 'Manual' }}
-            </td>
-
-            <td class="px-4 py-3 text-sm whitespace-nowrap">
-                <StatusBadge :status="transaction.status" />
-            </td>
-
-            <td class="px-4 py-3 text-sm whitespace-nowrap">
-                <StatusBadge :status="transaction.reconciliation_status || 'pending'" />
-            </td>
-
             <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-green-300">
                 {{ transaction.inflow_cents ? formatCurrency(transaction.inflow_cents) : '-' }}
             </td>
@@ -64,6 +53,27 @@ defineProps<{
 
             <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-gray-100">
                 {{ formatCurrency(transaction.running_balance_cents) }}
+            </td>
+
+            <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-300">
+                {{ transaction.source_label || transaction.source || 'Manual' }}
+            </td>
+
+            <td class="px-4 py-3 text-sm whitespace-nowrap">
+                <StatusBadge :status="transaction.accounting_status" />
+            </td>
+
+            <td class="px-4 py-3 text-sm whitespace-nowrap">
+                <StatusBadge :status="transaction.reconciliation_status" />
+            </td>
+
+            <td class="px-4 py-3 text-sm">
+                <span
+                    class="inline-flex rounded px-2 py-1 text-xs font-semibold"
+                    :class="transaction.classification_status === 'unclassified' ? 'bg-yellow-950 text-yellow-300' : 'bg-green-950 text-green-300'"
+                >
+                    {{ transaction.classification_label }}
+                </span>
             </td>
 
             <td class="px-4 py-3 text-right text-sm whitespace-nowrap">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import BankStatementDateRangeFilter from '@/components/financial/bankStatements/BankStatementDateRangeFilter.vue';
 import BankStatementTable from '@/components/financial/bankStatements/BankStatementTable.vue';
+import OfxImportDialog from '@/components/financial/ofxImports/OfxImportDialog.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -35,10 +36,6 @@ const form = reactive({
 });
 
 const accountUrl = computed(() => (props.selectedBankAccount ? route('bank-accounts.show', [props.selectedBankAccount.id]) : null));
-
-const ofxImportUrl = computed(() =>
-    props.selectedBankAccount ? route('ofx-imports.index', { bank_account_id: props.selectedBankAccount.id }) : null,
-);
 
 const reconciliationUrl = computed(() =>
     props.selectedBankAccount
@@ -156,13 +153,7 @@ onBeforeUnmount(() => {
                     Resumo da conta
                 </Link>
 
-                <Link
-                    v-if="ofxImportUrl"
-                    :href="ofxImportUrl"
-                    class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
-                >
-                    Importar OFX
-                </Link>
+                <OfxImportDialog v-if="selectedBankAccount" :bank-account="selectedBankAccount" />
 
                 <Link
                     v-if="reconciliationUrl"

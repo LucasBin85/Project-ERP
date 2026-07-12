@@ -34,7 +34,7 @@ class BuildOfxReconciliationStatementItems
             ->whereDate('posted_at', '>=', $periodStart)
             ->whereDate('posted_at', '<=', $periodEnd)
             ->when($alreadyReconciledIds !== [], fn ($query) => $query->whereNotIn('id', $alreadyReconciledIds))
-            ->with(['journalEntry.lines'])
+            ->with(['journalEntry.lines', 'journalLine.journalEntry'])
             ->orderBy('posted_at')
             ->orderBy('id')
             ->get()
@@ -57,7 +57,7 @@ class BuildOfxReconciliationStatementItems
                     'direction' => $transaction->direction,
                     'journal_entry_id' => $transaction->journal_entry_id,
                     'journal_line_id' => $matchedLineId,
-                    'match_reason' => $matchedLineId ? 'Lançamento OFX já postado encontrado' : null,
+                    'match_reason' => $matchedLineId ? 'Match exato por conta, data, valor e direção' : null,
                 ];
             })
             ->values()
@@ -66,16 +66,22 @@ class BuildOfxReconciliationStatementItems
 
     private function matchedJournalLineId(BankStatementImportTransaction $transaction, BankAccount $bankAccount, array $availableLineIds): ?int
     {
-        $entry = $transaction->journalEntry;
+        $line = $transaction->journalLine
+            ?: $transaction->journalEntry?->lines
+                ->first(fn (JournalLine $line) => (int) $line->chart_of_account_id === (int) $bankAccount->chart_of_account_id);
 
-        if (! $entry || $entry->status !== 'posted') {
+        $entry = $line?->journalEntry ?: $transaction->journalEntry;
+
+        if (! $entry || ! $line || $entry->status !== 'posted') {
             return null;
         }
 
-        $line = $entry->lines
-            ->first(fn (JournalLine $line) => (int) $line->chart_of_account_id === (int) $bankAccount->chart_of_account_id);
+        $expectedType = $transaction->direction === 'in' ? 'debit' : 'credit';
 
-        if (! $line) {
+        if ((int) $line->chart_of_account_id !== (int) $bankAccount->chart_of_account_id
+            || $line->type !== $expectedType
+            || (int) $line->amount_cents !== (int) $transaction->amount_cents
+            || $entry->entry_date?->toDateString() !== $transaction->posted_at?->toDateString()) {
             return null;
         }
 

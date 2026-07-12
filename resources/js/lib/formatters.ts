@@ -1,50 +1,44 @@
 export function formatDate(value: unknown): string {
-    if (!value) return '-'
+    if (!value) return '-';
 
-    const raw =
-        typeof value === 'string'
-            ? value
-            : (value as { date?: string }).date ?? String(value)
+    const raw = typeof value === 'string' ? value : ((value as { date?: string }).date ?? String(value));
 
-    const date = raw.substring(0, 10)
-    const [year, month, day] = date.split('-')
+    const date = raw.substring(0, 10);
+    const [year, month, day] = date.split('-');
 
-    if (!year || !month || !day) return '-'
+    if (!year || !month || !day) return '-';
 
-    return `${day}/${month}/${year}`
+    return `${day}/${month}/${year}`;
 }
 
 export function formatDateTime(value: string | Date | null | undefined): string {
-    if (!value) return '-'
+    if (!value) return '-';
 
     return new Intl.DateTimeFormat('pt-BR', {
         dateStyle: 'short',
         timeStyle: 'short',
-    }).format(new Date(value))
+    }).format(new Date(value));
 }
 
 export function formatCurrency(cents: number | null | undefined): string {
     return new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL',
-    }).format(Number(cents ?? 0) / 100)
+    }).format(Number(cents ?? 0) / 100);
 }
 
 export function formatMoneyOrDash(cents: number | null | undefined): string {
-    if (!cents) return '-'
+    if (!cents) return '-';
 
-    return formatCurrency(cents)
+    return formatCurrency(cents);
 }
 
-export function formatAccount(
-    code?: string | null,
-    name?: string | null,
-): string {
-    if (!code && !name) return '-'
-    if (!code) return String(name)
-    if (!name) return String(code)
+export function formatAccount(code?: string | null, name?: string | null): string {
+    if (!code && !name) return '-';
+    if (!code) return String(name);
+    if (!name) return String(code);
 
-    return `${code} - ${name}`
+    return `${code} - ${name}`;
 }
 
 export function formatStatus(status?: string | null): string {
@@ -63,14 +57,17 @@ export function formatStatus(status?: string | null): string {
         paid: 'Pago',
         received: 'Recebido',
         reconciled: 'Conciliado',
+        reconciled_via_ofx: 'Conciliado via OFX',
+        classified: 'Classificado',
+        unclassified: 'A classificar',
         completed: 'Concluído',
         cancelled: 'Cancelado',
         reversed: 'Estornado',
-    }
+    };
 
-    if (!status) return '-'
+    if (!status) return '-';
 
-    return statuses[status] ?? status
+    return statuses[status] ?? status;
 }
 
 export function formatNature(nature?: string | null): string {
@@ -79,11 +76,11 @@ export function formatNature(nature?: string | null): string {
         credora: 'Credora',
         debit: 'Devedora',
         credit: 'Credora',
-    }
+    };
 
-    if (!nature) return '-'
+    if (!nature) return '-';
 
-    return natures[nature] ?? nature
+    return natures[nature] ?? nature;
 }
 
 export function formatAccountType(type?: string | null): string {
@@ -93,20 +90,20 @@ export function formatAccountType(type?: string | null): string {
         receita: 'Receita',
         despesa: 'Despesa',
         patrimonio: 'Patrimônio',
-    }
+    };
 
-    if (!type) return '-'
+    if (!type) return '-';
 
-    return types[type] ?? type
+    return types[type] ?? type;
 }
 
 export function formatPercentage(value: number): string {
     return new Intl.NumberFormat('pt-BR', {
         style: 'percent',
         minimumFractionDigits: 2,
-    }).format(value / 100)
+    }).format(value / 100);
 }
 
 export function formatNumber(value: number): string {
-    return new Intl.NumberFormat('pt-BR').format(value)
+    return new Intl.NumberFormat('pt-BR').format(value);
 }

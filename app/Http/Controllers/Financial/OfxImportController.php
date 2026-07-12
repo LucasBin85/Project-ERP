@@ -31,17 +31,6 @@ class OfxImportController extends Controller
                 ->findOrFail($selectedBankAccountId);
         }
 
-        $bankAccounts = BankAccount::query()
-            ->where('wallet_id', $wallet->id)
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'bank_name', 'bank_code', 'agency', 'account_number'])
-            ->map(fn (BankAccount $account) => [
-                'id' => $account->id,
-                'label' => $this->formatBankAccountLabel($account),
-            ])
-            ->values();
-
         $imports = BankStatementImport::query()
             ->where('wallet_id', $wallet->id)
             ->where('source', 'ofx')
@@ -63,7 +52,6 @@ class OfxImportController extends Controller
                 'id' => $wallet->id,
                 'name' => $wallet->name,
             ],
-            'bankAccounts' => $bankAccounts,
             'selectedBankAccountId' => $selectedBankAccountId ? (int) $selectedBankAccountId : null,
             'imports' => $imports,
         ]);
@@ -105,24 +93,11 @@ class OfxImportController extends Controller
         }
 
         return redirect()
-            ->route('ofx-imports.index', ['bank_account_id' => $bankAccount->id])
+            ->route('bank-accounts.statement', $bankAccount)
             ->with('success', sprintf(
-                'OFX importado: %d lançamentos criados e %d duplicados ignorados.',
+                'OFX importado: %d transações processadas e %d duplicadas ignoradas.',
                 $import->imported_transactions,
                 $import->skipped_duplicates,
             ));
-    }
-
-    private function formatBankAccountLabel(BankAccount $account): string
-    {
-        $details = collect([
-            $account->bank_code,
-            $account->agency,
-            $account->account_number,
-        ])->filter()->join(' / ');
-
-        return $details !== ''
-            ? "{$account->name} ({$details})"
-            : $account->name;
     }
 }

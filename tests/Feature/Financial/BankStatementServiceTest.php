@@ -1,8 +1,8 @@
 <?php
 
 use App\DTOs\Financial\BankStatementFiltersDTO;
-use App\Models\BankReconciliation;
-use App\Models\BankReconciliationItem;
+use App\Models\BankStatementImport;
+use App\Models\BankStatementImportTransaction;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
@@ -32,6 +32,9 @@ $createStatementScenario = function (): array {
     $revenue = AccountingTestHelper::account($wallet, '4.1', 'Receita de Serviços', 'receita', 'credit');
     $expense = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
 
+    $suspense = AccountingTestHelper::account($wallet, '1.1.99', 'A classificar', 'ativo', 'debit');
+    $wallet->update(['suspense_account_id' => $suspense->id]);
+
     AccountingTestHelper::createPostedEntry($wallet, '2026-06-30', [
         [$bankAccount->chartOfAccount, 'debit', 100000],
         [$capital, 'credit', 100000],
@@ -57,7 +60,7 @@ $createStatementScenario = function (): array {
     ]);
     $outflowEntry->update([
         'description' => null,
-        'source' => 'open_finance',
+        'source' => 'manual',
     ]);
     $outflowLine = $outflowEntry->lines()
         ->where('chart_of_account_id', $bankAccount->chart_of_account_id)
@@ -78,7 +81,7 @@ $createStatementScenario = function (): array {
 
     JournalLine::query()->create([
         'journal_entry_id' => $draftEntry->id,
-        'chart_of_account_id' => $expense->id,
+        'chart_of_account_id' => $suspense->id,
         'type' => 'debit',
         'amount_cents' => 8000,
     ]);
@@ -91,24 +94,30 @@ $createStatementScenario = function (): array {
         'memo' => 'Memo secundario do OFX',
     ]);
 
-    $reconciliation = BankReconciliation::query()->create([
+    $import = BankStatementImport::query()->create([
         'wallet_id' => $wallet->id,
         'bank_account_id' => $bankAccount->id,
-        'period_start' => '2026-07-01',
-        'period_end' => '2026-07-31',
-        'opening_balance_cents' => 100000,
-        'statement_balance_cents' => 138000,
-        'book_balance_cents' => 138000,
-        'reconciled_balance_cents' => 138000,
-        'difference_cents' => 0,
+        'source' => 'ofx',
+        'original_filename' => 'match-manual.ofx',
+        'file_hash' => sha1('match-manual'),
+        'total_transactions' => 1,
+        'imported_transactions' => 1,
         'status' => 'completed',
-        'completed_at' => now(),
     ]);
 
-    BankReconciliationItem::query()->create([
-        'bank_reconciliation_id' => $reconciliation->id,
+    BankStatementImportTransaction::query()->create([
+        'bank_statement_import_id' => $import->id,
+        'wallet_id' => $wallet->id,
+        'bank_account_id' => $bankAccount->id,
+        'journal_entry_id' => $outflowEntry->id,
         'journal_line_id' => $outflowLine->id,
-        'amount_cents' => -12000,
+        'external_id' => 'ofx:bank-account:'.$bankAccount->id.':MATCH-MANUAL',
+        'fit_id' => 'MATCH-MANUAL',
+        'posted_at' => '2026-07-02',
+        'description' => 'Tarifa bancaria no memo',
+        'amount_cents' => 12000,
+        'direction' => 'out',
+        'status' => 'imported',
     ]);
 
     return compact(
@@ -160,10 +169,12 @@ it('builds a bank statement with complete draft and posted entries ordered from 
             'Tarifa bancaria no memo',
             'Recebimento manual',
         ])
-        ->and($transactions->pluck('status')->all())->toBe(['draft', 'posted', 'posted'])
-        ->and($transactions->pluck('source')->all())->toBe(['ofx', 'open_finance', 'manual'])
-        ->and($transactions->pluck('source_label')->all())->toBe(['OFX', 'Open Finance', 'Manual'])
-        ->and($transactions->pluck('reconciliation_status')->all())->toBe(['pending', 'reconciled', 'pending'])
+        ->and($transactions->pluck('accounting_status')->all())->toBe(['draft', 'posted', 'posted'])
+        ->and($transactions->pluck('source')->all())->toBe(['ofx', 'manual', 'manual'])
+        ->and($transactions->pluck('source_label')->all())->toBe(['OFX', 'Manual', 'Manual'])
+        ->and($transactions->pluck('reconciliation_status')->all())->toBe(['reconciled_via_ofx', 'reconciled', 'pending'])
+        ->and($transactions->pluck('classification_status')->all())->toBe(['unclassified', 'classified', 'classified'])
+        ->and($transactions->pluck('classification_label')->all())->toBe(['A classificar', 'Despesa Administrativa', 'Receita de Serviços'])
         ->and($transactions->pluck('type')->all())->toBe(['outflow', 'outflow', 'inflow'])
         ->and($transactions->pluck('inflow_cents')->all())->toBe([null, null, 50000])
         ->and($transactions->pluck('outflow_cents')->all())->toBe([8000, 12000, null])

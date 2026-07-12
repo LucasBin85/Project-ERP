@@ -4,13 +4,13 @@ import ReportSection from '@/components/reports/ReportSection.vue';
 import ReportSummaryCard from '@/components/reports/ReportSummaryCard.vue';
 import ReportTable from '@/components/reports/ReportTable.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
+import { useBankAccountsIndex } from '@/composables/financial/useBankAccountsIndex';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAccount, formatCurrency, formatDate } from '@/lib/formatters';
 import { Link, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
-import { useBankAccountsIndex } from '@/composables/financial/useBankAccountsIndex';
 
-const props = defineProps<{
+defineProps<{
     wallet: Record<string, any>;
     bankAccounts: Array<Record<string, any>>;
     summary: Record<string, number>;
@@ -35,13 +35,6 @@ function openAccount(accountId: number | string) {
                 </Link>
 
                 <Link
-                    :href="route('ofx-imports.index')"
-                    class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
-                >
-                    Importar OFX
-                </Link>
-
-                <Link
                     :href="route('bank-accounts.create')"
                     class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
                 >
@@ -50,29 +43,13 @@ function openAccount(accountId: number | string) {
             </div>
 
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <ReportSummaryCard
-                    label="Saldo atual total"
-                    :value="formatCurrency(summary.total_current_balance_cents)"
-                    tone="green"
-                />
+                <ReportSummaryCard label="Saldo atual total" :value="formatCurrency(summary.total_current_balance_cents)" tone="green" />
 
-                <ReportSummaryCard
-                    label="Saldo inicial total"
-                    :value="formatCurrency(summary.total_opening_balance_cents)"
-                    tone="blue"
-                />
+                <ReportSummaryCard label="Saldo inicial total" :value="formatCurrency(summary.total_opening_balance_cents)" tone="blue" />
 
-                <ReportSummaryCard
-                    label="Contas ativas"
-                    :value="String(summary.active_accounts ?? 0)"
-                    tone="neutral"
-                />
+                <ReportSummaryCard label="Contas ativas" :value="String(summary.active_accounts ?? 0)" tone="neutral" />
 
-                <ReportSummaryCard
-                    label="Total de contas"
-                    :value="String(summary.accounts_count ?? 0)"
-                    tone="neutral"
-                />
+                <ReportSummaryCard label="Total de contas" :value="String(summary.accounts_count ?? 0)" tone="neutral" />
             </div>
 
             <ReportSection>
@@ -80,26 +57,22 @@ function openAccount(accountId: number | string) {
                     <div>
                         <h2 class="text-lg font-bold text-white">Contas cadastradas</h2>
                         <p class="text-sm text-gray-400">
-                            Clique em uma conta para abrir o painel operacional com extrato, OFX, conciliação, transferências e cartões vinculados.
+                            Clique em uma conta para abrir o painel operacional. A importação OFX fica disponível no Extrato Bancário.
                         </p>
                     </div>
                 </template>
 
-                <ReportTable
-                    :empty="bankAccounts.length === 0"
-                    empty-message="Nenhuma conta bancária cadastrada."
-                    :empty-colspan="8"
-                >
+                <ReportTable :empty="bankAccounts.length === 0" empty-message="Nenhuma conta bancária cadastrada." :empty-colspan="8">
                     <template #head>
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Conta</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Banco</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Tipo</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Conta contábil</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Saldo inicial</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Saldo atual</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Último movimento</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Conta</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Banco</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Tipo</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Conta contábil</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo inicial</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo atual</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Último movimento</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Status</th>
                         </tr>
                     </template>
 
@@ -117,9 +90,7 @@ function openAccount(accountId: number | string) {
                             >
                                 {{ account.name }}
                             </Link>
-                            <div class="text-xs text-gray-500">
-                                {{ account.agency || '-' }} / {{ account.account_number || '-' }}
-                            </div>
+                            <div class="text-xs text-gray-500">{{ account.agency || '-' }} / {{ account.account_number || '-' }}</div>
                         </td>
 
                         <td class="px-4 py-3 text-sm text-gray-300">
@@ -134,22 +105,22 @@ function openAccount(accountId: number | string) {
                             {{ formatAccount(account.chart_of_account?.code, account.chart_of_account?.name) }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">
+                        <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-gray-100">
                             {{ formatCurrency(account.opening_balance_cents) }}
                         </td>
 
                         <td
-                            class="whitespace-nowrap px-4 py-3 text-right text-sm font-bold"
+                            class="px-4 py-3 text-right text-sm font-bold whitespace-nowrap"
                             :class="Number(account.current_balance_cents) >= 0 ? 'text-green-300' : 'text-red-300'"
                         >
                             {{ formatCurrency(account.current_balance_cents) }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                        <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-300">
                             {{ formatDate(account.last_transaction_at) }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
+                        <td class="px-4 py-3 text-right text-sm whitespace-nowrap">
                             <StatusBadge :status="account.is_active ? 'active' : 'cancelled'" />
                         </td>
                     </tr>
