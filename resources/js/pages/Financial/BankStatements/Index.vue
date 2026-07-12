@@ -4,17 +4,23 @@ import BankStatementTable from '@/components/financial/bankStatements/BankStatem
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
+import type {
+    BankStatementAccount,
+    BankStatementFilters,
+    BankStatementOperational,
+    BankStatementTransaction,
+    BankStatementWallet,
+} from '@/types/financial/bankStatement';
 import { Link, router } from '@inertiajs/vue3';
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
 
 const props = defineProps<{
-    wallet: Record<string, any>;
-    filters: Record<string, string>;
-    statementReady: boolean;
-    selectedBankAccount: Record<string, any> | null;
-    transactions: Array<Record<string, any>>;
-    operational: Record<string, any>;
+    wallet: BankStatementWallet;
+    filters: BankStatementFilters;
+    selectedBankAccount: BankStatementAccount | null;
+    transactions: BankStatementTransaction[];
+    operational: BankStatementOperational;
 }>();
 
 const showFilters = ref(false);
@@ -27,6 +33,22 @@ const form = reactive({
     end_date: props.filters.end_date ?? '',
     search: props.filters.search ?? '',
 });
+
+const accountUrl = computed(() => (props.selectedBankAccount ? route('bank-accounts.show', [props.selectedBankAccount.id]) : null));
+
+const ofxImportUrl = computed(() =>
+    props.selectedBankAccount ? route('ofx-imports.index', { bank_account_id: props.selectedBankAccount.id }) : null,
+);
+
+const reconciliationUrl = computed(() =>
+    props.selectedBankAccount
+        ? route('bank-reconciliations.create', {
+              bank_account_id: props.selectedBankAccount.id,
+              period_start: form.start_date,
+              period_end: form.end_date,
+          })
+        : null,
+);
 
 function statementRoute(params: Record<string, unknown> = {}) {
     return route('bank-accounts.statement', {
@@ -76,11 +98,7 @@ function subtractDays(dateString: string, days: number): string {
     const date = new Date(`${dateString}T12:00:00`);
     date.setDate(date.getDate() - days);
 
-    return [
-        date.getFullYear(),
-        String(date.getMonth() + 1).padStart(2, '0'),
-        String(date.getDate()).padStart(2, '0'),
-    ].join('-');
+    return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 }
 
 function loadOlderTransactions() {
@@ -109,11 +127,14 @@ function loadOlderTransactions() {
 onMounted(() => {
     if (!loadMoreRef.value) return;
 
-    observer = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-            loadOlderTransactions();
-        }
-    }, { rootMargin: '300px' });
+    observer = new IntersectionObserver(
+        (entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                loadOlderTransactions();
+            }
+        },
+        { rootMargin: '300px' },
+    );
 
     observer.observe(loadMoreRef.value);
 });
@@ -125,30 +146,27 @@ onBeforeUnmount(() => {
 
 <template>
     <AppLayout title="Extrato Bancário">
-        <ReportPage
-            title="Extrato Bancário"
-            :subtitle="selectedBankAccount ? `${selectedBankAccount.name} · ${wallet.name}` : wallet.name"
-        >
+        <ReportPage title="Extrato Bancário" :subtitle="selectedBankAccount ? `${selectedBankAccount.name} · ${wallet.name}` : wallet.name">
             <div class="flex flex-wrap justify-end gap-3">
                 <Link
-                    v-if="operational?.actions?.account_url"
-                    :href="operational.actions.account_url"
+                    v-if="accountUrl"
+                    :href="accountUrl"
                     class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
                 >
                     Resumo da conta
                 </Link>
 
                 <Link
-                    v-if="operational?.actions?.ofx_import_url"
-                    :href="operational.actions.ofx_import_url"
+                    v-if="ofxImportUrl"
+                    :href="ofxImportUrl"
                     class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
                 >
                     Importar OFX
                 </Link>
 
                 <Link
-                    v-if="operational?.actions?.reconciliation_url"
-                    :href="operational.actions.reconciliation_url"
+                    v-if="reconciliationUrl"
+                    :href="reconciliationUrl"
                     class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
                 >
                     Conciliar período
@@ -159,11 +177,10 @@ onBeforeUnmount(() => {
                 <template #header>
                     <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
-                            <h2 class="text-lg font-bold text-white">
-                                Movimentos da conta
-                            </h2>
+                            <h2 class="text-lg font-bold text-white">Movimentos da conta</h2>
                             <p class="mt-1 text-sm text-gray-400">
-                                O extrato lista lançamentos manuais, OFX e demais origens. Ao chegar ao fim da lista, períodos anteriores são carregados automaticamente.
+                                O extrato lista lançamentos manuais, OFX e demais origens. Ao chegar ao fim da lista, períodos anteriores são
+                                carregados automaticamente.
                             </p>
                         </div>
 
@@ -186,10 +203,7 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div v-if="showFilters" class="border-b border-gray-700 p-6">
-                    <BankStatementDateRangeFilter
-                        v-model:start="form.start_date"
-                        v-model:end="form.end_date"
-                    />
+                    <BankStatementDateRangeFilter v-model:start="form.start_date" v-model:end="form.end_date" />
                 </div>
 
                 <BankStatementTable :transactions="transactions" />

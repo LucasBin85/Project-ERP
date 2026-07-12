@@ -69,30 +69,19 @@ class BankStatementController extends Controller
                 'name' => $wallet->name,
             ],
             'filters' => $statement['filters'],
-            'statementReady' => $statement['ready'],
             'selectedBankAccount' => $statement['bank_account'],
             'transactions' => $statement['transactions'],
             'operational' => $this->operationalContext(
                 bankAccount: $bankAccount,
                 startDate: $filters->startDate,
-                endDate: $filters->endDate,
             ),
         ]);
     }
 
-    private function operationalContext(BankAccount $bankAccount, string $startDate, string $endDate): array
+    private function operationalContext(BankAccount $bankAccount, string $startDate): array
     {
         return [
             'has_older_transactions' => $this->hasOlderTransactions($bankAccount, $startDate),
-            'actions' => [
-                'account_url' => route('bank-accounts.show', $bankAccount),
-                'ofx_import_url' => route('ofx-imports.index', ['bank_account_id' => $bankAccount->id]),
-                'reconciliation_url' => route('bank-reconciliations.create', [
-                    'bank_account_id' => $bankAccount->id,
-                    'period_start' => $startDate,
-                    'period_end' => $endDate,
-                ]),
-            ],
         ];
     }
 

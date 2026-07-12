@@ -10,6 +10,7 @@ use App\Models\BankReconciliationStatementItem;
 use App\Models\JournalLine;
 use App\Models\Wallet;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class BankStatementService
 {
@@ -59,8 +60,7 @@ class BankStatementService
                     'id' => $line->id,
                     'date' => $entry?->entry_date,
                     'journal_entry_id' => $entry?->id,
-                    'journal_entry_url' => $entry ? route('journal-entries.show', $entry) : null,
-                    'description' => $line->memo ?: $entry?->description,
+                    'description' => $entry?->description ?: $line->memo,
                     'status' => $entry?->status,
                     'source' => $entry?->source,
                     'source_label' => $this->sourceLabel($entry?->source),
@@ -72,6 +72,16 @@ class BankStatementService
                     'running_balance_cents' => $runningBalance,
                 ];
             })
+            ->when(
+                $filters->search !== '',
+                fn (Collection $transactions) => $transactions->filter(
+                    fn (array $transaction) => Str::contains(
+                        (string) ($transaction['description'] ?? ''),
+                        $filters->search,
+                        true,
+                    ),
+                ),
+            )
             ->reverse()
             ->values();
 
@@ -111,10 +121,6 @@ class BankStatementService
                 $query->where('wallet_id', $wallet->id)
                     ->whereDate('entry_date', '>=', $filters->startDate)
                     ->whereDate('entry_date', '<=', $filters->endDate);
-
-                if ($filters->search !== '') {
-                    $query->where('description', 'like', '%' . $filters->search . '%');
-                }
             })
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->orderBy('journal_entries.entry_date')
