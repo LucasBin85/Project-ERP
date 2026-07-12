@@ -80,6 +80,9 @@ class BankStatementService
                     ),
                     'classification_status' => $classification['status'],
                     'classification_label' => $classification['label'],
+                    'can_classify' => $entry?->source === 'ofx'
+                        && $entry?->status === 'draft'
+                        && $entry?->lines->where('chart_of_account_id', $wallet->suspense_account_id)->count() === 1,
                     'type' => $inflowCents > 0 ? 'inflow' : 'outflow',
                     'inflow_cents' => $inflowCents ?: null,
                     'outflow_cents' => $outflowCents ?: null,

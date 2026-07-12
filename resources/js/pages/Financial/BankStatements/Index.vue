@@ -7,6 +7,7 @@ import ReportSection from '@/components/reports/ReportSection.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type {
     BankStatementAccount,
+    BankStatementClassificationAccount,
     BankStatementFilters,
     BankStatementOperational,
     BankStatementTransaction,
@@ -21,6 +22,7 @@ const props = defineProps<{
     filters: BankStatementFilters;
     selectedBankAccount: BankStatementAccount | null;
     transactions: BankStatementTransaction[];
+    classificationAccounts: BankStatementClassificationAccount[];
     operational: BankStatementOperational;
 }>();
 
@@ -197,7 +199,12 @@ onBeforeUnmount(() => {
                     <BankStatementDateRangeFilter v-model:start="form.start_date" v-model:end="form.end_date" />
                 </div>
 
-                <BankStatementTable :transactions="transactions" />
+                <BankStatementTable
+                    v-if="selectedBankAccount"
+                    :transactions="transactions"
+                    :bank-account="selectedBankAccount"
+                    :classification-accounts="classificationAccounts"
+                />
 
                 <div ref="loadMoreRef" class="border-t border-gray-700 p-6 text-center text-sm text-gray-400">
                     <button

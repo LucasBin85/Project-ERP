@@ -2,12 +2,15 @@
 import ReportTable from '@/components/reports/ReportTable.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@/lib/formatters';
-import type { BankStatementTransaction } from '@/types/financial/bankStatement';
+import type { BankStatementAccount, BankStatementClassificationAccount, BankStatementTransaction } from '@/types/financial/bankStatement';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import OfxClassificationDialog from './OfxClassificationDialog.vue';
 
 defineProps<{
     transactions: BankStatementTransaction[];
+    bankAccount: BankStatementAccount;
+    classificationAccounts: BankStatementClassificationAccount[];
 }>();
 </script>
 
@@ -74,6 +77,12 @@ defineProps<{
                 >
                     {{ transaction.classification_label }}
                 </span>
+                <OfxClassificationDialog
+                    v-if="transaction.can_classify"
+                    :transaction="transaction"
+                    :bank-account="bankAccount"
+                    :classification-accounts="classificationAccounts"
+                />
             </td>
 
             <td class="px-4 py-3 text-right text-sm whitespace-nowrap">

@@ -12,6 +12,13 @@ export interface BankStatementAccount {
     name: string;
 }
 
+export interface BankStatementClassificationAccount {
+    id: number;
+    code: string;
+    name: string;
+    type: string;
+}
+
 export interface BankStatementFilters {
     bank_account_id: string;
     start_date: string;
@@ -30,6 +37,7 @@ export interface BankStatementTransaction {
     reconciliation_status: ReconciliationStatus;
     classification_status: ClassificationStatus;
     classification_label: string;
+    can_classify: boolean;
     type: 'inflow' | 'outflow';
     inflow_cents: number | null;
     outflow_cents: number | null;

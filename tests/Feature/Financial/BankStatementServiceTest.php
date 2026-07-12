@@ -175,6 +175,7 @@ it('builds a bank statement with complete draft and posted entries ordered from 
         ->and($transactions->pluck('reconciliation_status')->all())->toBe(['reconciled_via_ofx', 'reconciled', 'pending'])
         ->and($transactions->pluck('classification_status')->all())->toBe(['unclassified', 'classified', 'classified'])
         ->and($transactions->pluck('classification_label')->all())->toBe(['A classificar', 'Despesa Administrativa', 'Receita de Serviços'])
+        ->and($transactions->pluck('can_classify')->all())->toBe([true, false, false])
         ->and($transactions->pluck('type')->all())->toBe(['outflow', 'outflow', 'inflow'])
         ->and($transactions->pluck('inflow_cents')->all())->toBe([null, null, 50000])
         ->and($transactions->pluck('outflow_cents')->all())->toBe([8000, 12000, null])
