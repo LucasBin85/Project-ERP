@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\DTOs\Financial\OfxClassificationDTO;
 use App\Exceptions\OfxClassificationException;
 use App\Models\BankAccount;
+use App\Models\BankStatementImportTransaction;
 use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
@@ -47,22 +48,39 @@ class ClassifyOfxDraftEntry
                 throw new OfxClassificationException('A wallet ativa não possui conta "A classificar" definida.');
             }
 
-            $entry->load('lines');
+            $lines = $entry->lines()
+                ->lockForUpdate()
+                ->get();
 
-            $bankLineExists = $entry->lines->contains(
+            $bankLines = $lines->filter(
                 fn (JournalLine $line) => (int) $line->chart_of_account_id === (int) $bankAccount->chart_of_account_id,
             );
 
-            if (! $bankLineExists) {
-                throw new OfxClassificationException('O lançamento não pertence à conta bancária informada.');
+            if ($bankLines->count() !== 1) {
+                throw new OfxClassificationException('O lançamento deve possuir exatamente uma linha da conta bancária informada.');
             }
 
-            $suspenseLines = $entry->lines->filter(
-                fn (JournalLine $line) => (int) $line->chart_of_account_id === (int) $wallet->suspense_account_id,
+            /** @var JournalLine $bankLine */
+            $bankLine = $bankLines->first();
+
+            $isOfxOriginLine = BankStatementImportTransaction::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('bank_account_id', $bankAccount->id)
+                ->where('journal_entry_id', $entry->id)
+                ->where('journal_line_id', $bankLine->id)
+                ->whereIn('status', ['imported', 'skipped_duplicate'])
+                ->exists();
+
+            if (! $isOfxOriginLine) {
+                throw new OfxClassificationException('A linha bancária informada não é a linha de origem desta importação OFX.');
+            }
+
+            $classificationLines = $lines->reject(
+                fn (JournalLine $line) => (int) $line->id === (int) $bankLine->id,
             );
 
-            if ($suspenseLines->count() !== 1) {
-                throw new OfxClassificationException('O lançamento deve possuir exatamente uma linha em "A classificar".');
+            if ($classificationLines->count() !== 1) {
+                throw new OfxClassificationException('O lançamento deve possuir exatamente uma linha de classificação editável.');
             }
 
             $destinationAccount = ChartOfAccount::query()
@@ -71,17 +89,17 @@ class ClassifyOfxDraftEntry
 
             if (! $destinationAccount
                 || (int) $destinationAccount->id === (int) $wallet->suspense_account_id
+                || (int) $destinationAccount->id === (int) $bankAccount->chart_of_account_id
                 || ! $destinationAccount->isPostingAllowed()
                 || $destinationAccount->isSynthetic()
                 || $destinationAccount->children()->exists()) {
                 throw new OfxClassificationException('Selecione uma conta analítica válida da wallet ativa.');
             }
 
-            /** @var JournalLine $suspenseLine */
-            $suspenseLine = $suspenseLines->first();
-            $suspenseLine->update([
+            /** @var JournalLine $classificationLine */
+            $classificationLine = $classificationLines->first();
+            $classificationLine->update([
                 'chart_of_account_id' => $destinationAccount->id,
-                'memo' => $entry->description ?: 'Classificação OFX',
             ]);
 
             $entry->recalcBalance();

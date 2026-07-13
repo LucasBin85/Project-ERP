@@ -5,7 +5,7 @@ import { formatCurrency, formatDate } from '@/lib/formatters';
 import type { BankStatementAccount, BankStatementClassificationAccount, BankStatementTransaction } from '@/types/financial/bankStatement';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
-import OfxClassificationDialog from './OfxClassificationDialog.vue';
+import InlineOfxClassification from './InlineOfxClassification.vue';
 
 defineProps<{
     transactions: BankStatementTransaction[];
@@ -15,14 +15,12 @@ defineProps<{
 </script>
 
 <template>
-    <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma movimentação encontrada para os filtros informados." :empty-colspan="10">
+    <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma movimentação encontrada para os filtros informados." :empty-colspan="8">
         <template #head>
             <tr>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Data</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Descrição</th>
-                <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Entrada</th>
-                <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saída</th>
-                <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo</th>
+                <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Valor</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Origem</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status contábil</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Validação / conciliação</th>
@@ -46,16 +44,11 @@ defineProps<{
                 </div>
             </td>
 
-            <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-green-300">
-                {{ transaction.inflow_cents ? formatCurrency(transaction.inflow_cents) : '-' }}
-            </td>
-
-            <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-red-300">
-                {{ transaction.outflow_cents ? formatCurrency(transaction.outflow_cents) : '-' }}
-            </td>
-
-            <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-gray-100">
-                {{ formatCurrency(transaction.running_balance_cents) }}
+            <td
+                class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap"
+                :class="transaction.amount_cents > 0 ? 'text-green-300' : transaction.amount_cents < 0 ? 'text-red-300' : 'text-gray-300'"
+            >
+                {{ formatCurrency(transaction.amount_cents) }}
             </td>
 
             <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-300">
@@ -71,18 +64,19 @@ defineProps<{
             </td>
 
             <td class="px-4 py-3 text-sm">
-                <span
-                    class="inline-flex rounded px-2 py-1 text-xs font-semibold"
-                    :class="transaction.classification_status === 'unclassified' ? 'bg-yellow-950 text-yellow-300' : 'bg-green-950 text-green-300'"
-                >
-                    {{ transaction.classification_label }}
-                </span>
-                <OfxClassificationDialog
+                <InlineOfxClassification
                     v-if="transaction.can_classify"
                     :transaction="transaction"
                     :bank-account="bankAccount"
                     :classification-accounts="classificationAccounts"
                 />
+                <span
+                    v-else
+                    class="inline-flex rounded px-2 py-1 text-xs font-semibold"
+                    :class="transaction.classification_status === 'unclassified' ? 'bg-yellow-950 text-yellow-300' : 'bg-green-950 text-green-300'"
+                >
+                    {{ transaction.classification_label }}
+                </span>
             </td>
 
             <td class="px-4 py-3 text-right text-sm whitespace-nowrap">

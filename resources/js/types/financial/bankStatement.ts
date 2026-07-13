@@ -37,6 +37,7 @@ export interface BankStatementTransaction {
     reconciliation_status: ReconciliationStatus;
     classification_status: ClassificationStatus;
     classification_label: string;
+    classification_account_id: number | null;
     can_classify: boolean;
     type: 'inflow' | 'outflow';
     inflow_cents: number | null;

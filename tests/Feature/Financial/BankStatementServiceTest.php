@@ -100,8 +100,8 @@ $createStatementScenario = function (): array {
         'source' => 'ofx',
         'original_filename' => 'match-manual.ofx',
         'file_hash' => sha1('match-manual'),
-        'total_transactions' => 1,
-        'imported_transactions' => 1,
+        'total_transactions' => 2,
+        'imported_transactions' => 2,
         'status' => 'completed',
     ]);
 
@@ -120,9 +120,26 @@ $createStatementScenario = function (): array {
         'status' => 'imported',
     ]);
 
+    BankStatementImportTransaction::query()->create([
+        'bank_statement_import_id' => $import->id,
+        'wallet_id' => $wallet->id,
+        'bank_account_id' => $bankAccount->id,
+        'journal_entry_id' => $draftEntry->id,
+        'journal_line_id' => $draftBankLine->id,
+        'external_id' => 'ofx:bank-account:'.$bankAccount->id.':OFX-DRAFT',
+        'fit_id' => 'OFX-DRAFT',
+        'posted_at' => '2026-07-03',
+        'description' => 'OFX pendente',
+        'amount_cents' => 8000,
+        'direction' => 'out',
+        'status' => 'imported',
+    ]);
+
     return compact(
         'wallet',
         'bankAccount',
+        'expense',
+        'revenue',
         'inflowEntry',
         'inflowLine',
         'outflowEntry',
@@ -131,6 +148,91 @@ $createStatementScenario = function (): array {
         'draftBankLine',
     );
 };
+
+it('keeps an already classified OFX draft editable and exposes its selected account', function () use ($createStatementScenario) {
+    $scenario = $createStatementScenario();
+    $scenario['draftEntry']->lines()
+        ->where('chart_of_account_id', $scenario['wallet']->suspense_account_id)
+        ->update(['chart_of_account_id' => $scenario['expense']->id]);
+
+    $statement = app(BankStatementService::class)->build(
+        $scenario['wallet'],
+        new BankStatementFiltersDTO(
+            bankAccountId: $scenario['bankAccount']->id,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+        ),
+    );
+
+    $draftTransaction = $statement->transactions->firstWhere(
+        'journal_entry_id',
+        $scenario['draftEntry']->id,
+    );
+
+    expect($draftTransaction['accounting_status'])->toBe('draft')
+        ->and($draftTransaction['source'])->toBe('ofx')
+        ->and($draftTransaction['classification_status'])->toBe('classified')
+        ->and($draftTransaction['classification_label'])->toBe('Despesa Administrativa')
+        ->and($draftTransaction['classification_account_id'])->toBe($scenario['expense']->id)
+        ->and($draftTransaction['can_classify'])->toBeTrue();
+});
+
+it('keeps a posted OFX classification read only', function () use ($createStatementScenario) {
+    $scenario = $createStatementScenario();
+    $scenario['draftEntry']->lines()
+        ->where('chart_of_account_id', $scenario['wallet']->suspense_account_id)
+        ->update(['chart_of_account_id' => $scenario['expense']->id]);
+    $scenario['draftEntry']->update([
+        'status' => 'posted',
+        'posted_at' => now(),
+    ]);
+
+    $statement = app(BankStatementService::class)->build(
+        $scenario['wallet'],
+        new BankStatementFiltersDTO(
+            bankAccountId: $scenario['bankAccount']->id,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+        ),
+    );
+
+    $postedTransaction = $statement->transactions->firstWhere(
+        'journal_entry_id',
+        $scenario['draftEntry']->id,
+    );
+
+    expect($postedTransaction['accounting_status'])->toBe('posted')
+        ->and($postedTransaction['source'])->toBe('ofx')
+        ->and($postedTransaction['classification_account_id'])->toBe($scenario['expense']->id)
+        ->and($postedTransaction['can_classify'])->toBeFalse();
+});
+
+it('keeps a manual draft classification read only', function () use ($createStatementScenario) {
+    $scenario = $createStatementScenario();
+    $scenario['draftEntry']->lines()
+        ->where('chart_of_account_id', $scenario['wallet']->suspense_account_id)
+        ->update(['chart_of_account_id' => $scenario['expense']->id]);
+    $scenario['draftEntry']->update(['source' => 'manual']);
+
+    $statement = app(BankStatementService::class)->build(
+        $scenario['wallet'],
+        new BankStatementFiltersDTO(
+            bankAccountId: $scenario['bankAccount']->id,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+        ),
+    );
+
+    $manualTransaction = $statement->transactions->firstWhere(
+        'journal_entry_id',
+        $scenario['draftEntry']->id,
+    );
+
+    expect($manualTransaction['accounting_status'])->toBe('draft')
+        ->and($manualTransaction['source'])->toBe('manual')
+        ->and($manualTransaction['classification_account_id'])->toBe($scenario['expense']->id)
+        ->and($manualTransaction['can_classify'])->toBeFalse();
+});
 
 it('builds a bank statement with complete draft and posted entries ordered from latest to oldest', function () use ($createStatementScenario) {
     $scenario = $createStatementScenario();
@@ -175,6 +277,7 @@ it('builds a bank statement with complete draft and posted entries ordered from 
         ->and($transactions->pluck('reconciliation_status')->all())->toBe(['reconciled_via_ofx', 'reconciled', 'pending'])
         ->and($transactions->pluck('classification_status')->all())->toBe(['unclassified', 'classified', 'classified'])
         ->and($transactions->pluck('classification_label')->all())->toBe(['A classificar', 'Despesa Administrativa', 'Receita de Serviços'])
+        ->and($transactions->pluck('classification_account_id')->all())->toBe([null, $scenario['expense']->id, $scenario['revenue']->id])
         ->and($transactions->pluck('can_classify')->all())->toBe([true, false, false])
         ->and($transactions->pluck('type')->all())->toBe(['outflow', 'outflow', 'inflow'])
         ->and($transactions->pluck('inflow_cents')->all())->toBe([null, null, 50000])

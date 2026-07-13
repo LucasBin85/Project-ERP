@@ -77,7 +77,11 @@ class BankStatementController extends Controller
             'filters' => $statement['filters'],
             'selectedBankAccount' => $statement['bank_account'],
             'transactions' => $statement['transactions'],
-            'classificationAccounts' => $this->classificationAccounts($wallet->id, $wallet->suspense_account_id),
+            'classificationAccounts' => $this->classificationAccounts(
+                walletId: $wallet->id,
+                suspenseAccountId: $wallet->suspense_account_id,
+                bankChartOfAccountId: $bankAccount->chart_of_account_id,
+            ),
             'operational' => $this->operationalContext(
                 bankAccount: $bankAccount,
                 startDate: $filters->startDate,
@@ -146,12 +150,16 @@ class BankStatementController extends Controller
             ->exists();
     }
 
-    private function classificationAccounts(int $walletId, ?int $suspenseAccountId): array
-    {
+    private function classificationAccounts(
+        int $walletId,
+        ?int $suspenseAccountId,
+        int $bankChartOfAccountId,
+    ): array {
         return ChartOfAccount::query()
             ->where('wallet_id', $walletId)
             ->where('allows_posting', true)
             ->when($suspenseAccountId, fn ($query) => $query->where('id', '!=', $suspenseAccountId))
+            ->where('id', '!=', $bankChartOfAccountId)
             ->whereDoesntHave('children')
             ->orderBy('code')
             ->get(['id', 'code', 'name', 'type'])

@@ -37,6 +37,7 @@ class BankStatementService
 
         $openingBalanceCents = $this->calculateOpeningBalance($wallet, $bankAccount, $filters);
         $periodLines = $this->periodLines($wallet, $bankAccount, $filters);
+        $ofxOriginLineIds = $this->ofxOriginLineIds($wallet, $bankAccount, $periodLines);
         $reconciledLineIds = $this->reconciledLineIds($periodLines->pluck('id'));
         $ofxValidatedLineIds = $this->ofxValidatedLineIds($wallet, $bankAccount, $periodLines);
 
@@ -49,6 +50,7 @@ class BankStatementService
                 &$runningBalance,
                 &$totalInflowsCents,
                 &$totalOutflowsCents,
+                $ofxOriginLineIds,
                 $ofxValidatedLineIds,
                 $reconciledLineIds,
                 $wallet,
@@ -80,9 +82,11 @@ class BankStatementService
                     ),
                     'classification_status' => $classification['status'],
                     'classification_label' => $classification['label'],
+                    'classification_account_id' => $classification['account_id'],
                     'can_classify' => $entry?->source === 'ofx'
                         && $entry?->status === 'draft'
-                        && $entry?->lines->where('chart_of_account_id', $wallet->suspense_account_id)->count() === 1,
+                        && $ofxOriginLineIds->contains((int) $line->id)
+                        && $classification['is_editable'],
                     'type' => $inflowCents > 0 ? 'inflow' : 'outflow',
                     'inflow_cents' => $inflowCents ?: null,
                     'outflow_cents' => $outflowCents ?: null,
@@ -176,6 +180,31 @@ class BankStatementService
             ->values();
     }
 
+    private function ofxOriginLineIds(Wallet $wallet, BankAccount $bankAccount, Collection $lines): Collection
+    {
+        $entryIdsByLineId = $lines->mapWithKeys(
+            fn (JournalLine $line) => [(int) $line->id => (int) $line->journal_entry_id],
+        );
+
+        if ($entryIdsByLineId->isEmpty()) {
+            return collect();
+        }
+
+        return BankStatementImportTransaction::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('bank_account_id', $bankAccount->id)
+            ->whereIn('journal_line_id', $entryIdsByLineId->keys())
+            ->whereIn('status', ['imported', 'skipped_duplicate'])
+            ->get(['journal_entry_id', 'journal_line_id'])
+            ->filter(fn (BankStatementImportTransaction $transaction) => (int) $entryIdsByLineId->get(
+                (int) $transaction->journal_line_id,
+            ) === (int) $transaction->journal_entry_id)
+            ->pluck('journal_line_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+    }
+
     private function ofxValidatedLineIds(Wallet $wallet, BankAccount $bankAccount, Collection $lines): Collection
     {
         $lineIds = $lines->pluck('id')->map(fn ($id) => (int) $id)->values();
@@ -242,9 +271,14 @@ class BankStatementService
 
     private function classification(Wallet $wallet, JournalLine $bankLine): array
     {
-        $counterpartLines = $bankLine->journalEntry?->lines
-            ?->reject(fn (JournalLine $line) => (int) $line->id === (int) $bankLine->id)
-            ->values() ?? collect();
+        $entryLines = $bankLine->journalEntry?->lines ?? collect();
+        $counterpartLines = $entryLines
+            ->reject(fn (JournalLine $line) => (int) $line->id === (int) $bankLine->id)
+            ->values();
+        $isEditable = $entryLines
+            ->where('chart_of_account_id', $bankLine->chart_of_account_id)
+            ->count() === 1
+            && $counterpartLines->count() === 1;
 
         $usesSuspenseAccount = $wallet->suspense_account_id
             && $counterpartLines->contains(
@@ -255,6 +289,8 @@ class BankStatementService
             return [
                 'status' => 'unclassified',
                 'label' => 'A classificar',
+                'account_id' => null,
+                'is_editable' => $isEditable,
             ];
         }
 
@@ -267,6 +303,10 @@ class BankStatementService
         return [
             'status' => $labels->isNotEmpty() ? 'classified' : 'unclassified',
             'label' => $labels->isNotEmpty() ? $labels->join(', ') : 'Não identificada',
+            'account_id' => $isEditable
+                ? (int) $counterpartLines->first()->chart_of_account_id
+                : null,
+            'is_editable' => $isEditable,
         ];
     }
 
