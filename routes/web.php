@@ -84,6 +84,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/resolve-match', [BankStatementController::class, 'resolveMatch'])
             ->name('bank-accounts.statement.resolve-match');
 
+        Route::post('bank-accounts/ofx-preview', [BankAccountController::class, 'previewOfx'])
+            ->name('bank-accounts.ofx-preview');
+
         Route::resource('bank-accounts', BankAccountController::class)
             ->only(['index', 'create', 'store', 'show']);
 

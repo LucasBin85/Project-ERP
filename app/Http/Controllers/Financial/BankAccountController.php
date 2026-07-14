@@ -9,11 +9,17 @@ use App\Models\Bank;
 use App\Models\BankAccount;
 use App\Services\Financial\BuildBankAccountWorkspace;
 use App\Services\Financial\CreateBankAccount;
+use App\Services\Financial\PreviewOfxBankAccountSetup;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
+use RuntimeException;
+use Throwable;
 
 class BankAccountController extends Controller
 {
@@ -67,7 +73,45 @@ class BankAccountController extends Controller
             ],
             'bankAccounts' => $bankAccounts,
             'banks' => $banks,
+            'bankAccountOfxPreview' => $request->session()->get('bank_account_ofx_preview'),
         ]);
+    }
+
+    public function previewOfx(
+        Request $request,
+        PreviewOfxBankAccountSetup $service,
+    ): JsonResponse|RedirectResponse {
+        $wallet = $this->resolveActiveWallet($request);
+
+        $request->validate([
+            'ofx_file' => ['required', 'file', 'max:2048', 'extensions:ofx'],
+        ]);
+
+        $file = $request->file('ofx_file');
+
+        try {
+            $preview = $service->execute(
+                wallet: $wallet,
+                contents: (string) $file->get(),
+                originalFilename: $file->getClientOriginalName(),
+            );
+        } catch (RuntimeException $exception) {
+            throw ValidationException::withMessages([
+                'ofx_file' => $exception->getMessage(),
+            ]);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            throw ValidationException::withMessages([
+                'ofx_file' => 'Não foi possível ler os dados da conta no arquivo OFX. Tente novamente.',
+            ]);
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json($preview);
+        }
+
+        return back()->with('bank_account_ofx_preview', $preview);
     }
 
     public function store(Request $request, CreateBankAccount $service)

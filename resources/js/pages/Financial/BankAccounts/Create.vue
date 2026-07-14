@@ -1,27 +1,42 @@
-<script setup>
+<script setup lang="ts">
 import BankAccountCreateForm from '@/components/financial/bankAccounts/BankAccountCreateForm.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import { useBankAccountCreateForm } from '@/composables/financial/useBankAccountCreateForm';
+import { useBankAccountOfxPreview } from '@/composables/financial/useBankAccountOfxPreview';
 import AppLayout from '@/layouts/AppLayout.vue';
+import type { BankAccountOfxPreview, BankOption, ExistingBankAccount } from '@/types/financial/bankAccount';
 import { route } from 'ziggy-js';
 
-const props = defineProps({
-    wallet: Object,
-    bankAccounts: {
-        type: Array,
-        default: () => [],
+interface WalletSummary {
+    id: number;
+    name: string;
+}
+
+const props = withDefaults(
+    defineProps<{
+        wallet?: WalletSummary | null;
+        bankAccounts?: ExistingBankAccount[];
+        banks?: BankOption[];
+        bankAccountOfxPreview?: BankAccountOfxPreview | null;
+    }>(),
+    {
+        wallet: null,
+        bankAccounts: () => [],
+        banks: () => [],
+        bankAccountOfxPreview: null,
     },
-    banks: {
-        type: Array,
-        default: () => [],
-    },
-});
+);
 
 const bankAccount = useBankAccountCreateForm(props.bankAccounts);
+const bankAccountOfx = useBankAccountOfxPreview(bankAccount.form);
+
+if (props.bankAccountOfxPreview) {
+    bankAccountOfx.applyPreview(props.bankAccountOfxPreview);
+}
 
 function submit() {
-    if (!bankAccount.canSubmit.value) return;
+    if (!bankAccount.canSubmit.value || bankAccountOfx.processing.value) return;
 
     bankAccount.form.post(route('bank-accounts.store'));
 }
@@ -47,8 +62,14 @@ function submit() {
                     :banks="banks"
                     :is-duplicate-name="bankAccount.isDuplicateName.value"
                     :is-duplicate-bank-account="bankAccount.isDuplicateBankAccount.value"
-                    :can-submit="bankAccount.canSubmit.value"
+                    :can-submit="bankAccount.canSubmit.value && !bankAccountOfx.processing.value"
+                    :ofx-processing="bankAccountOfx.processing.value"
+                    :ofx-selected-file-name="bankAccountOfx.selectedFileName.value"
+                    :ofx-message="bankAccountOfx.message.value"
+                    :ofx-warnings="bankAccountOfx.warnings.value"
+                    :ofx-error="bankAccountOfx.errorMessage.value"
                     @submit="submit"
+                    @select-ofx-file="bankAccountOfx.selectFile"
                     @update-bank-id="bankAccount.form.bank_id = $event"
                     @update-name="bankAccount.form.name = $event"
                     @update-account-type="bankAccount.form.account_type = $event"

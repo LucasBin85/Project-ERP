@@ -19,6 +19,7 @@ class ParseOfxStatement
      *         bank_id: ?string,
      *         branch_id: ?string,
      *         account_id: ?string,
+     *         account_key: ?string,
      *         account_type: ?string,
      *         broker_id: ?string,
      *         routing_number: ?string,
@@ -63,10 +64,49 @@ class ParseOfxStatement
         return [
             'started_at' => isset($startMatch[1]) ? $this->parseDate($startMatch[1]) : null,
             'ended_at' => isset($endMatch[1]) ? $this->parseDate($endMatch[1]) : null,
-            'account' => $this->parseAccount($contents),
+            'account' => $this->parseAccountFromContents($contents),
             'transactions' => $transactions,
             'errors' => $errors,
         ];
+    }
+
+    /**
+     * Parse only the account metadata from an OFX file.
+     *
+     * This intentionally skips statement transactions so it can be used to
+     * assist bank account setup without importing financial movements.
+     *
+     * @return array{
+     *     container: ?string,
+     *     bank_id: ?string,
+     *     branch_id: ?string,
+     *     account_id: ?string,
+     *     account_key: ?string,
+     *     account_type: ?string,
+     *     broker_id: ?string,
+     *     routing_number: ?string,
+     *     bank_name: ?string,
+     *     organization: ?string,
+     *     financial_institution_id: ?string,
+     *     currency: ?string
+     * }
+     */
+    public function parseAccountMetadata(string $contents): array
+    {
+        $contents = $this->normalize($contents);
+
+        if (! preg_match('/<OFX(?:>|\s)/i', $contents)) {
+            throw new RuntimeException('O arquivo selecionado não possui uma estrutura OFX válida.');
+        }
+
+        $this->ensureSingleAccount($contents);
+        $account = $this->parseAccountFromContents($contents);
+
+        if ($account['container'] === null) {
+            throw new RuntimeException('Não foi possível localizar os dados de uma conta no arquivo OFX.');
+        }
+
+        return $account;
     }
 
     private function ensureSingleAccount(string $contents): void
@@ -86,6 +126,7 @@ class ParseOfxStatement
      *     bank_id: ?string,
      *     branch_id: ?string,
      *     account_id: ?string,
+     *     account_key: ?string,
      *     account_type: ?string,
      *     broker_id: ?string,
      *     routing_number: ?string,
@@ -95,7 +136,7 @@ class ParseOfxStatement
      *     currency: ?string
      * }
      */
-    private function parseAccount(string $contents): array
+    private function parseAccountFromContents(string $contents): array
     {
         $container = null;
         $accountScope = '';
@@ -116,6 +157,7 @@ class ParseOfxStatement
             'bank_id' => $this->tag($accountScope, 'BANKID'),
             'branch_id' => $this->tag($accountScope, 'BRANCHID'),
             'account_id' => $this->tag($accountScope, 'ACCTID'),
+            'account_key' => $this->tag($accountScope, 'ACCTKEY'),
             'account_type' => $this->tag($accountScope, 'ACCTTYPE'),
             'broker_id' => $this->tag($accountScope, 'BROKERID'),
             'routing_number' => $this->tag($accountScope, 'ROUTINGNUM'),
