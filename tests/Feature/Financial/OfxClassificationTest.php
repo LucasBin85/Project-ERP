@@ -13,6 +13,8 @@ use App\Models\Wallet;
 use App\Services\Accounting\CreateBankImportEntry;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\ClassifyOfxDraftEntry;
+use App\Services\Financial\OfxOperationTypePolicy;
+use App\Services\Financial\ResolveOfxDraftMatch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
@@ -107,18 +109,62 @@ function classify(
     Wallet $wallet,
     BankAccount $bankAccount,
     JournalEntry $entry,
-    ChartOfAccount $destination,
+    ?ChartOfAccount $destination,
     bool $shouldPost = false,
+    string $operationType = OfxOperationTypePolicy::EXPENSE,
 ): JournalEntry {
     return app(ClassifyOfxDraftEntry::class)->execute(
         wallet: $wallet,
         bankAccount: $bankAccount,
         entry: $entry,
         dto: new OfxClassificationDTO(
-            destinationAccountId: $destination->id,
+            operationType: $operationType,
+            destinationAccountId: $destination?->id,
             shouldPost: $shouldPost,
         ),
     );
+}
+
+function classificationAudit(JournalEntry $entry): BankStatementImportTransaction
+{
+    return BankStatementImportTransaction::query()
+        ->where('journal_entry_id', $entry->id)
+        ->firstOrFail();
+}
+
+/** @return array{entry: JournalEntry, bankLine: JournalLine} */
+function classificationManualCandidate(
+    Wallet $wallet,
+    BankAccount $bankAccount,
+    string $direction,
+    int $amountCents,
+    string $description,
+): array {
+    $entry = JournalEntry::query()->create([
+        'wallet_id' => $wallet->id,
+        'source' => 'manual',
+        'entry_date' => '2026-07-12',
+        'description' => $description,
+        'status' => 'draft',
+        'is_balanced' => true,
+        'balance_diff_cents' => 0,
+    ]);
+
+    $bankLine = JournalLine::query()->create([
+        'journal_entry_id' => $entry->id,
+        'chart_of_account_id' => $bankAccount->chart_of_account_id,
+        'type' => $direction === 'in' ? 'debit' : 'credit',
+        'amount_cents' => $amountCents,
+    ]);
+
+    JournalLine::query()->create([
+        'journal_entry_id' => $entry->id,
+        'chart_of_account_id' => $wallet->suspense_account_id,
+        'type' => $direction === 'in' ? 'credit' : 'debit',
+        'amount_cents' => $amountCents,
+    ]);
+
+    return compact('entry', 'bankLine');
 }
 
 it('classifies an OFX outflow as an expense without changing the bank line', function () {
@@ -150,6 +196,66 @@ it('classifies an OFX outflow as an expense without changing the bank line', fun
         ->and($debitTotal)->toBe(12_590)
         ->and($creditTotal)->toBe(12_590)
         ->and($classified->is_balanced)->toBeTrue()
+        ->and($classified->balance_diff_cents)->toBe(0)
+        ->and(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::EXPENSE)
+        ->and(classificationAudit($entry)->classification_account_id)->toBe($expense->id);
+});
+
+it('keeps a legacy OFX audit without a journal line editable and repairs its link', function () {
+    $wallet = classificationWallet();
+    $bankAccount = classificationBankAccount($wallet);
+    $expense = AccountingTestHelper::account($wallet, '5.9.0', 'Despesa legada', 'despesa', 'debit');
+    $entry = classificationEntry($wallet, $bankAccount, 'out', 9_900);
+    $bankLine = $entry->lines->firstWhere('chart_of_account_id', $bankAccount->chart_of_account_id);
+    classificationAudit($entry)->update([
+        'journal_line_id' => null,
+        'status' => 'skipped_duplicate',
+        'resolution' => null,
+    ]);
+
+    $statement = app(BankStatementService::class)->build(
+        $wallet,
+        BankStatementFiltersDTO::fromArray([
+            'bank_account_id' => $bankAccount->id,
+            'start_date' => '2026-07-01',
+            'end_date' => '2026-07-31',
+            'search' => '',
+        ]),
+    )->toArray();
+
+    expect($statement['transactions'][0]['operation_type'])->toBeNull()
+        ->and($statement['transactions'][0]['can_edit_operation_type'])->toBeTrue()
+        ->and($statement['transactions'][0]['can_classify'])->toBeFalse();
+
+    classify(
+        $wallet,
+        $bankAccount,
+        $entry,
+        destination: null,
+        operationType: OfxOperationTypePolicy::EXPENSE,
+    );
+
+    $afterTypeSelection = app(BankStatementService::class)->build(
+        $wallet,
+        BankStatementFiltersDTO::fromArray([
+            'bank_account_id' => $bankAccount->id,
+            'start_date' => '2026-07-01',
+            'end_date' => '2026-07-31',
+            'search' => '',
+        ]),
+    )->toArray();
+
+    expect($afterTypeSelection['transactions'][0]['operation_type'])->toBe(OfxOperationTypePolicy::EXPENSE)
+        ->and($afterTypeSelection['transactions'][0]['can_edit_operation_type'])->toBeTrue()
+        ->and($afterTypeSelection['transactions'][0]['can_classify'])->toBeTrue()
+        ->and(classificationAudit($entry)->journal_line_id)->toBe($bankLine->id);
+
+    $classified = classify($wallet, $bankAccount, $entry, $expense)->fresh('lines');
+
+    expect($classified->lines->contains('chart_of_account_id', $expense->id))->toBeTrue()
+        ->and($classified->lines->firstWhere('id', $bankLine->id)->chart_of_account_id)
+        ->toBe($bankAccount->chart_of_account_id)
+        ->and($classified->is_balanced)->toBeTrue()
         ->and($classified->balance_diff_cents)->toBe(0);
 });
 
@@ -162,7 +268,13 @@ it('classifies an OFX inflow as revenue without changing the bank line', functio
     $bankLine = $entry->lines->firstWhere('chart_of_account_id', $bankAccount->chart_of_account_id);
     $suspenseLine = $entry->lines->firstWhere('chart_of_account_id', $wallet->suspense_account_id);
 
-    $classified = classify($wallet, $bankAccount, $entry, $revenue)->fresh('lines');
+    $classified = classify(
+        $wallet,
+        $bankAccount,
+        $entry,
+        $revenue,
+        operationType: OfxOperationTypePolicy::INCOME,
+    )->fresh('lines');
 
     $unchangedBankLine = $classified->lines->firstWhere('id', $bankLine->id);
     $classifiedLine = $classified->lines->firstWhere('id', $suspenseLine->id);
@@ -177,7 +289,100 @@ it('classifies an OFX inflow as revenue without changing the bank line', functio
         ->and($classified->lines->where('type', 'debit')->sum('amount_cents'))->toBe(350_000)
         ->and($classified->lines->where('type', 'credit')->sum('amount_cents'))->toBe(350_000)
         ->and($classified->is_balanced)->toBeTrue()
-        ->and($classified->balance_diff_cents)->toBe(0);
+        ->and($classified->balance_diff_cents)->toBe(0)
+        ->and(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::INCOME)
+        ->and(classificationAudit($entry)->classification_account_id)->toBe($revenue->id);
+});
+
+it('requires an operation type before enabling OFX classification in the statement', function () {
+    $wallet = classificationWallet();
+    $bankAccount = classificationBankAccount($wallet);
+    $entry = classificationEntry($wallet, $bankAccount, 'out', 19_900);
+
+    $before = app(BankStatementService::class)->build(
+        $wallet,
+        new BankStatementFiltersDTO(
+            bankAccountId: $bankAccount->id,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+        ),
+    )->transactions->firstWhere('journal_entry_id', $entry->id);
+
+    expect($before['operation_type'])->toBeNull()
+        ->and($before['can_edit_operation_type'])->toBeTrue()
+        ->and($before['can_classify'])->toBeFalse()
+        ->and($before['match_status'])->toBe('none');
+
+    classify(
+        $wallet,
+        $bankAccount,
+        $entry,
+        destination: null,
+        operationType: OfxOperationTypePolicy::EXPENSE,
+    );
+
+    $after = app(BankStatementService::class)->build(
+        $wallet,
+        new BankStatementFiltersDTO(
+            bankAccountId: $bankAccount->id,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+        ),
+    )->transactions->firstWhere('journal_entry_id', $entry->id);
+
+    expect(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::EXPENSE)
+        ->and(classificationAudit($entry)->classification_account_id)->toBeNull()
+        ->and($after['operation_type'])->toBe(OfxOperationTypePolicy::EXPENSE)
+        ->and($after['can_edit_operation_type'])->toBeTrue()
+        ->and($after['can_classify'])->toBeTrue();
+});
+
+it('applies the operation type policy and resets an incompatible existing classification', function () {
+    $wallet = classificationWallet();
+    $bankAccount = classificationBankAccount($wallet);
+    $expense = AccountingTestHelper::account($wallet, '5.9.14', 'Despesa anterior', 'despesa', 'debit');
+    $revenue = AccountingTestHelper::account($wallet, '4.9.14', 'Receita permitida', 'receita', 'credit');
+    $entry = classificationEntry($wallet, $bankAccount, 'out', 29_000);
+
+    classify($wallet, $bankAccount, $entry, $expense);
+
+    $changedType = classify(
+        $wallet,
+        $bankAccount,
+        $entry,
+        destination: null,
+        operationType: OfxOperationTypePolicy::INCOME,
+    )->fresh('lines');
+
+    expect($changedType->lines->contains('chart_of_account_id', $expense->id))->toBeFalse()
+        ->and($changedType->lines->contains('chart_of_account_id', $wallet->suspense_account_id))->toBeTrue()
+        ->and($changedType->is_balanced)->toBeTrue()
+        ->and(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::INCOME)
+        ->and(classificationAudit($entry)->classification_account_id)->toBeNull();
+
+    $beforeInvalidAttempt = classificationLinesSnapshot($changedType);
+
+    expect(fn () => classify(
+        $wallet,
+        $bankAccount,
+        $changedType,
+        $expense,
+        operationType: OfxOperationTypePolicy::INCOME,
+    ))->toThrow(\RuntimeException::class);
+
+    expect(classificationLinesSnapshot($changedType))->toBe($beforeInvalidAttempt);
+
+    $classified = classify(
+        $wallet,
+        $bankAccount,
+        $changedType,
+        $revenue,
+        operationType: OfxOperationTypePolicy::INCOME,
+    )->fresh('lines');
+
+    expect($classified->lines->contains('chart_of_account_id', $revenue->id))->toBeTrue()
+        ->and($classified->is_balanced)->toBeTrue()
+        ->and(classificationAudit($entry)->classification_account_id)->toBe($revenue->id);
 });
 
 it('reclassifies an already classified OFX draft without changing the bank line', function () {
@@ -196,6 +401,23 @@ it('reclassifies an already classified OFX draft without changing the bank line'
         'chart_of_account_id',
         $firstExpense->id,
     );
+    classificationAudit($entry)->update([
+        'journal_line_id' => null,
+        'status' => 'skipped_duplicate',
+    ]);
+
+    $statementTransaction = app(BankStatementService::class)->build(
+        $wallet,
+        new BankStatementFiltersDTO(
+            bankAccountId: $bankAccount->id,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+        ),
+    )->transactions->firstWhere('journal_entry_id', $entry->id);
+
+    expect($statementTransaction['classification_account_id'])->toBe($firstExpense->id)
+        ->and($statementTransaction['can_edit_operation_type'])->toBeTrue()
+        ->and($statementTransaction['can_classify'])->toBeTrue();
 
     $reclassified = classify($wallet, $bankAccount, $firstClassification, $correctExpense)->fresh('lines');
     $bankLineAfter = $reclassified->lines->firstWhere('id', $bankLineBefore->id);
@@ -210,12 +432,13 @@ it('reclassifies an already classified OFX draft without changing the bank line'
         ->and($classificationLineAfter->chart_of_account_id)->toBe($correctExpense->id)
         ->and($classificationLineAfter->type)->toBe('debit')
         ->and($classificationLineAfter->amount_cents)->toBe(31_500)
-        ->and($classificationLineAfter->memo)->toBe($classificationLineBefore->memo)
+        ->and($classificationLineAfter->memo)->toBe('Classificação OFX: '.$correctExpense->name)
         ->and($reclassified->lines->contains('chart_of_account_id', $firstExpense->id))->toBeFalse()
         ->and($reclassified->lines->where('type', 'debit')->sum('amount_cents'))->toBe(31_500)
         ->and($reclassified->lines->where('type', 'credit')->sum('amount_cents'))->toBe(31_500)
         ->and($reclassified->is_balanced)->toBeTrue()
-        ->and($reclassified->balance_diff_cents)->toBe(0);
+        ->and($reclassified->balance_diff_cents)->toBe(0)
+        ->and(classificationAudit($entry)->journal_line_id)->toBe($bankLineBefore->id);
 });
 
 it('only allows inline classification from the OFX origin bank line', function () {
@@ -226,6 +449,7 @@ it('only allows inline classification from the OFX origin bank line', function (
         code: '1.1.2.902',
         name: 'Banco de contrapartida',
     );
+    $otherBankAccount->chartOfAccount->update(['financial_group' => 'available']);
     $expense = AccountingTestHelper::account($wallet, '5.9.13', 'Despesa final', 'despesa', 'debit');
     $entry = classificationEntry($wallet, $originBankAccount, 'out', 33_000);
 
@@ -234,6 +458,7 @@ it('only allows inline classification from the OFX origin bank line', function (
         $originBankAccount,
         $entry,
         $otherBankAccount->chartOfAccount,
+        operationType: OfxOperationTypePolicy::TRANSFER,
     )->fresh('lines');
     $beforeInvalidAttempt = classificationLinesSnapshot($classifiedAsTransfer);
 
@@ -400,6 +625,7 @@ it('classifies an OFX entry through the bank statement endpoint', function () {
         ->withSession(['active_wallet' => $wallet->id])
         ->from($statementUrl)
         ->post(route('bank-accounts.statement.classify', [$bankAccount, $entry]), [
+            'operation_type' => OfxOperationTypePolicy::EXPENSE,
             'chart_of_account_id' => $expense->id,
             'should_post' => false,
         ]);
@@ -416,7 +642,114 @@ it('classifies an OFX entry through the bank statement endpoint', function () {
     ]);
 
     expect($entry->fresh()->status)->toBe('draft')
-        ->and($entry->fresh()->is_balanced)->toBeTrue();
+        ->and($entry->fresh()->is_balanced)->toBeTrue()
+        ->and(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::EXPENSE)
+        ->and(classificationAudit($entry)->classification_account_id)->toBe($expense->id);
+});
+
+it('rejects inline classification when operation type was not selected', function () {
+    $wallet = classificationWallet();
+    $bankAccount = classificationBankAccount($wallet);
+    $expense = AccountingTestHelper::account($wallet, '5.9.15', 'Destino sem tipo', 'despesa', 'debit');
+    $entry = classificationEntry($wallet, $bankAccount, 'out', 26_500);
+    $before = classificationLinesSnapshot($entry);
+    $statementUrl = route('bank-accounts.statement', $bankAccount);
+
+    $response = $this
+        ->actingAs($wallet->user)
+        ->withSession(['active_wallet' => $wallet->id])
+        ->from($statementUrl)
+        ->post(route('bank-accounts.statement.classify', [$bankAccount, $entry]), [
+            'chart_of_account_id' => $expense->id,
+            'should_post' => false,
+        ]);
+
+    $response
+        ->assertSessionHasErrors(['operation_type'])
+        ->assertRedirect($statementUrl);
+
+    expect(classificationLinesSnapshot($entry))->toBe($before)
+        ->and(classificationAudit($entry)->operation_type)->toBeNull()
+        ->and(classificationAudit($entry)->classification_account_id)->toBeNull();
+});
+
+it('requires an explicit keep decision before classifying when a unique manual match exists', function () {
+    $wallet = classificationWallet();
+    $bankAccount = classificationBankAccount($wallet);
+    $expense = AccountingTestHelper::account($wallet, '5.9.16', 'Despesa após manter OFX', 'despesa', 'debit');
+    $entry = classificationEntry($wallet, $bankAccount, 'out', 28_000);
+    classificationManualCandidate($wallet, $bankAccount, 'out', 28_000, 'Candidato manual');
+    $bankLine = $entry->lines->firstWhere('chart_of_account_id', $bankAccount->chart_of_account_id);
+    classificationAudit($entry)->update([
+        'journal_line_id' => null,
+        'status' => 'skipped_duplicate',
+    ]);
+    $before = classificationLinesSnapshot($entry);
+
+    expect(fn () => classify($wallet, $bankAccount, $entry, $expense))
+        ->toThrow(\RuntimeException::class);
+
+    expect(classificationLinesSnapshot($entry))->toBe($before);
+
+    $kept = app(ResolveOfxDraftMatch::class)->execute(
+        wallet: $wallet,
+        bankAccount: $bankAccount,
+        entry: $entry,
+        action: 'keep',
+    );
+
+    expect($kept?->id)->toBe($entry->id)
+        ->and(classificationAudit($entry)->status)->toBe('imported')
+        ->and(classificationAudit($entry)->resolution)->toBe('kept')
+        ->and(classificationAudit($entry)->journal_line_id)->toBe($bankLine->id);
+
+    $classified = classify($wallet, $bankAccount, $entry, $expense)->fresh('lines');
+
+    expect($classified->lines->contains('chart_of_account_id', $expense->id))->toBeTrue()
+        ->and($classified->is_balanced)->toBeTrue();
+});
+
+it('links an OFX draft to an explicitly selected manual match without duplicating the movement', function () {
+    $wallet = classificationWallet();
+    $bankAccount = classificationBankAccount($wallet);
+    $entry = classificationEntry($wallet, $bankAccount, 'in', 74_000);
+    $manual = classificationManualCandidate($wallet, $bankAccount, 'in', 74_000, 'Recebimento manual existente');
+    $audit = classificationAudit($entry);
+    $audit->update([
+        'journal_line_id' => null,
+        'status' => 'skipped_duplicate',
+    ]);
+
+    $resolved = app(ResolveOfxDraftMatch::class)->execute(
+        wallet: $wallet,
+        bankAccount: $bankAccount,
+        entry: $entry,
+        action: 'link',
+        candidateJournalLineId: $manual['bankLine']->id,
+    );
+
+    $audit = $audit->fresh();
+
+    $manualStatementTransaction = app(BankStatementService::class)->build(
+        $wallet,
+        new BankStatementFiltersDTO(
+            bankAccountId: $bankAccount->id,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+        ),
+    )->transactions->firstWhere('journal_entry_id', $manual['entry']->id);
+
+    expect($resolved?->id)->toBe($manual['entry']->id)
+        ->and($resolved?->source)->toBe('manual')
+        ->and(JournalEntry::query()->whereKey($entry->id)->exists())->toBeFalse()
+        ->and($audit->journal_entry_id)->toBe($manual['entry']->id)
+        ->and($audit->journal_line_id)->toBe($manual['bankLine']->id)
+        ->and($audit->status)->toBe('imported')
+        ->and($audit->resolution)->toBe('linked')
+        ->and($audit->operation_type)->toBeNull()
+        ->and($audit->classification_account_id)->toBeNull()
+        ->and($manualStatementTransaction['reconciliation_status'])->toBe('reconciled')
+        ->and($manual['entry']->fresh()->is_balanced)->toBeTrue();
 });
 
 it('rejects a posted OFX entry through the bank statement endpoint', function () {
@@ -433,6 +766,7 @@ it('rejects a posted OFX entry through the bank statement endpoint', function ()
         ->withSession(['active_wallet' => $wallet->id])
         ->from($statementUrl)
         ->post(route('bank-accounts.statement.classify', [$bankAccount, $entry]), [
+            'operation_type' => OfxOperationTypePolicy::EXPENSE,
             'chart_of_account_id' => $expense->id,
             'should_post' => false,
         ]);

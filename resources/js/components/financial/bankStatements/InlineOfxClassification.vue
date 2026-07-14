@@ -12,31 +12,38 @@ const props = defineProps<{
 }>();
 
 type InlineClassificationForm = {
+    operation_type: string;
     chart_of_account_id: string;
     should_post: boolean;
 };
 
 const form = useForm<InlineClassificationForm>({
+    operation_type: props.transaction.operation_type ?? '',
     chart_of_account_id: props.transaction.classification_account_id ? String(props.transaction.classification_account_id) : '',
     should_post: false,
 });
 
-const hasValidCurrentAccount = computed(() =>
-    props.classificationAccounts.some((account) => account.id === props.transaction.classification_account_id),
+const eligibleAccounts = computed(() =>
+    props.transaction.operation_type
+        ? props.classificationAccounts.filter((account) => account.allowed_operation_types.includes(props.transaction.operation_type!))
+        : [],
 );
 
-function syncCurrentAccount() {
+const hasValidCurrentAccount = computed(() => eligibleAccounts.value.some((account) => account.id === props.transaction.classification_account_id));
+
+function syncFromTransaction() {
+    form.operation_type = props.transaction.operation_type ?? '';
     form.chart_of_account_id = props.transaction.classification_account_id ? String(props.transaction.classification_account_id) : '';
 }
 
 function submit(shouldPost: boolean) {
-    if (!props.transaction.journal_entry_id || !form.chart_of_account_id || form.processing) return;
+    if (!props.transaction.journal_entry_id || !form.operation_type || !form.chart_of_account_id || form.processing) return;
 
     form.should_post = shouldPost;
     form.clearErrors();
     form.post(route('bank-accounts.statement.classify', [props.bankAccount.id, props.transaction.journal_entry_id]), {
         preserveScroll: true,
-        onError: syncCurrentAccount,
+        onError: syncFromTransaction,
         onFinish: () => {
             form.should_post = false;
         },
@@ -49,28 +56,33 @@ function saveClassification() {
     submit(false);
 }
 
-watch(() => props.transaction.classification_account_id, syncCurrentAccount);
+watch(() => [props.transaction.operation_type, props.transaction.classification_account_id], syncFromTransaction);
 </script>
 
 <template>
-    <div class="min-w-56 space-y-1.5">
+    <div class="min-w-60 space-y-1.5">
+        <p v-if="!transaction.operation_type" class="rounded bg-gray-900 px-2 py-2 text-xs text-gray-400">Selecione primeiro o tipo de operação.</p>
+
+        <p v-else-if="eligibleAccounts.length === 0" class="rounded bg-amber-950/40 px-2 py-2 text-xs text-amber-300">
+            Este tipo está preparado para integração futura. O lançamento permanece em “A classificar”.
+        </p>
+
         <select
+            v-else
             :id="`ofx-classification-account-${transaction.id}`"
             v-model="form.chart_of_account_id"
-            :disabled="form.processing"
-            class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white disabled:cursor-wait disabled:opacity-60"
+            :disabled="form.processing || !transaction.can_classify"
+            class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Conta contábil de classificação"
             @change="saveClassification"
         >
             <option value="" disabled>Selecionar conta...</option>
-            <option v-for="account in classificationAccounts" :key="account.id" :value="String(account.id)">
-                {{ account.code }} - {{ account.name }}
-            </option>
+            <option v-for="account in eligibleAccounts" :key="account.id" :value="String(account.id)">{{ account.code }} - {{ account.name }}</option>
         </select>
 
         <div class="flex min-h-5 items-center justify-between gap-3 text-xs">
             <span v-if="form.processing" class="text-gray-400">Salvando...</span>
-            <InputError v-else :message="form.errors.chart_of_account_id" />
+            <InputError v-else :message="form.errors.chart_of_account_id || form.errors.operation_type" />
 
             <button
                 v-if="transaction.classification_account_id && hasValidCurrentAccount"

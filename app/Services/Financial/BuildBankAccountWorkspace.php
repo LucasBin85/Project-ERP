@@ -281,7 +281,6 @@ class BuildBankAccountWorkspace
     {
         return [
             'statement_url' => route('bank-accounts.statement', $bankAccount),
-            'reconciliation_url' => route('bank-reconciliations.create', ['bank_account_id' => $bankAccount->id]),
             'transfer_url' => route('bank-transfers.create', ['from_bank_account_id' => $bankAccount->id]),
             'credit_card_create_url' => route('credit-cards.create', ['bank_account_id' => $bankAccount->id]),
         ];

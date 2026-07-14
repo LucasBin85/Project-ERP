@@ -1,52 +1,56 @@
 <script setup>
-import { Link } from '@inertiajs/vue3'
-import { route } from 'ziggy-js'
+import { Link } from '@inertiajs/vue3';
+import { route } from 'ziggy-js';
 
 defineProps({
     form: Object,
+    banks: {
+        type: Array,
+        default: () => [],
+    },
     isDuplicateName: Boolean,
     isDuplicateBankAccount: Boolean,
     canSubmit: Boolean,
-})
+});
 
 const emit = defineEmits([
     'submit',
+    'update-bank-id',
     'update-name',
     'update-account-type',
     'update-opening-balance-date',
     'update-only-numbers',
     'update-opening-balance',
-])
+]);
 </script>
 
 <template>
     <form class="space-y-6 p-6" @submit.prevent="emit('submit')">
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-                <label class="mb-1 block text-sm font-semibold text-gray-300">Nome/Banco</label>
+                <label class="mb-1 block text-sm font-semibold text-gray-300">Banco</label>
+                <select
+                    :value="form.bank_id ?? ''"
+                    class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
+                    @change="emit('update-bank-id', Number($event.target.value))"
+                >
+                    <option value="" disabled>Selecione um banco...</option>
+                    <option v-for="bank in banks" :key="bank.id" :value="bank.id">{{ bank.code }} - {{ bank.short_name }}</option>
+                </select>
+                <p class="mt-1 text-sm text-red-400">{{ form.errors.bank_id }}</p>
+            </div>
+
+            <div>
+                <label class="mb-1 block text-sm font-semibold text-gray-300">Nome da conta</label>
                 <input
                     :value="form.name"
                     class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
                     :class="isDuplicateName ? 'border-red-500' : ''"
-                    placeholder="Ex: Banco Nubank"
+                    placeholder="Ex: Conta principal"
                     @input="emit('update-name', $event.target.value)"
                 />
-                <p v-if="isDuplicateName" class="mt-1 text-sm text-red-400">
-                    Já existe uma conta bancária com esse nome.
-                </p>
+                <p v-if="isDuplicateName" class="mt-1 text-sm text-red-400">Já existe uma conta bancária com esse nome.</p>
                 <p class="mt-1 text-sm text-red-400">{{ form.errors.name }}</p>
-            </div>
-
-            <div>
-                <label class="mb-1 block text-sm font-semibold text-gray-300">Código do banco</label>
-                <input
-                    :value="form.bank_code"
-                    class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
-                    placeholder="Ex: 260"
-                    inputmode="numeric"
-                    @input="emit('update-only-numbers', 'bank_code', $event)"
-                />
-                <p class="mt-1 text-sm text-red-400">{{ form.errors.bank_code }}</p>
             </div>
 
             <div>
@@ -72,7 +76,7 @@ const emit = defineEmits([
                     @input="emit('update-only-numbers', 'account_number', $event)"
                 />
                 <p v-if="isDuplicateBankAccount" class="mt-1 text-sm text-red-400">
-                    Já existe uma conta bancária com este código, agência e número.
+                    Já existe uma conta bancária deste banco com a mesma agência e número.
                 </p>
                 <p class="mt-1 text-sm text-red-400">{{ form.errors.account_number }}</p>
             </div>
@@ -84,7 +88,7 @@ const emit = defineEmits([
                     class="w-full rounded-lg border border-gray-600 bg-gray-900 px-3 py-2 text-white"
                     @change="emit('update-account-type', $event.target.value)"
                 >
-                    <option value="checking">Conta Corrente</option>
+                    <option value="checking">Conta corrente</option>
                     <option value="savings">Poupança</option>
                     <option value="investment">Investimento</option>
                     <option value="cash">Caixa</option>

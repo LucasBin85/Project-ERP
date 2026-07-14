@@ -10,6 +10,7 @@ class BankAccount extends Model
     protected $fillable = [
         'wallet_id',
         'chart_of_account_id',
+        'bank_id',
         'name',
         'bank_name',
         'bank_code',
@@ -33,5 +34,10 @@ class BankAccount extends Model
     public function chartOfAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class);
+    }
+
+    public function bank(): BelongsTo
+    {
+        return $this->belongsTo(Bank::class);
     }
 }

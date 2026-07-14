@@ -15,6 +15,11 @@ use Illuminate\Support\Str;
 
 class BankStatementService
 {
+    public function __construct(
+        private readonly FindMatchingOfxJournalLine $matchingJournalLines,
+        private readonly OfxOperationTypePolicy $operationTypes,
+    ) {}
+
     public function build(Wallet $wallet, BankStatementFiltersDTO $filters): BankStatementDTO
     {
         if (! $filters->isReady()) {
@@ -37,7 +42,8 @@ class BankStatementService
 
         $openingBalanceCents = $this->calculateOpeningBalance($wallet, $bankAccount, $filters);
         $periodLines = $this->periodLines($wallet, $bankAccount, $filters);
-        $ofxOriginLineIds = $this->ofxOriginLineIds($wallet, $bankAccount, $periodLines);
+        $ofxTransactionsByLineId = $this->ofxTransactionsByLineId($wallet, $bankAccount, $periodLines);
+        $ofxOriginLineIds = $ofxTransactionsByLineId->keys();
         $reconciledLineIds = $this->reconciledLineIds($periodLines->pluck('id'));
         $ofxValidatedLineIds = $this->ofxValidatedLineIds($wallet, $bankAccount, $periodLines);
 
@@ -54,6 +60,8 @@ class BankStatementService
                 $ofxValidatedLineIds,
                 $reconciledLineIds,
                 $wallet,
+                $bankAccount,
+                $ofxTransactionsByLineId,
             ) {
                 $entry = $line->journalEntry;
                 $amountCents = (int) $line->amount_cents;
@@ -66,6 +74,22 @@ class BankStatementService
                 $runningBalance -= $outflowCents;
 
                 $classification = $this->classification($wallet, $line);
+                $auditTransaction = $ofxTransactionsByLineId->get((int) $line->id);
+                $canEditOfx = $entry?->source === 'ofx'
+                    && $entry?->status === 'draft'
+                    && $ofxOriginLineIds->contains((int) $line->id)
+                    && $classification['is_editable'];
+                $match = $this->ofxMatch(
+                    wallet: $wallet,
+                    bankAccount: $bankAccount,
+                    bankLine: $line,
+                    auditTransaction: $auditTransaction,
+                    canEdit: $canEditOfx,
+                );
+                $operationType = $auditTransaction?->operation_type;
+                $operationSupportsClassification = $operationType
+                    && in_array($operationType, $this->operationTypes->codes(), true)
+                    && $this->operationTypes->supportsClassification($operationType);
 
                 return [
                     'id' => $line->id,
@@ -83,10 +107,14 @@ class BankStatementService
                     'classification_status' => $classification['status'],
                     'classification_label' => $classification['label'],
                     'classification_account_id' => $classification['account_id'],
-                    'can_classify' => $entry?->source === 'ofx'
-                        && $entry?->status === 'draft'
-                        && $ofxOriginLineIds->contains((int) $line->id)
-                        && $classification['is_editable'],
+                    'operation_type' => $operationType,
+                    'can_edit_operation_type' => $canEditOfx && $match['status'] === 'none',
+                    'can_classify' => $canEditOfx
+                        && $match['status'] === 'none'
+                        && $operationSupportsClassification,
+                    'match_status' => $match['status'],
+                    'match_candidates' => $match['candidates'],
+                    'match_resolution' => $auditTransaction?->resolution,
                     'type' => $inflowCents > 0 ? 'inflow' : 'outflow',
                     'inflow_cents' => $inflowCents ?: null,
                     'outflow_cents' => $outflowCents ?: null,
@@ -180,29 +208,134 @@ class BankStatementService
             ->values();
     }
 
-    private function ofxOriginLineIds(Wallet $wallet, BankAccount $bankAccount, Collection $lines): Collection
-    {
-        $entryIdsByLineId = $lines->mapWithKeys(
-            fn (JournalLine $line) => [(int) $line->id => (int) $line->journal_entry_id],
-        );
+    private function ofxTransactionsByLineId(
+        Wallet $wallet,
+        BankAccount $bankAccount,
+        Collection $lines,
+    ): Collection {
+        $linesById = $lines->keyBy(fn (JournalLine $line) => (int) $line->id);
+        $linesByEntryId = $lines->groupBy(fn (JournalLine $line) => (int) $line->journal_entry_id);
 
-        if ($entryIdsByLineId->isEmpty()) {
+        if ($linesById->isEmpty()) {
             return collect();
         }
+
+        $lineIds = $linesById->keys();
+        $entryIds = $linesByEntryId->keys();
 
         return BankStatementImportTransaction::query()
             ->where('wallet_id', $wallet->id)
             ->where('bank_account_id', $bankAccount->id)
-            ->whereIn('journal_line_id', $entryIdsByLineId->keys())
-            ->whereIn('status', ['imported', 'skipped_duplicate'])
-            ->get(['journal_entry_id', 'journal_line_id'])
-            ->filter(fn (BankStatementImportTransaction $transaction) => (int) $entryIdsByLineId->get(
-                (int) $transaction->journal_line_id,
-            ) === (int) $transaction->journal_entry_id)
-            ->pluck('journal_line_id')
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
+            ->where(function ($query) use ($lineIds, $entryIds) {
+                $query->whereIn('journal_line_id', $lineIds)
+                    ->orWhere(function ($query) use ($entryIds) {
+                        $query->whereNull('journal_line_id')
+                            ->whereIn('journal_entry_id', $entryIds);
+                    });
+            })
+            ->where(function ($query) {
+                $query->where('status', 'imported')
+                    ->orWhere(function ($query) {
+                        $query->where('status', 'skipped_duplicate')
+                            ->whereNull('resolution');
+                    });
+            })
+            ->orderByRaw("CASE WHEN status = 'imported' THEN 0 ELSE 1 END")
+            ->orderByDesc('id')
+            ->get([
+                'id',
+                'journal_entry_id',
+                'journal_line_id',
+                'posted_at',
+                'amount_cents',
+                'direction',
+                'operation_type',
+                'status',
+                'resolution',
+            ])
+            ->map(fn (BankStatementImportTransaction $transaction) => [
+                'line_id' => $this->auditBankLineId($transaction, $linesById, $linesByEntryId),
+                'transaction' => $transaction,
+            ])
+            ->filter(fn (array $match) => $match['line_id'] !== null)
+            ->uniqueStrict('line_id')
+            ->mapWithKeys(fn (array $match) => [
+                $match['line_id'] => $match['transaction'],
+            ]);
+    }
+
+    private function auditBankLineId(
+        BankStatementImportTransaction $transaction,
+        Collection $linesById,
+        Collection $linesByEntryId,
+    ): ?int {
+        if ($transaction->journal_line_id) {
+            /** @var JournalLine|null $line */
+            $line = $linesById->get((int) $transaction->journal_line_id);
+
+            return $line && (int) $line->journal_entry_id === (int) $transaction->journal_entry_id
+                ? (int) $line->id
+                : null;
+        }
+
+        $expectedLineType = match ($transaction->direction) {
+            'in' => 'debit',
+            'out' => 'credit',
+            default => null,
+        };
+
+        if (! $expectedLineType || ! $transaction->posted_at) {
+            return null;
+        }
+
+        $candidates = $linesByEntryId
+            ->get((int) $transaction->journal_entry_id, collect())
+            ->filter(fn (JournalLine $line) => $line->type === $expectedLineType
+                && (int) $line->amount_cents === (int) $transaction->amount_cents
+                && $line->journalEntry?->entry_date?->toDateString() === $transaction->posted_at->toDateString());
+
+        return $candidates->count() === 1
+            ? (int) $candidates->first()->id
+            : null;
+    }
+
+    private function ofxMatch(
+        Wallet $wallet,
+        BankAccount $bankAccount,
+        JournalLine $bankLine,
+        ?BankStatementImportTransaction $auditTransaction,
+        bool $canEdit,
+    ): array {
+        if (! $canEdit || ! $auditTransaction || $auditTransaction->resolution === 'kept') {
+            return ['status' => 'none', 'candidates' => []];
+        }
+
+        $entry = $bankLine->journalEntry;
+        $candidates = $this->matchingJournalLines->candidates(
+            wallet: $wallet,
+            bankAccount: $bankAccount,
+            entryDate: $entry->entry_date->toDateString(),
+            amountCents: (int) $bankLine->amount_cents,
+            direction: $bankLine->type === 'debit' ? 'in' : 'out',
+        );
+
+        if ($candidates->isEmpty()) {
+            return ['status' => 'none', 'candidates' => []];
+        }
+
+        return [
+            'status' => $candidates->count() === 1 ? 'unique' : 'ambiguous',
+            'candidates' => $candidates
+                ->map(fn (JournalLine $candidate) => [
+                    'journal_entry_id' => $candidate->journal_entry_id,
+                    'journal_line_id' => $candidate->id,
+                    'date' => $candidate->journalEntry?->entry_date,
+                    'description' => $candidate->journalEntry?->description,
+                    'status' => $candidate->journalEntry?->status,
+                ])
+                ->values()
+                ->all(),
+        ];
     }
 
     private function ofxValidatedLineIds(Wallet $wallet, BankAccount $bankAccount, Collection $lines): Collection

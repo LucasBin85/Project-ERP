@@ -9,8 +9,9 @@ use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Financial\BankReconciliationPreviewService;
 use App\Services\Financial\BuildOfxReconciliationStatementItems;
+use App\Services\Financial\ConfirmOfxBankStatement;
 use App\Services\Financial\CreateBankReconciliation;
-use App\Services\Financial\ImportOfxBankStatement;
+use App\Services\Financial\PreviewOfxBankStatement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\FinancialTestHelper;
 
@@ -45,7 +46,7 @@ function createWalletForOfxReconciliation(): Wallet
 
 function sampleOfxContentForReconciliation(): string
 {
-    return <<<OFX
+    return <<<'OFX'
 OFXHEADER:100
 DATA:OFXSGML
 VERSION:102
@@ -96,11 +97,29 @@ it('builds reconciliation statement items from imported OFX transactions and com
         name: 'Banco Principal',
     );
 
-    app(ImportOfxBankStatement::class)->execute(
+    $contents = sampleOfxContentForReconciliation();
+    $ofxPreview = app(PreviewOfxBankStatement::class)->execute(
         wallet: $wallet,
         bankAccount: $bankAccount,
-        contents: sampleOfxContentForReconciliation(),
+        contents: $contents,
         originalFilename: 'extrato-conciliacao.ofx',
+    );
+
+    app(ConfirmOfxBankStatement::class)->execute(
+        wallet: $wallet,
+        bankAccount: $bankAccount,
+        contents: $contents,
+        originalFilename: 'extrato-conciliacao.ofx',
+        expectedFileHash: $ofxPreview['file_hash'],
+        decisions: collect($ofxPreview['rows'])
+            ->map(fn (array $row) => [
+                'row_key' => $row['row_key'],
+                'action' => $row['default_action'],
+                'operation_type' => null,
+                'classification_account_id' => null,
+            ])
+            ->all(),
+        expectedRows: $ofxPreview['rows'],
     );
 
     JournalEntry::query()

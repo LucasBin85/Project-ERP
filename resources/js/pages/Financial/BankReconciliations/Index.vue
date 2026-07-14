@@ -24,51 +24,30 @@ function formatPaginationLabel(label: string): string {
 <template>
     <AppLayout title="Conciliação Bancária">
         <ReportPage title="Conciliação Bancária" :subtitle="wallet.name">
-            <div class="flex justify-end">
-                <Link
-                    :href="route('bank-reconciliations.create')"
-                    class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
-                >
-                    Nova conciliação
-                </Link>
-            </div>
-
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">
-                            Conciliações registradas
-                        </h2>
+                        <h2 class="text-lg font-bold text-white">Conciliações registradas</h2>
 
-                        <p class="text-sm text-gray-400">
-                            Comparação manual entre o saldo informado pelo banco e as movimentações postadas no ERP.
-                        </p>
+                        <p class="text-sm text-gray-400">Comparação manual entre o saldo informado pelo banco e as movimentações postadas no ERP.</p>
                     </div>
                 </template>
 
-                <ReportTable
-                    :empty="reconciliations.data.length === 0"
-                    empty-message="Nenhuma conciliação encontrada."
-                    :empty-colspan="7"
-                >
+                <ReportTable :empty="reconciliations.data.length === 0" empty-message="Nenhuma conciliação encontrada." :empty-colspan="7">
                     <template #head>
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Período</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Conta</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Saldo banco</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Saldo conciliado</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Diferença</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Status</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Ações</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Período</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Conta</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo banco</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo conciliado</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Diferença</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Ações</th>
                         </tr>
                     </template>
 
-                    <tr
-                        v-for="reconciliation in reconciliations.data"
-                        :key="reconciliation.id"
-                        class="hover:bg-gray-800/50"
-                    >
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                    <tr v-for="reconciliation in reconciliations.data" :key="reconciliation.id" class="hover:bg-gray-800/50">
+                        <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-300">
                             {{ formatDate(reconciliation.period_start) }} até {{ formatDate(reconciliation.period_end) }}
                         </td>
 
@@ -76,26 +55,26 @@ function formatPaginationLabel(label: string): string {
                             {{ reconciliation.bank_account?.name ?? '-' }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">
+                        <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-gray-100">
                             {{ formatCurrency(reconciliation.statement_balance_cents) }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">
+                        <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-gray-100">
                             {{ formatCurrency(reconciliation.reconciled_balance_cents) }}
                         </td>
 
                         <td
-                            class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
+                            class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap"
                             :class="Number(reconciliation.difference_cents) === 0 ? 'text-green-300' : 'text-yellow-300'"
                         >
                             {{ formatCurrency(reconciliation.difference_cents) }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-sm">
+                        <td class="px-4 py-3 text-sm whitespace-nowrap">
                             <StatusBadge :status="reconciliation.status" />
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
+                        <td class="px-4 py-3 text-right text-sm whitespace-nowrap">
                             <Link
                                 :href="route('bank-reconciliations.show', [reconciliation.id])"
                                 class="inline-flex items-center rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-medium text-gray-200 transition hover:bg-gray-700"
@@ -111,10 +90,7 @@ function formatPaginationLabel(label: string): string {
                     class="flex flex-wrap items-center justify-center gap-2 border-t border-gray-700 px-4 py-4"
                 >
                     <template v-for="link in reconciliations.links" :key="link.label">
-                        <span
-                            v-if="!link.url"
-                            class="rounded-md px-3 py-1.5 text-sm text-gray-500"
-                        >
+                        <span v-if="!link.url" class="rounded-md px-3 py-1.5 text-sm text-gray-500">
                             {{ formatPaginationLabel(link.label) }}
                         </span>
 
@@ -122,9 +98,7 @@ function formatPaginationLabel(label: string): string {
                             v-else
                             :href="link.url"
                             class="rounded-md px-3 py-1.5 text-sm transition"
-                            :class="link.active
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+                            :class="link.active ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
                         >
                             {{ formatPaginationLabel(link.label) }}
                         </Link>

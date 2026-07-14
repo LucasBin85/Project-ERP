@@ -13,6 +13,8 @@ import type {
     BankStatementTransaction,
     BankStatementWallet,
 } from '@/types/financial/bankStatement';
+import type { OfxImportPreview } from '@/types/financial/ofxImport';
+import type { FinancialOperationTypeOption } from '@/types/financial/operationType';
 import { Link, router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
@@ -23,7 +25,12 @@ const props = defineProps<{
     selectedBankAccount: BankStatementAccount | null;
     transactions: BankStatementTransaction[];
     classificationAccounts: BankStatementClassificationAccount[];
+    operationTypes: FinancialOperationTypeOption[];
     operational: BankStatementOperational;
+    ofxPreview?: OfxImportPreview | null;
+    flash?: {
+        success?: string | null;
+    };
 }>();
 
 const showFilters = ref(false);
@@ -38,16 +45,6 @@ const form = reactive({
 });
 
 const accountUrl = computed(() => (props.selectedBankAccount ? route('bank-accounts.show', [props.selectedBankAccount.id]) : null));
-
-const reconciliationUrl = computed(() =>
-    props.selectedBankAccount
-        ? route('bank-reconciliations.create', {
-              bank_account_id: props.selectedBankAccount.id,
-              period_start: form.start_date,
-              period_end: form.end_date,
-          })
-        : null,
-);
 
 function statementRoute(params: Record<string, unknown> = {}) {
     return route('bank-accounts.statement', {
@@ -155,15 +152,15 @@ onBeforeUnmount(() => {
                     Resumo da conta
                 </Link>
 
-                <OfxImportDialog v-if="selectedBankAccount" :bank-account="selectedBankAccount" />
+                <OfxImportDialog v-if="selectedBankAccount" :bank-account="selectedBankAccount" :initial-preview="ofxPreview" />
+            </div>
 
-                <Link
-                    v-if="reconciliationUrl"
-                    :href="reconciliationUrl"
-                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-                >
-                    Conciliar período
-                </Link>
+            <div
+                v-if="flash?.success"
+                role="status"
+                class="rounded-2xl border border-green-500/30 bg-green-950/30 px-4 py-3 text-sm font-semibold text-green-300"
+            >
+                {{ flash.success }}
             </div>
 
             <ReportSection>
@@ -204,6 +201,7 @@ onBeforeUnmount(() => {
                     :transactions="transactions"
                     :bank-account="selectedBankAccount"
                     :classification-accounts="classificationAccounts"
+                    :operation-types="operationTypes"
                 />
 
                 <div ref="loadMoreRef" class="border-t border-gray-700 p-6 text-center text-sm text-gray-400">

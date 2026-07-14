@@ -79,5 +79,5 @@ it('builds a bank account workspace with recent transactions and actions', funct
         ->and($data['recent_transactions'])->toHaveCount(2)
         ->and($data['actions']['statement_url'])->toContain('/bank-accounts/'.$bankAccount->id.'/statement')
         ->and($data['actions'])->not->toHaveKey('ofx_import_url')
-        ->and($data['actions']['reconciliation_url'])->toContain('bank_account_id='.$bankAccount->id);
+        ->and($data['actions'])->not->toHaveKey('reconciliation_url');
 });

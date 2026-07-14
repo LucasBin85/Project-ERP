@@ -8,6 +8,7 @@ use App\Models\JournalLine;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Financial\BankStatementService;
+use App\Services\Financial\OfxOperationTypePolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
@@ -120,7 +121,7 @@ $createStatementScenario = function (): array {
         'status' => 'imported',
     ]);
 
-    BankStatementImportTransaction::query()->create([
+    $draftAudit = BankStatementImportTransaction::query()->create([
         'bank_statement_import_id' => $import->id,
         'wallet_id' => $wallet->id,
         'bank_account_id' => $bankAccount->id,
@@ -146,7 +147,20 @@ $createStatementScenario = function (): array {
         'outflowLine',
         'draftEntry',
         'draftBankLine',
+        'draftAudit',
     );
+};
+
+$addManualMatch = function (array $scenario, string $description): JournalLine {
+    $entry = AccountingTestHelper::createPostedEntry($scenario['wallet'], '2026-07-03', [
+        [$scenario['expense'], 'debit', 8000],
+        [$scenario['bankAccount']->chartOfAccount, 'credit', 8000],
+    ]);
+    $entry->update(['description' => $description]);
+
+    return $entry->lines()
+        ->where('chart_of_account_id', $scenario['bankAccount']->chart_of_account_id)
+        ->firstOrFail();
 };
 
 it('keeps an already classified OFX draft editable and exposes its selected account', function () use ($createStatementScenario) {
@@ -154,6 +168,10 @@ it('keeps an already classified OFX draft editable and exposes its selected acco
     $scenario['draftEntry']->lines()
         ->where('chart_of_account_id', $scenario['wallet']->suspense_account_id)
         ->update(['chart_of_account_id' => $scenario['expense']->id]);
+    $scenario['draftAudit']->update([
+        'operation_type' => OfxOperationTypePolicy::EXPENSE,
+        'classification_account_id' => $scenario['expense']->id,
+    ]);
 
     $statement = app(BankStatementService::class)->build(
         $scenario['wallet'],
@@ -174,6 +192,9 @@ it('keeps an already classified OFX draft editable and exposes its selected acco
         ->and($draftTransaction['classification_status'])->toBe('classified')
         ->and($draftTransaction['classification_label'])->toBe('Despesa Administrativa')
         ->and($draftTransaction['classification_account_id'])->toBe($scenario['expense']->id)
+        ->and($draftTransaction['operation_type'])->toBe(OfxOperationTypePolicy::EXPENSE)
+        ->and($draftTransaction['can_edit_operation_type'])->toBeTrue()
+        ->and($draftTransaction['match_status'])->toBe('none')
         ->and($draftTransaction['can_classify'])->toBeTrue();
 });
 
@@ -278,7 +299,10 @@ it('builds a bank statement with complete draft and posted entries ordered from 
         ->and($transactions->pluck('classification_status')->all())->toBe(['unclassified', 'classified', 'classified'])
         ->and($transactions->pluck('classification_label')->all())->toBe(['A classificar', 'Despesa Administrativa', 'Receita de Serviços'])
         ->and($transactions->pluck('classification_account_id')->all())->toBe([null, $scenario['expense']->id, $scenario['revenue']->id])
-        ->and($transactions->pluck('can_classify')->all())->toBe([true, false, false])
+        ->and($transactions->pluck('operation_type')->all())->toBe([null, null, null])
+        ->and($transactions->pluck('can_edit_operation_type')->all())->toBe([true, false, false])
+        ->and($transactions->pluck('can_classify')->all())->toBe([false, false, false])
+        ->and($transactions->pluck('match_status')->all())->toBe(['none', 'none', 'none'])
         ->and($transactions->pluck('type')->all())->toBe(['outflow', 'outflow', 'inflow'])
         ->and($transactions->pluck('inflow_cents')->all())->toBe([null, null, 50000])
         ->and($transactions->pluck('outflow_cents')->all())->toBe([8000, 12000, null])
@@ -286,6 +310,61 @@ it('builds a bank statement with complete draft and posted entries ordered from 
         ->and($transactions->pluck('running_balance_cents')->all())->toBe([130000, 138000, 150000])
         ->and($transactions->every(fn (array $transaction) => ! array_key_exists('journal_entry_url', $transaction)))
         ->toBeTrue();
+});
+
+it('exposes a unique exact manual match and blocks operation type and classification until resolution', function () use ($createStatementScenario, $addManualMatch) {
+    $scenario = $createStatementScenario();
+    $candidate = $addManualMatch($scenario, 'Candidato manual exato');
+    $scenario['draftAudit']->update(['operation_type' => OfxOperationTypePolicy::EXPENSE]);
+
+    $statement = app(BankStatementService::class)->build(
+        $scenario['wallet'],
+        new BankStatementFiltersDTO(
+            bankAccountId: $scenario['bankAccount']->id,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+        ),
+    );
+
+    $transaction = $statement->transactions->firstWhere(
+        'journal_entry_id',
+        $scenario['draftEntry']->id,
+    );
+
+    expect($transaction['match_status'])->toBe('unique')
+        ->and($transaction['match_candidates'])->toHaveCount(1)
+        ->and($transaction['match_candidates'][0]['journal_line_id'])->toBe($candidate->id)
+        ->and($transaction['match_candidates'][0]['journal_entry_id'])->toBe($candidate->journal_entry_id)
+        ->and($transaction['match_candidates'][0]['description'])->toBe('Candidato manual exato')
+        ->and($transaction['can_edit_operation_type'])->toBeFalse()
+        ->and($transaction['can_classify'])->toBeFalse();
+});
+
+it('exposes all compatible candidates when an OFX draft has an ambiguous match', function () use ($createStatementScenario, $addManualMatch) {
+    $scenario = $createStatementScenario();
+    $first = $addManualMatch($scenario, 'Primeiro candidato');
+    $second = $addManualMatch($scenario, 'Segundo candidato');
+
+    $statement = app(BankStatementService::class)->build(
+        $scenario['wallet'],
+        new BankStatementFiltersDTO(
+            bankAccountId: $scenario['bankAccount']->id,
+            startDate: '2026-07-01',
+            endDate: '2026-07-31',
+        ),
+    );
+
+    $transaction = $statement->transactions->firstWhere(
+        'journal_entry_id',
+        $scenario['draftEntry']->id,
+    );
+
+    expect($transaction['match_status'])->toBe('ambiguous')
+        ->and(collect($transaction['match_candidates'])->pluck('journal_line_id')->all())
+        ->toBe([$first->id, $second->id])
+        ->and($transaction['can_edit_operation_type'])->toBeFalse()
+        ->and($transaction['can_classify'])->toBeFalse()
+        ->and($transaction['match_resolution'])->toBeNull();
 });
 
 it('filters displayed entries without changing totals or chronological balances', function () use ($createStatementScenario) {

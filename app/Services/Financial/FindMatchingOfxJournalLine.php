@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\Models\BankAccount;
 use App\Models\JournalLine;
 use App\Models\Wallet;
+use Illuminate\Database\Eloquent\Collection;
 
 class FindMatchingOfxJournalLine
 {
@@ -15,8 +16,28 @@ class FindMatchingOfxJournalLine
         int $amountCents,
         string $direction,
     ): ?JournalLine {
+        $candidates = $this->candidates(
+            wallet: $wallet,
+            bankAccount: $bankAccount,
+            entryDate: $entryDate,
+            amountCents: $amountCents,
+            direction: $direction,
+        );
+
+        return $candidates->count() === 1 ? $candidates->first() : null;
+    }
+
+    /** @return Collection<int, JournalLine> */
+    public function candidates(
+        Wallet $wallet,
+        BankAccount $bankAccount,
+        string $entryDate,
+        int $amountCents,
+        string $direction,
+        bool $lockForUpdate = false,
+    ): Collection {
         if ((int) $bankAccount->wallet_id !== (int) $wallet->id) {
-            return null;
+            return new Collection;
         }
 
         $lineType = match ($direction) {
@@ -26,10 +47,10 @@ class FindMatchingOfxJournalLine
         };
 
         if ($lineType === null || $amountCents <= 0) {
-            return null;
+            return new Collection;
         }
 
-        $candidates = JournalLine::query()
+        return JournalLine::query()
             ->select('journal_lines.*')
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->where('journal_entries.wallet_id', $wallet->id)
@@ -58,9 +79,8 @@ class FindMatchingOfxJournalLine
                     });
             })
             ->with('journalEntry')
-            ->limit(2)
+            ->limit(20)
+            ->when($lockForUpdate, fn ($query) => $query->lockForUpdate())
             ->get();
-
-        return $candidates->count() === 1 ? $candidates->first() : null;
     }
 }

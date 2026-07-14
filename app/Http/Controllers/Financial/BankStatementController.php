@@ -11,8 +11,11 @@ use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
+use App\Models\Wallet;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\ClassifyOfxDraftEntry;
+use App\Services\Financial\OfxOperationTypePolicy;
+use App\Services\Financial\ResolveOfxDraftMatch;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -44,8 +47,12 @@ class BankStatementController extends Controller
         return redirect()->route('bank-accounts.index');
     }
 
-    public function show(Request $request, BankAccount $bankAccount, BankStatementService $service): Response
-    {
+    public function show(
+        Request $request,
+        BankAccount $bankAccount,
+        BankStatementService $service,
+        OfxOperationTypePolicy $operationTypes,
+    ): Response {
         $wallet = $this->resolveActiveWallet($request);
 
         abort_unless($bankAccount->wallet_id === $wallet->id, 404);
@@ -78,10 +85,12 @@ class BankStatementController extends Controller
             'selectedBankAccount' => $statement['bank_account'],
             'transactions' => $statement['transactions'],
             'classificationAccounts' => $this->classificationAccounts(
-                walletId: $wallet->id,
-                suspenseAccountId: $wallet->suspense_account_id,
-                bankChartOfAccountId: $bankAccount->chart_of_account_id,
+                wallet: $wallet,
+                bankAccount: $bankAccount,
+                operationTypes: $operationTypes,
             ),
+            'operationTypes' => $operationTypes->metadata(),
+            'ofxPreview' => $request->session()->get('ofx_preview'),
             'operational' => $this->operationalContext(
                 bankAccount: $bankAccount,
                 startDate: $filters->startDate,
@@ -94,6 +103,7 @@ class BankStatementController extends Controller
         BankAccount $bankAccount,
         JournalEntry $journalEntry,
         ClassifyOfxDraftEntry $service,
+        OfxOperationTypePolicy $operationTypes,
     ): RedirectResponse {
         $wallet = $this->resolveActiveWallet($request);
 
@@ -101,8 +111,9 @@ class BankStatementController extends Controller
         abort_unless((int) $journalEntry->wallet_id === (int) $wallet->id, 404);
 
         $data = $request->validate([
+            'operation_type' => ['required', Rule::in($operationTypes->codes())],
             'chart_of_account_id' => [
-                'required',
+                'nullable',
                 'integer',
                 Rule::exists('chart_of_accounts', 'id')
                     ->where('wallet_id', $wallet->id)
@@ -128,7 +139,53 @@ class BankStatementController extends Controller
             'success',
             $data['should_post']
                 ? 'Lançamento OFX classificado e postado com sucesso.'
-                : 'Lançamento OFX classificado com sucesso.',
+                : ($data['chart_of_account_id'] ?? null
+                    ? 'Lançamento OFX classificado com sucesso.'
+                    : 'Tipo de operação atualizado com sucesso.'),
+        );
+    }
+
+    public function resolveMatch(
+        Request $request,
+        BankAccount $bankAccount,
+        JournalEntry $journalEntry,
+        ResolveOfxDraftMatch $service,
+    ): RedirectResponse {
+        $wallet = $this->resolveActiveWallet($request);
+
+        abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id, 404);
+        abort_unless((int) $journalEntry->wallet_id === (int) $wallet->id, 404);
+
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['keep', 'link'])],
+            'journal_line_id' => [
+                Rule::requiredIf($request->input('action') === 'link'),
+                'nullable',
+                'integer',
+            ],
+        ]);
+
+        try {
+            $service->execute(
+                wallet: $wallet,
+                bankAccount: $bankAccount,
+                entry: $journalEntry,
+                action: $data['action'],
+                candidateJournalLineId: isset($data['journal_line_id'])
+                    ? (int) $data['journal_line_id']
+                    : null,
+            );
+        } catch (OfxClassificationException $exception) {
+            return back()->withErrors([
+                'action' => $exception->getMessage(),
+            ]);
+        }
+
+        return back()->with(
+            'success',
+            $data['action'] === 'link'
+                ? 'OFX vinculado ao lançamento manual com sucesso.'
+                : 'Lançamento OFX mantido para classificação.',
         );
     }
 
@@ -151,23 +208,32 @@ class BankStatementController extends Controller
     }
 
     private function classificationAccounts(
-        int $walletId,
-        ?int $suspenseAccountId,
-        int $bankChartOfAccountId,
+        Wallet $wallet,
+        BankAccount $bankAccount,
+        OfxOperationTypePolicy $operationTypes,
     ): array {
         return ChartOfAccount::query()
-            ->where('wallet_id', $walletId)
+            ->where('wallet_id', $wallet->id)
             ->where('allows_posting', true)
-            ->when($suspenseAccountId, fn ($query) => $query->where('id', '!=', $suspenseAccountId))
-            ->where('id', '!=', $bankChartOfAccountId)
+            ->when(
+                $wallet->suspense_account_id,
+                fn ($query) => $query->where('id', '!=', $wallet->suspense_account_id),
+            )
+            ->where('id', '!=', $bankAccount->chart_of_account_id)
             ->whereDoesntHave('children')
             ->orderBy('code')
-            ->get(['id', 'code', 'name', 'type'])
+            ->get(['id', 'wallet_id', 'code', 'name', 'type', 'financial_group', 'allows_posting'])
             ->map(fn (ChartOfAccount $account) => [
                 'id' => $account->id,
                 'code' => $account->code,
                 'name' => $account->name,
                 'type' => $account->type,
+                'financial_group' => $account->financial_group,
+                'allowed_operation_types' => $operationTypes->allowedOperationTypesForAccount(
+                    $wallet,
+                    $bankAccount,
+                    $account,
+                ),
             ])
             ->values()
             ->all();

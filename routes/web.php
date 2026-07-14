@@ -1,36 +1,33 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
-
-use App\Http\Controllers\WalletController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\FinancialPositionController;
+use App\Http\Controllers\Accounting\BalanceSheetController;
 use App\Http\Controllers\Accounting\ChartOfAccountController;
-use App\Http\Controllers\Accounting\JournalEntryController;
 use App\Http\Controllers\Accounting\GeneralJournalController;
+use App\Http\Controllers\Accounting\IncomeStatementController;
+use App\Http\Controllers\Accounting\JournalEntryController;
 use App\Http\Controllers\Accounting\LedgerController;
 use App\Http\Controllers\Accounting\TrialBalanceController;
-use App\Http\Controllers\Accounting\IncomeStatementController;
-use App\Http\Controllers\Accounting\BalanceSheetController;
-use App\Http\Controllers\Financial\BankAccountController;
-use App\Http\Controllers\Financial\BankTransferController;
-use App\Http\Controllers\Financial\BankStatementController;
-use App\Http\Controllers\Financial\BankReconciliationController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Financial\AccountPayableController;
 use App\Http\Controllers\Financial\AccountReceivableController;
-use App\Http\Controllers\Financial\CreditCardController;
+use App\Http\Controllers\Financial\BankAccountController;
+use App\Http\Controllers\Financial\BankReconciliationController;
+use App\Http\Controllers\Financial\BankStatementController;
+use App\Http\Controllers\Financial\BankTransferController;
 use App\Http\Controllers\Financial\CashFlowController;
+use App\Http\Controllers\Financial\CreditCardController;
 use App\Http\Controllers\Financial\OfxImportController;
-
-
+use App\Http\Controllers\FinancialPositionController;
+use App\Http\Controllers\WalletController;
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
     // CRUD de carteiras
     Route::resource('wallets', WalletController::class)
-        ->only(['index','create','store', 'show','edit','update','destroy'])
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy'])
         ->names('wallets');
     // Ativar carteira
     // (define a sessão com a carteira ativa)
@@ -38,10 +35,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('wallets.active');
 
     Route::resource('chart-of-accounts', ChartOfAccountController::class)
-        ->only(['index','create','store', 'show','edit','update','destroy'])
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy'])
         ->names('chart-of-accounts');
-
-    
 
     Route::get('/Accounting/journal-entries', [JournalEntryController::class, 'index'])
         ->name('journal-entries.index');
@@ -61,33 +56,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/Accounting/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])
         ->name('journal-entries.post');
 
-
-
-    
     Route::get('/general-journal', [GeneralJournalController::class, 'index'])
         ->name('general-journal.index');
 
-
-
     Route::get('/ledger', [LedgerController::class, 'index'])
-    ->name('ledger.index');
-
+        ->name('ledger.index');
 
     Route::get('/financial-position', [FinancialPositionController::class, 'index'])
         ->name('financial-position.index');
 
-
     Route::get('/trial-balance', [TrialBalanceController::class, 'index'])
-    ->name('trial-balance.index');
-
+        ->name('trial-balance.index');
 
     Route::get('/income-statement', [IncomeStatementController::class, 'index'])
-    ->name('income-statement.index');
-
+        ->name('income-statement.index');
 
     Route::get('/balance-sheet', [BalanceSheetController::class, 'index'])
-    ->name('balance-sheet.index');
-
+        ->name('balance-sheet.index');
 
     Route::prefix('financial')->group(function () {
         Route::get('bank-accounts/{bankAccount}/statement', [BankStatementController::class, 'show'])
@@ -95,6 +80,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/classify', [BankStatementController::class, 'classify'])
             ->name('bank-accounts.statement.classify');
+
+        Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/resolve-match', [BankStatementController::class, 'resolveMatch'])
+            ->name('bank-accounts.statement.resolve-match');
 
         Route::resource('bank-accounts', BankAccountController::class)
             ->only(['index', 'create', 'store', 'show']);
@@ -111,11 +99,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('ofx-imports', [OfxImportController::class, 'index'])
             ->name('ofx-imports.index');
 
-        Route::post('ofx-imports', [OfxImportController::class, 'store'])
-            ->name('ofx-imports.store');
+        Route::post('ofx-imports/preview', [OfxImportController::class, 'preview'])
+            ->name('ofx-imports.preview');
+
+        Route::post('ofx-imports/confirm', [OfxImportController::class, 'confirm'])
+            ->name('ofx-imports.confirm');
 
         Route::resource('bank-reconciliations', BankReconciliationController::class)
-            ->only(['index', 'create', 'store', 'show']);
+            ->only(['index', 'show']);
 
         Route::post('accounts-payable/{accountPayable}/pay', [AccountPayableController::class, 'pay'])
             ->name('accounts-payable.pay');
@@ -153,7 +144,6 @@ Route::get('dashboard', function () {
 Route::get('/check-auth', function () {
     return Auth::user();
 });
-
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';

@@ -1,3 +1,5 @@
+import type { FinancialOperationType } from '@/types/financial/operationType';
+
 export type JournalEntryStatus = 'draft' | 'posted';
 export type ReconciliationStatus = 'pending' | 'reconciled' | 'reconciled_via_ofx';
 export type ClassificationStatus = 'classified' | 'unclassified';
@@ -17,6 +19,8 @@ export interface BankStatementClassificationAccount {
     code: string;
     name: string;
     type: string;
+    financial_group: string | null;
+    allowed_operation_types: FinancialOperationType[];
 }
 
 export interface BankStatementFilters {
@@ -38,7 +42,18 @@ export interface BankStatementTransaction {
     classification_status: ClassificationStatus;
     classification_label: string;
     classification_account_id: number | null;
+    operation_type: FinancialOperationType | null;
+    can_edit_operation_type: boolean;
     can_classify: boolean;
+    match_status: 'none' | 'unique' | 'ambiguous';
+    match_resolution: 'created' | 'kept' | 'linked' | null;
+    match_candidates: Array<{
+        journal_entry_id: number;
+        journal_line_id: number;
+        date: string | null;
+        description: string | null;
+        status: JournalEntryStatus;
+    }>;
     type: 'inflow' | 'outflow';
     inflow_cents: number | null;
     outflow_cents: number | null;

@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\DTOs\Financial\AccountPayableDTO;
 use App\DTOs\Financial\AccountReceivableDTO;
+use App\DTOs\Financial\BankAccountDTO;
 use App\DTOs\Financial\BankTransferDTO;
 use App\DTOs\Financial\CreditCardDTO;
 use App\DTOs\Financial\CreditCardPaymentDTO;
@@ -12,6 +13,7 @@ use App\DTOs\Financial\PayAccountPayableDTO;
 use App\DTOs\Financial\ReceiveAccountReceivableDTO;
 use App\Models\AccountPayable;
 use App\Models\AccountReceivable;
+use App\Models\Bank;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCard;
@@ -41,6 +43,7 @@ class JournalEntryTestSeeder extends Seeder
 
         if (! $user) {
             $this->command?->warn('Nenhum usuário encontrado. Crie um usuário antes de rodar o seeder.');
+
             return;
         }
 
@@ -48,6 +51,7 @@ class JournalEntryTestSeeder extends Seeder
 
         if (! $wallet) {
             $this->command?->warn('Usuário sem wallet vinculada.');
+
             return;
         }
 
@@ -58,6 +62,7 @@ class JournalEntryTestSeeder extends Seeder
 
         if (! $expense || ! $income || ! $wallet->suspense_account_id) {
             $this->command?->warn('Plano de contas base incompleto. Seeder financeiro não executado.');
+
             return;
         }
 
@@ -150,7 +155,14 @@ class JournalEntryTestSeeder extends Seeder
             return $existing;
         }
 
-        return app(CreateBankAccount::class)->execute($wallet, $data)->fresh('chartOfAccount');
+        $bank = Bank::query()
+            ->where('code', $data['bank_code'])
+            ->firstOrFail();
+
+        return app(CreateBankAccount::class)->execute($wallet, BankAccountDTO::fromArray([
+            ...$data,
+            'bank_id' => $bank->id,
+        ]))->fresh('chartOfAccount');
     }
 
     private function entry(Wallet $wallet, string $externalId, string $source, string $date, string $description, string $status, array $lines): void

@@ -13,13 +13,17 @@ class BankStatementImportTransaction extends Model
         'bank_account_id',
         'journal_entry_id',
         'journal_line_id',
+        'classification_account_id',
         'external_id',
+        'transaction_hash',
         'fit_id',
         'posted_at',
         'description',
         'amount_cents',
         'direction',
+        'operation_type',
         'status',
+        'resolution',
         'raw_payload',
         'error_message',
     ];
@@ -27,6 +31,7 @@ class BankStatementImportTransaction extends Model
     protected $casts = [
         'posted_at' => 'date',
         'amount_cents' => 'integer',
+        'classification_account_id' => 'integer',
         'raw_payload' => 'array',
     ];
 
@@ -53,5 +58,10 @@ class BankStatementImportTransaction extends Model
     public function journalLine(): BelongsTo
     {
         return $this->belongsTo(JournalLine::class);
+    }
+
+    public function classificationAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'classification_account_id');
     }
 }

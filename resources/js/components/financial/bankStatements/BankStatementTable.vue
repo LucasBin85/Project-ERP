@@ -3,19 +3,27 @@ import ReportTable from '@/components/reports/ReportTable.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import type { BankStatementAccount, BankStatementClassificationAccount, BankStatementTransaction } from '@/types/financial/bankStatement';
+import type { FinancialOperationTypeOption } from '@/types/financial/operationType';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import InlineOfxClassification from './InlineOfxClassification.vue';
+import InlineOfxMatchResolution from './InlineOfxMatchResolution.vue';
+import InlineOfxOperationType from './InlineOfxOperationType.vue';
 
-defineProps<{
+const props = defineProps<{
     transactions: BankStatementTransaction[];
     bankAccount: BankStatementAccount;
     classificationAccounts: BankStatementClassificationAccount[];
+    operationTypes: FinancialOperationTypeOption[];
 }>();
+
+function operationTypeLabel(operationType: BankStatementTransaction['operation_type']): string {
+    return props.operationTypes.find((option) => option.code === operationType)?.label ?? '—';
+}
 </script>
 
 <template>
-    <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma movimentação encontrada para os filtros informados." :empty-colspan="8">
+    <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma movimentação encontrada para os filtros informados." :empty-colspan="9">
         <template #head>
             <tr>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Data</th>
@@ -24,6 +32,7 @@ defineProps<{
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Origem</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status contábil</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Validação / conciliação</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Tipo de operação</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Classificação</th>
                 <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Lançamento</th>
             </tr>
@@ -64,8 +73,19 @@ defineProps<{
             </td>
 
             <td class="px-4 py-3 text-sm">
+                <InlineOfxOperationType
+                    v-if="transaction.source === 'ofx' && transaction.accounting_status === 'draft'"
+                    :transaction="transaction"
+                    :bank-account="bankAccount"
+                    :operation-types="operationTypes"
+                />
+                <span v-else class="text-gray-300">{{ operationTypeLabel(transaction.operation_type) }}</span>
+            </td>
+
+            <td class="px-4 py-3 text-sm">
+                <InlineOfxMatchResolution v-if="transaction.match_status !== 'none'" :transaction="transaction" :bank-account="bankAccount" />
                 <InlineOfxClassification
-                    v-if="transaction.can_classify"
+                    v-else-if="transaction.source === 'ofx' && transaction.accounting_status === 'draft'"
                     :transaction="transaction"
                     :bank-account="bankAccount"
                     :classification-accounts="classificationAccounts"

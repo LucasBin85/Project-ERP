@@ -51,14 +51,17 @@ class HandleInertiaRequests extends Middleware
                             'wallets' => $request->user()
                                 ->wallets()
                                 ->get(['id', 'name', 'currency'])
-                                 ->toArray(),
-                                'active_wallet' => $request->session()->get(
-                                    'active_wallet',
-                                        optional($request->user()->wallets()->first())->id
-                                ),
+                                ->toArray(),
+                            'active_wallet' => $request->session()->get(
+                                'active_wallet',
+                                optional($request->user()->wallets()->first())->id
+                            ),
                         ]
                     )
                     : null,
+            ],
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
             ],
             'ziggy' => [
                 ...(new Ziggy)->toArray(),

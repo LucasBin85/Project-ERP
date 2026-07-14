@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Financial;
 
-use App\Http\Controllers\Controller;
+use App\DTOs\Financial\BankAccountDTO;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
+use App\Http\Controllers\Controller;
+use App\Models\Bank;
 use App\Models\BankAccount;
 use App\Services\Financial\BuildBankAccountWorkspace;
 use App\Services\Financial\CreateBankAccount;
@@ -11,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use InvalidArgumentException;
 
 class BankAccountController extends Controller
 {
@@ -40,9 +43,21 @@ class BankAccountController extends Controller
             ->get([
                 'id',
                 'name',
+                'bank_id',
                 'bank_code',
                 'agency',
                 'account_number',
+            ]);
+
+        $banks = Bank::query()
+            ->where('active', true)
+            ->orderBy('short_name')
+            ->get([
+                'id',
+                'code',
+                'name',
+                'short_name',
+                'ispb',
             ]);
 
         return Inertia::render('Financial/BankAccounts/Create', [
@@ -51,6 +66,7 @@ class BankAccountController extends Controller
                 'name' => $wallet->name,
             ],
             'bankAccounts' => $bankAccounts,
+            'banks' => $banks,
         ]);
     }
 
@@ -67,11 +83,10 @@ class BankAccountController extends Controller
                     ->where('wallet_id', $wallet->id),
             ],
 
-            'bank_code' => [
-                'nullable',
-                'string',
-                'max:20',
-                'regex:/^[0-9]*$/',
+            'bank_id' => [
+                'required',
+                'integer',
+                Rule::exists('banks', 'id')->where('active', true),
             ],
 
             'agency' => [
@@ -88,7 +103,7 @@ class BankAccountController extends Controller
                 'regex:/^[0-9]*$/',
                 Rule::unique('bank_accounts', 'account_number')
                     ->where('wallet_id', $wallet->id)
-                    ->where('bank_code', $request->bank_code)
+                    ->where('bank_id', $request->integer('bank_id'))
                     ->where('agency', $request->agency),
             ],
 
@@ -112,9 +127,13 @@ class BankAccountController extends Controller
             ],
         ]);
 
-        $data['bank_name'] = $data['name'];
-
-        $bankAccount = $service->execute($wallet, $data);
+        try {
+            $bankAccount = $service->execute($wallet, BankAccountDTO::fromArray($data));
+        } catch (InvalidArgumentException $exception) {
+            return back()
+                ->withErrors(['account_number' => $exception->getMessage()])
+                ->withInput();
+        }
 
         return redirect()
             ->route('bank-accounts.show', $bankAccount)
