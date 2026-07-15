@@ -17,6 +17,52 @@ export interface ExistingBankAccount {
     account_number: string | null;
 }
 
+export interface BankAccountChartOfAccount {
+    id: number;
+    code: string;
+    name: string;
+}
+
+export interface BankAccountOverview {
+    id: number;
+    name: string;
+    bank_name: string | null;
+    bank_code: string | null;
+    agency: string | null;
+    account_number: string | null;
+    account_type: BankAccountType;
+    opening_balance_cents: number;
+    statement_balance_cents: number;
+    accounting_balance_cents: number;
+    current_balance_cents?: number;
+    is_active: boolean;
+    chart_of_account: BankAccountChartOfAccount | null;
+    last_transaction_at: string | null;
+    show_url?: string | null;
+}
+
+export interface BankAccountsIndexSummary {
+    total_statement_balance_cents: number;
+    total_accounting_balance_cents: number;
+    total_current_balance_cents?: number;
+    total_opening_balance_cents: number;
+    active_accounts: number;
+    inactive_accounts: number;
+    accounts_count: number;
+}
+
+export interface BankAccountShowSummary {
+    statement_balance_cents: number;
+    accounting_balance_cents: number;
+    current_balance_cents?: number;
+    month_inflows_cents: number;
+    month_outflows_cents: number;
+    month_result_cents: number;
+    current_card_invoice_cents: number;
+    open_reconciliations: number;
+    linked_credit_cards: number;
+}
+
 export interface BankAccountCreateFormData {
     [key: string]: string | number | null;
     bank_id: number | null;

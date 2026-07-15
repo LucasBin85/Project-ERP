@@ -35,13 +35,23 @@ it('builds bank accounts overview with current balances', function () {
         [$expense, 'debit', 25000],
         [$bankAccount->chartOfAccount, 'credit', 25000],
     ]);
+    AccountingTestHelper::createDraftEntry($wallet, now()->toDateString(), [
+        [$bankAccount->chartOfAccount, 'debit', 30000],
+        [$equity, 'credit', 30000],
+    ], 'ofx');
 
     $data = app(BuildBankAccountWorkspace::class)->index($wallet);
 
-    expect($data['summary']['total_current_balance_cents'])->toBe(75000)
+    expect($data['summary']['total_statement_balance_cents'])->toBe(105000)
+        ->and($data['summary']['total_accounting_balance_cents'])->toBe(75000)
+        ->and($data['summary']['total_current_balance_cents'])->toBe(105000)
         ->and($data['summary']['accounts_count'])->toBe(1)
-        ->and($data['accounts'][0]['current_balance_cents'])->toBe(75000)
-        ->and($data['accounts'][0]['last_transaction_at'])->not->toBeNull();
+        ->and($data['accounts'][0]['statement_balance_cents'])->toBe(105000)
+        ->and($data['accounts'][0]['accounting_balance_cents'])->toBe(75000)
+        ->and($data['accounts'][0]['current_balance_cents'])->toBe(105000)
+        ->and($data['accounts'][0]['last_transaction_at'])->toBe(now()->toDateString())
+        ->and($data['accounts'][0]['show_url'])->toBe(route('bank-accounts.show', $bankAccount))
+        ->and($data['accounts'][0]['show_url'])->not->toContain('/statement');
 });
 
 it('builds a bank account workspace with recent transactions and actions', function () {
@@ -70,10 +80,19 @@ it('builds a bank account workspace with recent transactions and actions', funct
         [$expense, 'debit', 25000],
         [$bankAccount->chartOfAccount, 'credit', 25000],
     ]);
+    AccountingTestHelper::createDraftEntry($wallet, now()->toDateString(), [
+        [$expense, 'debit', 10000],
+        [$bankAccount->chartOfAccount, 'credit', 10000],
+    ], 'ofx');
 
     $data = app(BuildBankAccountWorkspace::class)->show($wallet, $bankAccount);
 
-    expect($data['summary']['current_balance_cents'])->toBe(75000)
+    expect($data['summary']['statement_balance_cents'])->toBe(65000)
+        ->and($data['summary']['accounting_balance_cents'])->toBe(75000)
+        ->and($data['summary']['current_balance_cents'])->toBe(65000)
+        ->and($data['account']['statement_balance_cents'])->toBe(65000)
+        ->and($data['account']['accounting_balance_cents'])->toBe(75000)
+        ->and($data['account']['current_balance_cents'])->toBe(65000)
         ->and($data['summary']['month_inflows_cents'])->toBe(100000)
         ->and($data['summary']['month_outflows_cents'])->toBe(25000)
         ->and($data['recent_transactions'])->toHaveCount(2)

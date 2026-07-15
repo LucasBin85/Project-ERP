@@ -10,23 +10,30 @@ use App\Models\CreditCardInvoice;
 use App\Models\JournalLine;
 use App\Models\Wallet;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 
 class BuildBankAccountWorkspace
 {
+    public function __construct(
+        private readonly BankAccountBalanceService $balances,
+    ) {}
+
     public function index(Wallet $wallet): array
     {
-        $accounts = BankAccount::query()
+        $bankAccounts = BankAccount::query()
             ->where('wallet_id', $wallet->id)
             ->with('chartOfAccount:id,code,name')
             ->orderBy('name')
-            ->get()
-            ->map(fn (BankAccount $account) => $this->accountOverview($wallet, $account));
+            ->get();
+        $balances = $this->balances->calculateMany($wallet, $bankAccounts);
+        $accounts = $bankAccounts
+            ->map(fn (BankAccount $account) => $this->accountOverview($wallet, $account, $balances[$account->id]));
 
         return [
             'accounts' => $accounts->values()->all(),
             'summary' => [
-                'total_current_balance_cents' => $accounts->sum('current_balance_cents'),
+                'total_statement_balance_cents' => $accounts->sum('statement_balance_cents'),
+                'total_accounting_balance_cents' => $accounts->sum('accounting_balance_cents'),
+                'total_current_balance_cents' => $accounts->sum('statement_balance_cents'),
                 'total_opening_balance_cents' => $accounts->sum('opening_balance_cents'),
                 'active_accounts' => $accounts->where('is_active', true)->count(),
                 'inactive_accounts' => $accounts->where('is_active', false)->count(),
@@ -43,13 +50,16 @@ class BuildBankAccountWorkspace
 
         $currentMonthStart = now()->startOfMonth()->toDateString();
         $today = now()->toDateString();
+        $balances = $this->balances->calculate($wallet, $bankAccount);
         $monthMovements = $this->periodMovementTotals($wallet, $bankAccount, $currentMonthStart, $today);
         $creditCards = $this->linkedCreditCards($wallet, $bankAccount);
 
         return [
-            'account' => $this->accountOverview($wallet, $bankAccount),
+            'account' => $this->accountOverview($wallet, $bankAccount, $balances),
             'summary' => [
-                'current_balance_cents' => $this->currentBalanceCents($wallet, $bankAccount),
+                'statement_balance_cents' => $balances['statement_balance_cents'],
+                'accounting_balance_cents' => $balances['accounting_balance_cents'],
+                'current_balance_cents' => $balances['statement_balance_cents'],
                 'month_inflows_cents' => $monthMovements['inflows_cents'],
                 'month_outflows_cents' => $monthMovements['outflows_cents'],
                 'month_result_cents' => $monthMovements['inflows_cents'] - $monthMovements['outflows_cents'],
@@ -57,14 +67,21 @@ class BuildBankAccountWorkspace
                 'open_reconciliations' => $this->openReconciliationsCount($wallet, $bankAccount),
                 'linked_credit_cards' => count($creditCards),
             ],
-            'recent_transactions' => $this->recentTransactions($wallet, $bankAccount),
+            'recent_transactions' => $this->recentTransactions(
+                $wallet,
+                $bankAccount,
+                $balances['accounting_balance_cents'],
+            ),
             'recent_transfers' => $this->recentTransfers($wallet, $bankAccount),
             'credit_cards' => $creditCards,
             'actions' => $this->actions($bankAccount),
         ];
     }
 
-    private function accountOverview(Wallet $wallet, BankAccount $account): array
+    /**
+     * @param  array{statement_balance_cents: int, accounting_balance_cents: int}  $balances
+     */
+    private function accountOverview(Wallet $wallet, BankAccount $account, array $balances): array
     {
         return [
             'id' => $account->id,
@@ -75,24 +92,14 @@ class BuildBankAccountWorkspace
             'account_number' => $account->account_number,
             'account_type' => $account->account_type,
             'opening_balance_cents' => (int) $account->opening_balance_cents,
-            'current_balance_cents' => $this->currentBalanceCents($wallet, $account),
+            'statement_balance_cents' => $balances['statement_balance_cents'],
+            'accounting_balance_cents' => $balances['accounting_balance_cents'],
+            'current_balance_cents' => $balances['statement_balance_cents'],
             'is_active' => (bool) $account->is_active,
             'chart_of_account' => $account->chartOfAccount,
             'last_transaction_at' => $this->lastTransactionDate($wallet, $account),
+            'show_url' => route('bank-accounts.show', $account),
         ];
-    }
-
-    private function currentBalanceCents(Wallet $wallet, BankAccount $bankAccount): int
-    {
-        $lines = JournalLine::query()
-            ->where('chart_of_account_id', $bankAccount->chart_of_account_id)
-            ->whereHas('journalEntry', function ($query) use ($wallet) {
-                $query->where('wallet_id', $wallet->id)
-                    ->where('status', 'posted');
-            })
-            ->get(['type', 'amount_cents']);
-
-        return $this->debitBalance($lines);
     }
 
     private function periodMovementTotals(Wallet $wallet, BankAccount $bankAccount, string $startDate, string $endDate): array
@@ -113,9 +120,12 @@ class BuildBankAccountWorkspace
         ];
     }
 
-    private function recentTransactions(Wallet $wallet, BankAccount $bankAccount): array
-    {
-        $runningBalance = $this->currentBalanceCents($wallet, $bankAccount);
+    private function recentTransactions(
+        Wallet $wallet,
+        BankAccount $bankAccount,
+        int $accountingBalanceCents,
+    ): array {
+        $runningBalance = $accountingBalanceCents;
 
         return JournalLine::query()
             ->with('journalEntry:id,wallet_id,entry_date,description,status,source')
@@ -257,24 +267,13 @@ class BuildBankAccountWorkspace
             ->where('chart_of_account_id', $bankAccount->chart_of_account_id)
             ->whereHas('journalEntry', function ($query) use ($wallet) {
                 $query->where('wallet_id', $wallet->id)
-                    ->where('status', 'posted');
+                    ->whereIn('status', ['draft', 'posted']);
             })
             ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
             ->orderByDesc('journal_entries.entry_date')
             ->value('journal_entries.entry_date');
 
         return $date ? Carbon::parse($date)->toDateString() : null;
-    }
-
-    private function debitBalance(Collection $lines): int
-    {
-        return $lines->reduce(function (int $balance, JournalLine $line) {
-            $amount = (int) $line->amount_cents;
-
-            return $line->type === 'debit'
-                ? $balance + $amount
-                : $balance - $amount;
-        }, 0);
     }
 
     private function actions(BankAccount $bankAccount): array

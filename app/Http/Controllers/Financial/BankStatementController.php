@@ -13,9 +13,11 @@ use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Wallet;
 use App\Services\Financial\BankStatementService;
+use App\Services\Financial\BulkPostOfxDraftEntries;
 use App\Services\Financial\ClassifyOfxDraftEntry;
 use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\ResolveOfxDraftMatch;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -70,11 +72,49 @@ class BankStatementController extends Controller
             ),
             'operationTypes' => $operationTypes->metadata(),
             'ofxPreview' => $request->session()->get('ofx_preview'),
+            'bulkPostResult' => $request->session()->get('ofx_bulk_post_result'),
             'operational' => $this->operationalContext(
                 bankAccount: $bankAccount,
                 startDate: $filters->startDate,
             ),
         ]);
+    }
+
+    public function bulkPost(
+        Request $request,
+        BankAccount $bankAccount,
+        BulkPostOfxDraftEntries $service,
+    ): RedirectResponse|JsonResponse {
+        $wallet = $this->resolveActiveWallet($request);
+
+        abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id, 404);
+
+        $data = $request->validate([
+            'start_date' => ['required', 'date'],
+            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+        ]);
+
+        $result = $service->execute(
+            wallet: $wallet,
+            bankAccount: $bankAccount,
+            startDate: $data['start_date'],
+            endDate: $data['end_date'],
+        );
+        $payload = $result->toArray();
+
+        if ($request->expectsJson()) {
+            return response()->json($payload);
+        }
+
+        $response = back()
+            ->with('ofx_bulk_post_result', $payload)
+            ->with('success', $result->message());
+
+        if ($result->errors > 0) {
+            $response->withErrors(['bulk_post' => $result->message()]);
+        }
+
+        return $response;
     }
 
     public function classify(

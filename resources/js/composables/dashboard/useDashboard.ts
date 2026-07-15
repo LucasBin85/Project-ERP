@@ -109,7 +109,7 @@ export function useDashboard(props) {
         {
             label: 'Saldo bancário',
             value: formatCurrency(props.kpis.cash_balance_cents),
-            helper: 'Disponível nas contas bancárias até a data final',
+            helper: 'Saldo contábil: somente lançamentos postados até a data final',
             tone: Number(props.kpis.cash_balance_cents || 0) >= 0 ? 'positive' : 'negative',
             badge: 'Caixa',
             action: () => goToBankAccounts(),

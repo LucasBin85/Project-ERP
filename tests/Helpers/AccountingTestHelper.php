@@ -35,16 +35,35 @@ class AccountingTestHelper
         string $date,
         array $lines
     ): JournalEntry {
+        return self::createEntry($wallet, $date, $lines, 'posted', 'manual');
+    }
+
+    public static function createDraftEntry(
+        Wallet $wallet,
+        string $date,
+        array $lines,
+        string $source = 'manual',
+    ): JournalEntry {
+        return self::createEntry($wallet, $date, $lines, 'draft', $source);
+    }
+
+    private static function createEntry(
+        Wallet $wallet,
+        string $date,
+        array $lines,
+        string $status,
+        string $source,
+    ): JournalEntry {
         $debit = collect($lines)->where(1, 'debit')->sum(2);
         $credit = collect($lines)->where(1, 'credit')->sum(2);
 
         $entry = JournalEntry::query()->create([
             'wallet_id' => $wallet->id,
-            'source' => 'manual',
+            'source' => $source,
             'entry_date' => $date,
             'description' => 'Teste',
-            'status' => 'posted',
-            'posted_at' => now(),
+            'status' => $status,
+            'posted_at' => $status === 'posted' ? now() : null,
             'is_balanced' => $debit === $credit,
             'balance_diff_cents' => $debit - $credit,
         ]);

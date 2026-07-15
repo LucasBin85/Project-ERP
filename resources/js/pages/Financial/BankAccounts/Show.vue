@@ -5,18 +5,26 @@ import StatusBadge from '@/components/ui/StatusBadge.vue';
 import { useBankAccountsIndex } from '@/composables/financial/useBankAccountsIndex';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCurrency, formatDate } from '@/lib/formatters';
+import type { BankAccountOverview, BankAccountShowSummary } from '@/types/financial/bankAccount';
 import { Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import { route } from 'ziggy-js';
 
 const props = defineProps<{
-    wallet: Record<string, any>;
-    account: Record<string, any>;
-    summary: Record<string, number>;
+    wallet: { id: number; name: string };
+    account: BankAccountOverview;
+    summary: BankAccountShowSummary;
     credit_cards: Array<Record<string, any>>;
     actions: Record<string, string>;
 }>();
 
 const bankAccountsView = useBankAccountsIndex();
+const statementBalanceCents = computed(() =>
+    Number(props.summary.statement_balance_cents ?? props.account.statement_balance_cents ?? props.summary.current_balance_cents ?? 0),
+);
+const accountingBalanceCents = computed(() =>
+    Number(props.summary.accounting_balance_cents ?? props.account.accounting_balance_cents ?? props.summary.current_balance_cents ?? 0),
+);
 
 function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
     if (!invoice) return 'Sem fatura';
@@ -37,7 +45,7 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                 </Link>
 
                 <Link :href="actions.statement_url" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
-                    Abrir extrato
+                    Abrir Extrato
                 </Link>
             </div>
 
@@ -58,15 +66,21 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                     </template>
 
                     <div class="flex min-h-[220px] flex-col justify-between">
-                        <div class="p-6">
+                        <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
                             <div>
-                                <p class="text-sm font-medium text-gray-400">Saldo da conta</p>
-                                <p
-                                    class="mt-2 text-3xl font-bold"
-                                    :class="Number(summary.current_balance_cents) >= 0 ? 'text-green-300' : 'text-red-300'"
-                                >
-                                    {{ formatCurrency(summary.current_balance_cents) }}
+                                <p class="text-sm font-medium text-gray-400">Saldo do extrato</p>
+                                <p class="mt-2 text-3xl font-bold" :class="statementBalanceCents >= 0 ? 'text-green-300' : 'text-red-300'">
+                                    {{ formatCurrency(statementBalanceCents) }}
                                 </p>
+                                <p class="mt-2 text-xs leading-5 text-gray-500">Saldo conforme os movimentos disponíveis no Extrato.</p>
+                            </div>
+
+                            <div class="rounded-xl border border-gray-700 bg-gray-900/50 p-4">
+                                <p class="text-sm font-medium text-gray-400">Saldo contábil</p>
+                                <p class="mt-2 text-xl font-bold" :class="accountingBalanceCents >= 0 ? 'text-blue-300' : 'text-red-300'">
+                                    {{ formatCurrency(accountingBalanceCents) }}
+                                </p>
+                                <p class="mt-2 text-xs leading-5 text-gray-500">Considera somente lançamentos postados.</p>
                             </div>
                         </div>
 

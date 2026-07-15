@@ -30,11 +30,15 @@ const props = defineProps<{
     ofxPreview?: OfxImportPreview | null;
     flash?: {
         success?: string | null;
+        error?: string | null;
     };
+    errors?: Record<string, string>;
 }>();
 
 const showFilters = ref(false);
 const loadingOlder = ref(false);
+const bulkPosting = ref(false);
+const bulkPostRequestError = ref<string | null>(null);
 const loadMoreRef = ref<HTMLElement | null>(null);
 let observer: IntersectionObserver | null = null;
 
@@ -45,6 +49,7 @@ const form = reactive({
 });
 
 const accountUrl = computed(() => (props.selectedBankAccount ? route('bank-accounts.show', [props.selectedBankAccount.id]) : null));
+const feedbackError = computed(() => bulkPostRequestError.value ?? props.flash?.error ?? props.errors?.bulk_post ?? null);
 
 function statementRoute(params: Record<string, unknown> = {}) {
     return route('bank-accounts.statement', {
@@ -67,6 +72,34 @@ function applyFilters() {
             preserveScroll: true,
             preserveState: true,
             replace: true,
+        },
+    );
+}
+
+function bulkPostClassified() {
+    if (bulkPosting.value || !props.selectedBankAccount?.id || !form.start_date || !form.end_date) return;
+
+    bulkPostRequestError.value = null;
+
+    router.post(
+        route('bank-accounts.statement.bulk-post', {
+            bankAccount: props.selectedBankAccount.id,
+        }),
+        {
+            start_date: form.start_date,
+            end_date: form.end_date,
+        },
+        {
+            preserveScroll: true,
+            onStart: () => {
+                bulkPosting.value = true;
+            },
+            onError: (errors) => {
+                bulkPostRequestError.value = Object.values(errors)[0] ?? 'Não foi possível postar os lançamentos classificados.';
+            },
+            onFinish: () => {
+                bulkPosting.value = false;
+            },
         },
     );
 }
@@ -163,14 +196,34 @@ onBeforeUnmount(() => {
                 </button>
 
                 <OfxImportDialog v-if="selectedBankAccount" :bank-account="selectedBankAccount" :initial-preview="ofxPreview" />
+
+                <button
+                    v-if="selectedBankAccount"
+                    type="button"
+                    :disabled="bulkPosting || !form.start_date || !form.end_date"
+                    :aria-busy="bulkPosting"
+                    class="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Postar todos os lançamentos classificados no período selecionado"
+                    @click="bulkPostClassified"
+                >
+                    {{ bulkPosting ? 'Postando classificados...' : 'Postar classificados' }}
+                </button>
             </div>
 
             <div
-                v-if="flash?.success"
+                v-if="flash?.success && !feedbackError"
                 role="status"
                 class="rounded-2xl border border-green-500/30 bg-green-950/30 px-4 py-3 text-sm font-semibold text-green-300"
             >
                 {{ flash.success }}
+            </div>
+
+            <div
+                v-if="feedbackError"
+                role="alert"
+                class="rounded-2xl border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm font-semibold text-red-300"
+            >
+                {{ feedbackError }}
             </div>
 
             <ReportSection>
