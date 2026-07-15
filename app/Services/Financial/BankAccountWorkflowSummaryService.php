@@ -38,6 +38,7 @@ class BankAccountWorkflowSummaryService
             ->with([
                 'lines.chartOfAccount.children',
                 'settledAccountPayable:id,payment_journal_entry_id',
+                'settledAccountReceivable:id,receipt_journal_entry_id',
             ])
             ->get();
 
@@ -70,6 +71,16 @@ class BankAccountWorkflowSummaryService
             if ($audit?->operation_type === OfxOperationTypePolicy::PAYMENT
                 && $audit?->direction === OfxOperationTypePolicy::DIRECTION_OUT
                 && ! $entry->settledAccountPayable) {
+                $summary['pending_link_entries']++;
+
+                continue;
+            }
+
+            if ($audit?->operation_type === OfxOperationTypePolicy::INCOME
+                && $audit?->direction === OfxOperationTypePolicy::DIRECTION_IN
+                && $wallet->suspense_account_id
+                && $entry->lines->contains(fn (JournalLine $line) => (int) $line->chart_of_account_id === (int) $wallet->suspense_account_id)
+                && ! $entry->settledAccountReceivable) {
                 $summary['pending_link_entries']++;
 
                 continue;

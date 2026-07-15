@@ -79,11 +79,13 @@ class BankStatementService
                 $classification = $this->classification($wallet, $line);
                 $auditTransaction = $ofxTransactionsByLineId->get((int) $line->id);
                 $linkedAccountPayable = $entry?->settledAccountPayable;
+                $linkedAccountReceivable = $entry?->settledAccountReceivable;
                 $canEditOfx = $entry?->source === 'ofx'
                     && $entry?->status === 'draft'
                     && $ofxOriginLineIds->contains((int) $line->id)
                     && $classification['is_editable']
-                    && ! $linkedAccountPayable;
+                    && ! $linkedAccountPayable
+                    && ! $linkedAccountReceivable;
                 $match = $this->ofxMatch(
                     wallet: $wallet,
                     bankAccount: $bankAccount,
@@ -103,6 +105,7 @@ class BankStatementService
                     direction: $direction,
                     matchStatus: $match['status'],
                     hasLinkedPayable: (bool) $linkedAccountPayable,
+                    hasLinkedReceivable: (bool) $linkedAccountReceivable,
                 );
                 $operationSupportsClassification = $operationType
                     && in_array($operationType, $this->operationTypes->codes(), true)
@@ -144,6 +147,19 @@ class BankStatementService
                         'payee_name' => $linkedAccountPayable->payee_name,
                         'status' => $linkedAccountPayable->status,
                         'show_url' => route('accounts-payable.show', $linkedAccountPayable),
+                    ] : null,
+                    'can_link_account_receivable' => $canEditOfx
+                        && $direction === OfxOperationTypePolicy::DIRECTION_IN
+                        && $operationType === OfxOperationTypePolicy::INCOME
+                        && $classification['status'] === 'unclassified'
+                        && $match['status'] === 'none'
+                        && ! $linkedAccountReceivable,
+                    'linked_account_receivable' => $linkedAccountReceivable ? [
+                        'id' => $linkedAccountReceivable->id,
+                        'description' => $linkedAccountReceivable->description,
+                        'customer_name' => $linkedAccountReceivable->customer_name,
+                        'status' => $linkedAccountReceivable->status,
+                        'show_url' => route('accounts-receivable.show', $linkedAccountReceivable),
                     ] : null,
                     'match_status' => $match['status'],
                     'match_candidates' => $match['candidates'],
@@ -199,6 +215,7 @@ class BankStatementService
             ->with([
                 'journalEntry:id,wallet_id,entry_date,description,status,source',
                 'journalEntry.settledAccountPayable:id,payment_journal_entry_id,payee_name,description,status',
+                'journalEntry.settledAccountReceivable:id,receipt_journal_entry_id,customer_name,description,status',
                 'journalEntry.lines:id,journal_entry_id,chart_of_account_id,type,amount_cents,memo',
                 'journalEntry.lines.chartOfAccount:id,wallet_id,parent_id,code,name,type,financial_group,allows_posting',
                 'journalEntry.lines.chartOfAccount.children:id,parent_id',
@@ -496,6 +513,7 @@ class BankStatementService
         string $direction,
         string $matchStatus,
         bool $hasLinkedPayable,
+        bool $hasLinkedReceivable,
     ): string {
         if ($entry?->status === 'posted') {
             return 'posted';
@@ -504,6 +522,13 @@ class BankStatementService
         if ($operationType === OfxOperationTypePolicy::PAYMENT
             && $direction === OfxOperationTypePolicy::DIRECTION_OUT
             && ! $hasLinkedPayable) {
+            return 'pending_link';
+        }
+
+        if ($operationType === OfxOperationTypePolicy::INCOME
+            && $direction === OfxOperationTypePolicy::DIRECTION_IN
+            && $classificationStatus === 'unclassified'
+            && ! $hasLinkedReceivable) {
             return 'pending_link';
         }
 

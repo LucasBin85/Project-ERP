@@ -44,6 +44,11 @@ class JournalEntry extends Model
         return $this->hasOne(AccountPayable::class, 'payment_journal_entry_id');
     }
 
+    public function settledAccountReceivable(): HasOne
+    {
+        return $this->hasOne(AccountReceivable::class, 'receipt_journal_entry_id');
+    }
+
     /**
      * Recalcula is_balanced e balance_diff_cents (debit - credit)
      */

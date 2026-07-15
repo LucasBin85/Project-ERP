@@ -56,6 +56,14 @@ export interface BankStatementTransaction {
         status: string;
         show_url: string;
     } | null;
+    can_link_account_receivable: boolean;
+    linked_account_receivable: {
+        id: number;
+        description: string;
+        customer_name: string;
+        status: string;
+        show_url: string;
+    } | null;
     match_status: 'none' | 'unique' | 'ambiguous';
     match_resolution: 'created' | 'kept' | 'linked' | null;
     match_candidates: Array<{

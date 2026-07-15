@@ -229,6 +229,12 @@ class ClassifyOfxDraftEntry
             );
         }
 
+        if ($entry->settledAccountReceivable()->exists()) {
+            throw new OfxClassificationException(
+                'O lançamento já está vinculado a uma conta a receber e não pode ser reclassificado.',
+            );
+        }
+
         if (! $wallet->suspense_account_id) {
             throw new OfxClassificationException(
                 'A wallet ativa não possui conta "A classificar" definida.',

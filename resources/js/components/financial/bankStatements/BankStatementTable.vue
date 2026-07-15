@@ -10,6 +10,7 @@ import InlineOfxClassification from './InlineOfxClassification.vue';
 import InlineOfxMatchResolution from './InlineOfxMatchResolution.vue';
 import InlineOfxOperationType from './InlineOfxOperationType.vue';
 import InlinePayableSettlement from './InlinePayableSettlement.vue';
+import InlineReceivableSettlement from './InlineReceivableSettlement.vue';
 
 const props = defineProps<{
     transactions: BankStatementTransaction[];
@@ -94,6 +95,11 @@ function operationTypeLabel(transaction: BankStatementTransaction): string {
             <td class="px-4 py-3 text-sm">
                 <InlinePayableSettlement
                     v-if="transaction.linked_account_payable || transaction.can_link_account_payable"
+                    :transaction="transaction"
+                    :bank-account="bankAccount"
+                />
+                <InlineReceivableSettlement
+                    v-else-if="transaction.linked_account_receivable || transaction.can_link_account_receivable"
                     :transaction="transaction"
                     :bank-account="bankAccount"
                 />
