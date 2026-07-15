@@ -26,27 +26,6 @@ class BankStatementController extends Controller
 {
     use ResolvesActiveWallet;
 
-    public function index(Request $request): RedirectResponse
-    {
-        $wallet = $this->resolveActiveWallet($request);
-        $bankAccountId = $request->integer('bank_account_id');
-
-        if ($bankAccountId) {
-            $bankAccount = BankAccount::query()
-                ->where('wallet_id', $wallet->id)
-                ->findOrFail($bankAccountId);
-
-            return redirect()->route('bank-accounts.statement', array_filter([
-                'bankAccount' => $bankAccount,
-                'start_date' => $request->query('start_date'),
-                'end_date' => $request->query('end_date'),
-                'search' => $request->query('search'),
-            ]));
-        }
-
-        return redirect()->route('bank-accounts.index');
-    }
-
     public function show(
         Request $request,
         BankAccount $bankAccount,

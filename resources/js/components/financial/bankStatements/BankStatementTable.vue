@@ -31,7 +31,7 @@ function operationTypeLabel(operationType: BankStatementTransaction['operation_t
                 <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Valor</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Origem</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status contábil</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Validação / conciliação</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Validação bancária</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Tipo de operação</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Classificação</th>
                 <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Lançamento</th>

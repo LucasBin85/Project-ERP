@@ -11,9 +11,14 @@ use Tests\Helpers\FinancialTestHelper;
 
 uses(RefreshDatabase::class);
 
-it('keeps reconciliation creation routes out of the application flow', function () {
-    expect(\Illuminate\Support\Facades\Route::has('bank-reconciliations.create'))->toBeFalse()
-        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.store'))->toBeFalse();
+it('keeps financial navigation routes aligned with the contextual bank statement flow', function () {
+    expect(\Illuminate\Support\Facades\Route::has('bank-statements.index'))->toBeFalse()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.create'))->toBeFalse()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.store'))->toBeFalse()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-accounts.statement'))->toBeTrue()
+        ->and(\Illuminate\Support\Facades\Route::has('ofx-imports.index'))->toBeTrue()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.index'))->toBeTrue()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.show'))->toBeTrue();
 });
 
 it('creates a completed reconciliation when statement items match system movements', function () {

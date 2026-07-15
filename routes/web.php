@@ -93,9 +93,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('bank-transfers', BankTransferController::class)
             ->only(['index', 'create', 'store', 'show']);
 
-        Route::get('bank-statements', [BankStatementController::class, 'index'])
-            ->name('bank-statements.index');
-
         Route::get('cash-flow', [CashFlowController::class, 'index'])
             ->name('cash-flow.index');
 

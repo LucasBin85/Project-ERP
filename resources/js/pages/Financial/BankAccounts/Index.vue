@@ -19,7 +19,7 @@ defineProps<{
 const bankAccountsView = useBankAccountsIndex();
 
 function openAccount(accountId: number | string) {
-    router.visit(route('bank-accounts.show', [accountId]));
+    router.visit(route('bank-accounts.statement', [accountId]));
 }
 </script>
 
@@ -57,7 +57,7 @@ function openAccount(accountId: number | string) {
                     <div>
                         <h2 class="text-lg font-bold text-white">Contas cadastradas</h2>
                         <p class="text-sm text-gray-400">
-                            Clique em uma conta para abrir o painel operacional. A importação OFX fica disponível no Extrato Bancário.
+                            Clique em uma conta para abrir o Extrato, importar arquivos OFX e classificar os movimentos pendentes.
                         </p>
                     </div>
                 </template>
@@ -84,7 +84,7 @@ function openAccount(accountId: number | string) {
                     >
                         <td class="px-4 py-3 text-sm">
                             <Link
-                                :href="route('bank-accounts.show', [account.id])"
+                                :href="route('bank-accounts.statement', [account.id])"
                                 class="font-semibold text-white hover:text-indigo-300"
                                 @click.stop
                             >

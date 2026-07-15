@@ -16,8 +16,8 @@ defineProps<{
 </script>
 
 <template>
-    <AppLayout title="Conciliação Bancária">
-        <ReportPage title="Conciliação Bancária" :subtitle="wallet.name">
+    <AppLayout title="Auditoria de conciliação">
+        <ReportPage title="Registro de conciliação" :subtitle="wallet.name">
             <div class="flex justify-end gap-3">
                 <Link
                     :href="route('bank-reconciliations.index')"
@@ -27,14 +27,16 @@ defineProps<{
                 </Link>
 
                 <Link
-                    :href="route('bank-statements.index', {
-                        bank_account_id: reconciliation.bank_account_id,
-                        start_date: reconciliation.period_start?.substring(0, 10),
-                        end_date: reconciliation.period_end?.substring(0, 10),
-                    })"
+                    :href="
+                        route('bank-accounts.statement', {
+                            bankAccount: reconciliation.bank_account_id,
+                            start_date: reconciliation.period_start?.substring(0, 10),
+                            end_date: reconciliation.period_end?.substring(0, 10),
+                        })
+                    "
                     class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
                 >
-                    Ver extrato interno
+                    Abrir extrato da conta
                 </Link>
             </div>
 
@@ -42,6 +44,7 @@ defineProps<{
                 <template #header>
                     <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                         <div>
+                            <p class="mb-1 text-xs font-bold tracking-wide text-gray-500 uppercase">Registro histórico para auditoria</p>
                             <h2 class="text-lg font-bold text-white">
                                 {{ reconciliation.bank_account?.name }}
                             </h2>
@@ -56,29 +59,13 @@ defineProps<{
                 </template>
 
                 <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-5">
-                    <ReportSummaryCard
-                        label="Saldo inicial"
-                        :value="formatCurrency(reconciliation.opening_balance_cents)"
-                        tone="blue"
-                    />
+                    <ReportSummaryCard label="Saldo inicial" :value="formatCurrency(reconciliation.opening_balance_cents)" tone="blue" />
 
-                    <ReportSummaryCard
-                        label="Saldo contábil"
-                        :value="formatCurrency(reconciliation.book_balance_cents)"
-                        tone="neutral"
-                    />
+                    <ReportSummaryCard label="Saldo contábil" :value="formatCurrency(reconciliation.book_balance_cents)" tone="neutral" />
 
-                    <ReportSummaryCard
-                        label="Saldo extrato"
-                        :value="formatCurrency(reconciliation.statement_balance_cents)"
-                        tone="neutral"
-                    />
+                    <ReportSummaryCard label="Saldo extrato" :value="formatCurrency(reconciliation.statement_balance_cents)" tone="neutral" />
 
-                    <ReportSummaryCard
-                        label="Saldo conciliado"
-                        :value="formatCurrency(reconciliation.reconciled_balance_cents)"
-                        tone="green"
-                    />
+                    <ReportSummaryCard label="Saldo conciliado" :value="formatCurrency(reconciliation.reconciled_balance_cents)" tone="green" />
 
                     <ReportSummaryCard
                         label="Diferença"
@@ -88,7 +75,7 @@ defineProps<{
                 </div>
 
                 <div v-if="reconciliation.notes" class="border-t border-gray-700 p-6">
-                    <p class="text-xs uppercase text-gray-500">Observações</p>
+                    <p class="text-xs text-gray-500 uppercase">Observações</p>
                     <p class="mt-1 text-sm text-gray-200">
                         {{ reconciliation.notes }}
                     </p>
@@ -98,12 +85,10 @@ defineProps<{
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">
-                            OFX/extrato do banco × lançamento do sistema
-                        </h2>
+                        <h2 class="text-lg font-bold text-white">Vínculos registrados</h2>
 
                         <p class="text-sm text-gray-400">
-                            Vínculos registrados entre cada transação externa importada e os lançamentos internos do ERP.
+                            Relação histórica entre transações externas e lançamentos do ERP, preservada para rastreabilidade.
                         </p>
                     </div>
                 </template>
@@ -115,41 +100,36 @@ defineProps<{
                 >
                     <template #head>
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Status</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Fonte</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Data extrato</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição extrato</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Valor extrato</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Lançamento vinculado</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Valor sistema</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Fonte</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Data extrato</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Descrição extrato</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Valor extrato</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Lançamento vinculado</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Valor sistema</th>
                         </tr>
                     </template>
 
-                    <tr
-                        v-for="item in reconciliation.statement_items"
-                        :key="item.id"
-                        class="hover:bg-gray-800/50"
-                    >
-                        <td class="whitespace-nowrap px-4 py-3 text-sm">
+                    <tr v-for="item in reconciliation.statement_items" :key="item.id" class="hover:bg-gray-800/50">
+                        <td class="px-4 py-3 text-sm whitespace-nowrap">
                             <StatusBadge :status="item.status" />
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-sm">
-                            <div v-if="item.bank_statement_import_transaction" class="font-semibold text-green-300">
-                                OFX
-                            </div>
-                            <div v-else class="font-semibold text-gray-300">
-                                Manual
-                            </div>
+                        <td class="px-4 py-3 text-sm whitespace-nowrap">
+                            <div v-if="item.bank_statement_import_transaction" class="font-semibold text-green-300">OFX</div>
+                            <div v-else class="font-semibold text-gray-300">Manual</div>
                             <div v-if="item.bank_statement_import_transaction?.fit_id" class="max-w-[140px] truncate text-xs text-gray-500">
                                 {{ item.bank_statement_import_transaction.fit_id }}
                             </div>
-                            <div v-if="item.bank_statement_import_transaction?.import?.original_filename" class="max-w-[140px] truncate text-xs text-gray-500">
+                            <div
+                                v-if="item.bank_statement_import_transaction?.import?.original_filename"
+                                class="max-w-[140px] truncate text-xs text-gray-500"
+                            >
                                 {{ item.bank_statement_import_transaction.import.original_filename }}
                             </div>
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                        <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-300">
                             {{ formatDate(item.transaction_date) }}
                         </td>
 
@@ -158,7 +138,7 @@ defineProps<{
                         </td>
 
                         <td
-                            class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
+                            class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap"
                             :class="Number(item.amount_cents) >= 0 ? 'text-green-300' : 'text-red-300'"
                         >
                             {{ formatCurrency(item.amount_cents) }}
@@ -170,22 +150,22 @@ defineProps<{
                                 :href="route('journal-entries.show', [item.journal_line.journal_entry.id])"
                                 class="inline-flex items-center rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-medium text-gray-200 transition hover:bg-gray-700"
                             >
-                                JE-{{ String(item.journal_line.journal_entry.id).padStart(6, '0') }} · {{ item.journal_line?.journal_entry?.description }}
+                                JE-{{ String(item.journal_line.journal_entry.id).padStart(6, '0') }} ·
+                                {{ item.journal_line?.journal_entry?.description }}
                             </Link>
 
-                            <span v-else class="text-yellow-300">
-                                A conciliar
-                            </span>
+                            <span v-else class="text-yellow-300"> Sem vínculo registrado </span>
                         </td>
 
                         <td
-                            class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold"
+                            class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap"
                             :class="Number(item.journal_line?.amount_cents ?? 0) >= 0 ? 'text-gray-100' : 'text-red-300'"
                         >
                             <span v-if="item.journal_line">
-                                {{ item.journal_line.type === 'debit'
-                                    ? formatCurrency(item.journal_line.amount_cents)
-                                    : formatCurrency(Number(item.journal_line.amount_cents) * -1)
+                                {{
+                                    item.journal_line.type === 'debit'
+                                        ? formatCurrency(item.journal_line.amount_cents)
+                                        : formatCurrency(Number(item.journal_line.amount_cents) * -1)
                                 }}
                             </span>
                             <span v-else class="text-gray-500">-</span>

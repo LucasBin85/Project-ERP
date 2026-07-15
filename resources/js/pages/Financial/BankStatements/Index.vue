@@ -141,8 +141,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <AppLayout title="Extrato Bancário">
-        <ReportPage title="Extrato Bancário" :subtitle="selectedBankAccount ? `${selectedBankAccount.name} · ${wallet.name}` : wallet.name">
+    <AppLayout title="Extrato">
+        <ReportPage title="Extrato" :subtitle="selectedBankAccount ? `${selectedBankAccount.name} · ${wallet.name}` : wallet.name">
             <div class="flex flex-wrap justify-end gap-3">
                 <Link
                     v-if="accountUrl"
@@ -151,6 +151,16 @@ onBeforeUnmount(() => {
                 >
                     Resumo da conta
                 </Link>
+
+                <button
+                    type="button"
+                    class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                    :aria-expanded="showFilters"
+                    aria-controls="bank-statement-filters"
+                    @click="showFilters = !showFilters"
+                >
+                    {{ showFilters ? 'Ocultar filtros' : 'Filtros' }}
+                </button>
 
                 <OfxImportDialog v-if="selectedBankAccount" :bank-account="selectedBankAccount" :initial-preview="ofxPreview" />
             </div>
@@ -165,34 +175,26 @@ onBeforeUnmount(() => {
 
             <ReportSection>
                 <template #header>
-                    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <h2 class="text-lg font-bold text-white">Movimentos da conta</h2>
-                            <p class="mt-1 text-sm text-gray-400">
-                                O extrato lista lançamentos manuais, OFX e demais origens. Ao chegar ao fim da lista, períodos anteriores são
-                                carregados automaticamente.
-                            </p>
-                        </div>
-
-                        <button
-                            type="button"
-                            class="rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-semibold text-gray-300 hover:bg-gray-800"
-                            @click="showFilters = !showFilters"
-                        >
-                            {{ showFilters ? 'Ocultar filtros' : 'Filtros' }}
-                        </button>
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Movimentos da conta</h2>
+                        <p class="mt-1 text-sm text-gray-400">
+                            Consulte movimentos manuais, importados por OFX e de outras origens. Classifique e poste os itens pendentes diretamente no
+                            Extrato.
+                        </p>
                     </div>
                 </template>
 
                 <div class="border-b border-gray-700 p-6">
+                    <label for="bank-statement-search" class="mb-2 block text-sm font-semibold text-gray-300">Buscar movimentos</label>
                     <input
+                        id="bank-statement-search"
                         v-model="form.search"
                         class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
-                        placeholder="Buscar no extrato..."
+                        placeholder="Descrição ou histórico..."
                     />
                 </div>
 
-                <div v-if="showFilters" class="border-b border-gray-700 p-6">
+                <div v-if="showFilters" id="bank-statement-filters" class="border-b border-gray-700 p-6">
                     <BankStatementDateRangeFilter v-model:start="form.start_date" v-model:end="form.end_date" />
                 </div>
 

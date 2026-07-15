@@ -22,18 +22,24 @@ function formatPaginationLabel(label: string): string {
 </script>
 
 <template>
-    <AppLayout title="Conciliação Bancária">
-        <ReportPage title="Conciliação Bancária" :subtitle="wallet.name">
+    <AppLayout title="Histórico de conciliações">
+        <ReportPage title="Histórico de conciliações bancárias" :subtitle="wallet.name">
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">Conciliações registradas</h2>
+                        <h2 class="text-lg font-bold text-white">Registros de conciliação</h2>
 
-                        <p class="text-sm text-gray-400">Comparação manual entre o saldo informado pelo banco e as movimentações postadas no ERP.</p>
+                        <p class="text-sm text-gray-400">
+                            Histórico preservado para auditoria e rastreabilidade. A operação atual acontece no Extrato de cada conta.
+                        </p>
                     </div>
                 </template>
 
-                <ReportTable :empty="reconciliations.data.length === 0" empty-message="Nenhuma conciliação encontrada." :empty-colspan="7">
+                <ReportTable
+                    :empty="reconciliations.data.length === 0"
+                    empty-message="Nenhum registro histórico de conciliação encontrado."
+                    :empty-colspan="7"
+                >
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Período</th>
@@ -79,7 +85,7 @@ function formatPaginationLabel(label: string): string {
                                 :href="route('bank-reconciliations.show', [reconciliation.id])"
                                 class="inline-flex items-center rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-medium text-gray-200 transition hover:bg-gray-700"
                             >
-                                Ver
+                                Ver registro
                             </Link>
                         </td>
                     </tr>

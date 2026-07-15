@@ -139,7 +139,7 @@ watch(
 <template>
     <Dialog :open="open" @update:open="handleOpenChange">
         <DialogTrigger as-child>
-            <button type="button" class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800">
+            <button type="button" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
                 Importar OFX
             </button>
         </DialogTrigger>
@@ -162,7 +162,7 @@ watch(
                                 : 'border-gray-700 text-gray-500'
                         "
                     >
-                        1. Upload
+                        1. Arquivo OFX
                     </li>
                     <li
                         class="rounded-lg border px-3 py-2"
@@ -207,7 +207,7 @@ watch(
                 >
                     <p class="text-base font-bold">Importação concluída</p>
                     <p class="mt-2 text-sm">{{ completedMessage }}</p>
-                    <p class="mt-3 text-xs text-green-300/80">O extrato bancário foi atualizado.</p>
+                    <p class="mt-3 text-xs text-green-300/80">O Extrato foi atualizado.</p>
                 </div>
 
                 <form v-else-if="!ofxImport.preview.value" class="space-y-6" @submit.prevent="ofxImport.loadPreview()">
@@ -240,7 +240,7 @@ watch(
                             :disabled="!ofxImport.canPreview.value || ofxImport.processing.value"
                             class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {{ ofxImport.previewForm.processing ? 'Carregando prévia...' : 'Carregar prévia' }}
+                            {{ ofxImport.previewForm.processing ? 'Gerando pré-visualização...' : 'Pré-visualizar' }}
                         </button>
                     </DialogFooter>
                 </form>
@@ -261,6 +261,7 @@ watch(
                     <section class="rounded-xl border p-4" :class="accountStatusClasses[ofxImport.preview.value.account_validation.status]">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div>
+                                <p class="text-xs font-bold tracking-wide uppercase opacity-70">Validação bancária</p>
                                 <p class="text-sm font-bold">
                                     {{ accountStatusLabels[ofxImport.preview.value.account_validation.status] }}
                                 </p>
@@ -369,7 +370,7 @@ watch(
                     </div>
 
                     <p v-if="ofxImport.hasPreviewErrors.value" class="text-sm text-red-300">
-                        Corrija o arquivo e carregue uma nova prévia. Nenhum lançamento será criado enquanto houver linhas com erro.
+                        Corrija o arquivo e gere uma nova pré-visualização. Nenhum lançamento será criado enquanto houver linhas com erro.
                     </p>
 
                     <DialogFooter class="gap-2">

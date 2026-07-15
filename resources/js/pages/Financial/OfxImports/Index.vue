@@ -17,26 +17,26 @@ const props = defineProps<{
 </script>
 
 <template>
-    <AppLayout title="Histórico OFX">
+    <AppLayout title="Auditoria de importações OFX">
         <ReportPage title="Histórico de importações OFX" :subtitle="props.wallet?.name">
             <div v-if="selectedBankAccountId" class="flex justify-end">
                 <Link
                     :href="route('bank-accounts.show', [selectedBankAccountId])"
                     class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
                 >
-                    Voltar para a conta bancária
+                    Resumo da conta
                 </Link>
             </div>
 
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">Histórico de importações</h2>
+                        <h2 class="text-lg font-bold text-white">Registros de importação</h2>
                         <p class="text-sm text-gray-400">
                             {{
                                 selectedBankAccountId
-                                    ? 'Últimos arquivos OFX importados para esta conta.'
-                                    : 'Últimos arquivos OFX importados para a carteira ativa.'
+                                    ? 'Auditoria dos arquivos OFX já processados nesta conta. Novas importações devem ser iniciadas no Extrato.'
+                                    : 'Auditoria dos arquivos OFX já processados na carteira ativa. Novas importações devem ser iniciadas no Extrato de uma conta.'
                             }}
                         </p>
                     </div>

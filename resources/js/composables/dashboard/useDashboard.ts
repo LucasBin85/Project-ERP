@@ -50,11 +50,8 @@ export function useDashboard(props) {
         })
     }
 
-    function goToBankStatements() {
-        router.get(route('bank-statements.index'), {
-            start_date: form.start_date,
-            end_date: form.end_date,
-        })
+    function goToBankAccounts() {
+        router.get(route('bank-accounts.index'))
     }
 
     function goToAccountsReceivable() {
@@ -115,7 +112,7 @@ export function useDashboard(props) {
             helper: 'Disponível nas contas bancárias até a data final',
             tone: Number(props.kpis.cash_balance_cents || 0) >= 0 ? 'positive' : 'negative',
             badge: 'Caixa',
-            action: () => goToBankStatements(),
+            action: () => goToBankAccounts(),
         },
         {
             label: 'Caixa projetado',
@@ -215,7 +212,7 @@ export function useDashboard(props) {
         clearFilters,
         goToGeneralJournal,
         goToCashFlow,
-        goToBankStatements,
+        goToBankAccounts,
         goToAccountsReceivable,
         goToAccountsPayable,
         goToCreditCards,
