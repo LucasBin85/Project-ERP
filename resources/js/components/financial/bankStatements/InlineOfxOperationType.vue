@@ -3,7 +3,7 @@ import InputError from '@/components/InputError.vue';
 import type { BankStatementAccount, BankStatementTransaction } from '@/types/financial/bankStatement';
 import type { FinancialOperationTypeOption } from '@/types/financial/operationType';
 import { useForm } from '@inertiajs/vue3';
-import { watch } from 'vue';
+import { computed, watch } from 'vue';
 import { route } from 'ziggy-js';
 
 const props = defineProps<{
@@ -17,6 +17,22 @@ const form = useForm({
     chart_of_account_id: null as null,
     should_post: false,
 });
+
+const allowedOperationTypes = computed(() =>
+    props.operationTypes.filter((operationType) => props.transaction.allowed_operation_types.includes(operationType.code)),
+);
+
+function optionLabel(operationType: FinancialOperationTypeOption): string {
+    if (operationType.code === 'investment') {
+        return props.transaction.type === 'inflow' ? 'Resgate de investimento' : 'Investimento / aplicação';
+    }
+
+    if (operationType.code === 'other' && props.transaction.type === 'inflow') {
+        return 'Reembolso, estorno ou outro';
+    }
+
+    return operationType.label;
+}
 
 function saveOperationType() {
     if (!props.transaction.journal_entry_id || !form.operation_type || form.processing) return;
@@ -48,8 +64,8 @@ watch(
             @change="saveOperationType"
         >
             <option value="" disabled>Selecionar tipo...</option>
-            <option v-for="operationType in operationTypes" :key="operationType.code" :value="operationType.code">
-                {{ operationType.label }}
+            <option v-for="operationType in allowedOperationTypes" :key="operationType.code" :value="operationType.code">
+                {{ optionLabel(operationType) }}
             </option>
         </select>
         <InputError :message="form.errors.operation_type || form.errors.chart_of_account_id" />

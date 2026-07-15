@@ -8,8 +8,10 @@ use App\Models\BankAccount;
 use App\Models\BankReconciliationItem;
 use App\Models\BankReconciliationStatementItem;
 use App\Models\BankStatementImportTransaction;
+use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Wallet;
+use App\Services\Accounting\AssessJournalEntryPostingReadiness;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -18,6 +20,7 @@ class BankStatementService
     public function __construct(
         private readonly FindMatchingOfxJournalLine $matchingJournalLines,
         private readonly OfxOperationTypePolicy $operationTypes,
+        private readonly AssessJournalEntryPostingReadiness $postingReadiness,
     ) {}
 
     public function build(Wallet $wallet, BankStatementFiltersDTO $filters): BankStatementDTO
@@ -75,10 +78,12 @@ class BankStatementService
 
                 $classification = $this->classification($wallet, $line);
                 $auditTransaction = $ofxTransactionsByLineId->get((int) $line->id);
+                $linkedAccountPayable = $entry?->settledAccountPayable;
                 $canEditOfx = $entry?->source === 'ofx'
                     && $entry?->status === 'draft'
                     && $ofxOriginLineIds->contains((int) $line->id)
-                    && $classification['is_editable'];
+                    && $classification['is_editable']
+                    && ! $linkedAccountPayable;
                 $match = $this->ofxMatch(
                     wallet: $wallet,
                     bankAccount: $bankAccount,
@@ -87,6 +92,18 @@ class BankStatementService
                     canEdit: $canEditOfx,
                 );
                 $operationType = $auditTransaction?->operation_type;
+                $direction = $line->type === 'debit'
+                    ? OfxOperationTypePolicy::DIRECTION_IN
+                    : OfxOperationTypePolicy::DIRECTION_OUT;
+                $workflowStatus = $this->workflowStatus(
+                    wallet: $wallet,
+                    entry: $entry,
+                    classificationStatus: $classification['status'],
+                    operationType: $operationType,
+                    direction: $direction,
+                    matchStatus: $match['status'],
+                    hasLinkedPayable: (bool) $linkedAccountPayable,
+                );
                 $operationSupportsClassification = $operationType
                     && in_array($operationType, $this->operationTypes->codes(), true)
                     && $this->operationTypes->supportsClassification($operationType);
@@ -97,6 +114,7 @@ class BankStatementService
                     'journal_entry_id' => $entry?->id,
                     'description' => $entry?->description ?: $line->memo,
                     'accounting_status' => $entry?->status,
+                    'workflow_status' => $workflowStatus,
                     'source' => $entry?->source,
                     'source_label' => $this->sourceLabel($entry?->source),
                     'reconciliation_status' => $this->reconciliationStatus(
@@ -108,10 +126,25 @@ class BankStatementService
                     'classification_label' => $classification['label'],
                     'classification_account_id' => $classification['account_id'],
                     'operation_type' => $operationType,
+                    'allowed_operation_types' => $this->operationTypes
+                        ->allowedOperationTypesForDirection($direction),
                     'can_edit_operation_type' => $canEditOfx && $match['status'] === 'none',
                     'can_classify' => $canEditOfx
                         && $match['status'] === 'none'
                         && $operationSupportsClassification,
+                    'can_link_account_payable' => $canEditOfx
+                        && $direction === OfxOperationTypePolicy::DIRECTION_OUT
+                        && $operationType === OfxOperationTypePolicy::PAYMENT
+                        && $classification['status'] === 'unclassified'
+                        && $match['status'] === 'none'
+                        && ! $linkedAccountPayable,
+                    'linked_account_payable' => $linkedAccountPayable ? [
+                        'id' => $linkedAccountPayable->id,
+                        'description' => $linkedAccountPayable->description,
+                        'payee_name' => $linkedAccountPayable->payee_name,
+                        'status' => $linkedAccountPayable->status,
+                        'show_url' => route('accounts-payable.show', $linkedAccountPayable),
+                    ] : null,
                     'match_status' => $match['status'],
                     'match_candidates' => $match['candidates'],
                     'match_resolution' => $auditTransaction?->resolution,
@@ -165,8 +198,10 @@ class BankStatementService
         return JournalLine::query()
             ->with([
                 'journalEntry:id,wallet_id,entry_date,description,status,source',
+                'journalEntry.settledAccountPayable:id,payment_journal_entry_id,payee_name,description,status',
                 'journalEntry.lines:id,journal_entry_id,chart_of_account_id,type,amount_cents,memo',
-                'journalEntry.lines.chartOfAccount:id,code,name',
+                'journalEntry.lines.chartOfAccount:id,wallet_id,parent_id,code,name,type,financial_group,allows_posting',
+                'journalEntry.lines.chartOfAccount.children:id,parent_id',
             ])
             ->where('chart_of_account_id', $bankAccount->chart_of_account_id)
             ->whereHas('journalEntry', function ($query) use ($wallet, $filters) {
@@ -451,6 +486,38 @@ class BankStatementService
             'manual' => 'Manual',
             default => $source ? str($source)->headline()->toString() : 'Manual',
         };
+    }
+
+    private function workflowStatus(
+        Wallet $wallet,
+        ?JournalEntry $entry,
+        string $classificationStatus,
+        ?string $operationType,
+        string $direction,
+        string $matchStatus,
+        bool $hasLinkedPayable,
+    ): string {
+        if ($entry?->status === 'posted') {
+            return 'posted';
+        }
+
+        if ($operationType === OfxOperationTypePolicy::PAYMENT
+            && $direction === OfxOperationTypePolicy::DIRECTION_OUT
+            && ! $hasLinkedPayable) {
+            return 'pending_link';
+        }
+
+        if ($matchStatus !== 'none') {
+            return 'pending_link';
+        }
+
+        if ($entry && $this->postingReadiness->handle($wallet, $entry)->ready) {
+            return 'ready_for_accounting';
+        }
+
+        return $classificationStatus === 'unclassified'
+            ? 'pending_classification'
+            : 'classified';
     }
 
     private function calculateDebitBalance(Collection $lines): int

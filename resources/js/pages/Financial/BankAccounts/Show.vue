@@ -22,9 +22,6 @@ const bankAccountsView = useBankAccountsIndex();
 const statementBalanceCents = computed(() =>
     Number(props.summary.statement_balance_cents ?? props.account.statement_balance_cents ?? props.summary.current_balance_cents ?? 0),
 );
-const accountingBalanceCents = computed(() =>
-    Number(props.summary.accounting_balance_cents ?? props.account.accounting_balance_cents ?? props.summary.current_balance_cents ?? 0),
-);
 
 function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
     if (!invoice) return 'Sem fatura';
@@ -66,21 +63,32 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                     </template>
 
                     <div class="flex min-h-[220px] flex-col justify-between">
-                        <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
-                            <div>
-                                <p class="text-sm font-medium text-gray-400">Saldo do extrato</p>
-                                <p class="mt-2 text-3xl font-bold" :class="statementBalanceCents >= 0 ? 'text-green-300' : 'text-red-300'">
-                                    {{ formatCurrency(statementBalanceCents) }}
-                                </p>
-                                <p class="mt-2 text-xs leading-5 text-gray-500">Saldo conforme os movimentos disponíveis no Extrato.</p>
-                            </div>
+                        <div class="p-6">
+                            <p class="text-sm font-medium text-gray-400">Saldo do extrato</p>
+                            <p class="mt-2 text-3xl font-bold" :class="statementBalanceCents >= 0 ? 'text-green-300' : 'text-red-300'">
+                                {{ formatCurrency(statementBalanceCents) }}
+                            </p>
+                            <p class="mt-2 text-xs leading-5 text-gray-500">
+                                Considera todos os movimentos bancários reais, independentemente de classificação ou postagem contábil.
+                            </p>
+                        </div>
 
-                            <div class="rounded-xl border border-gray-700 bg-gray-900/50 p-4">
-                                <p class="text-sm font-medium text-gray-400">Saldo contábil</p>
-                                <p class="mt-2 text-xl font-bold" :class="accountingBalanceCents >= 0 ? 'text-blue-300' : 'text-red-300'">
-                                    {{ formatCurrency(accountingBalanceCents) }}
-                                </p>
-                                <p class="mt-2 text-xs leading-5 text-gray-500">Considera somente lançamentos postados.</p>
+                        <div class="grid grid-cols-2 gap-px border-t border-gray-700 bg-gray-700 lg:grid-cols-4">
+                            <div class="bg-gray-950 p-4">
+                                <p class="text-xs text-gray-500 uppercase">Sem classificação</p>
+                                <p class="mt-1 text-xl font-bold text-yellow-300">{{ summary.unclassified_entries ?? 0 }}</p>
+                            </div>
+                            <div class="bg-gray-950 p-4">
+                                <p class="text-xs text-gray-500 uppercase">Prontos para contabilidade</p>
+                                <p class="mt-1 text-xl font-bold text-green-300">{{ summary.ready_for_accounting_entries ?? 0 }}</p>
+                            </div>
+                            <div class="bg-gray-950 p-4">
+                                <p class="text-xs text-gray-500 uppercase">Vínculo pendente</p>
+                                <p class="mt-1 text-xl font-bold text-orange-300">{{ summary.pending_link_entries ?? 0 }}</p>
+                            </div>
+                            <div class="bg-gray-950 p-4">
+                                <p class="text-xs text-gray-500 uppercase">Postados</p>
+                                <p class="mt-1 text-xl font-bold text-blue-300">{{ summary.posted_entries ?? 0 }}</p>
                             </div>
                         </div>
 

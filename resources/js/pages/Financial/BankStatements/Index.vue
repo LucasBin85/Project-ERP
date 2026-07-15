@@ -37,8 +37,6 @@ const props = defineProps<{
 
 const showFilters = ref(false);
 const loadingOlder = ref(false);
-const bulkPosting = ref(false);
-const bulkPostRequestError = ref<string | null>(null);
 const loadMoreRef = ref<HTMLElement | null>(null);
 let observer: IntersectionObserver | null = null;
 
@@ -49,7 +47,7 @@ const form = reactive({
 });
 
 const accountUrl = computed(() => (props.selectedBankAccount ? route('bank-accounts.show', [props.selectedBankAccount.id]) : null));
-const feedbackError = computed(() => bulkPostRequestError.value ?? props.flash?.error ?? props.errors?.bulk_post ?? null);
+const feedbackError = computed(() => props.flash?.error ?? Object.values(props.errors ?? {})[0] ?? null);
 
 function statementRoute(params: Record<string, unknown> = {}) {
     return route('bank-accounts.statement', {
@@ -72,34 +70,6 @@ function applyFilters() {
             preserveScroll: true,
             preserveState: true,
             replace: true,
-        },
-    );
-}
-
-function bulkPostClassified() {
-    if (bulkPosting.value || !props.selectedBankAccount?.id || !form.start_date || !form.end_date) return;
-
-    bulkPostRequestError.value = null;
-
-    router.post(
-        route('bank-accounts.statement.bulk-post', {
-            bankAccount: props.selectedBankAccount.id,
-        }),
-        {
-            start_date: form.start_date,
-            end_date: form.end_date,
-        },
-        {
-            preserveScroll: true,
-            onStart: () => {
-                bulkPosting.value = true;
-            },
-            onError: (errors) => {
-                bulkPostRequestError.value = Object.values(errors)[0] ?? 'Não foi possível postar os lançamentos classificados.';
-            },
-            onFinish: () => {
-                bulkPosting.value = false;
-            },
         },
     );
 }
@@ -197,17 +167,12 @@ onBeforeUnmount(() => {
 
                 <OfxImportDialog v-if="selectedBankAccount" :bank-account="selectedBankAccount" :initial-preview="ofxPreview" />
 
-                <button
-                    v-if="selectedBankAccount"
-                    type="button"
-                    :disabled="bulkPosting || !form.start_date || !form.end_date"
-                    :aria-busy="bulkPosting"
-                    class="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    title="Postar todos os lançamentos classificados no período selecionado"
-                    @click="bulkPostClassified"
+                <Link
+                    :href="route('accounting.pending-entries.index')"
+                    class="rounded-lg border border-green-600/70 px-4 py-2 text-sm font-semibold text-green-300 hover:bg-green-950/30"
                 >
-                    {{ bulkPosting ? 'Postando classificados...' : 'Postar classificados' }}
-                </button>
+                    Pendências contábeis
+                </Link>
             </div>
 
             <div
@@ -231,8 +196,8 @@ onBeforeUnmount(() => {
                     <div>
                         <h2 class="text-lg font-bold text-white">Movimentos da conta</h2>
                         <p class="mt-1 text-sm text-gray-400">
-                            Consulte movimentos manuais, importados por OFX e de outras origens. Classifique e poste os itens pendentes diretamente no
-                            Extrato.
+                            Consulte movimentos manuais, importados por OFX e de outras origens. Classifique e vincule pendências para deixar os itens
+                            prontos para a Contabilidade.
                         </p>
                     </div>
                 </template>

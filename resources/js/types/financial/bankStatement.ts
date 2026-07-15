@@ -3,6 +3,7 @@ import type { FinancialOperationType } from '@/types/financial/operationType';
 export type JournalEntryStatus = 'draft' | 'posted';
 export type ReconciliationStatus = 'pending' | 'reconciled' | 'reconciled_via_ofx';
 export type ClassificationStatus = 'classified' | 'unclassified';
+export type BankStatementWorkflowStatus = 'pending_classification' | 'classified' | 'pending_link' | 'ready_for_accounting' | 'posted';
 
 export interface BankStatementWallet {
     id: number;
@@ -36,6 +37,7 @@ export interface BankStatementTransaction {
     journal_entry_id: number | null;
     description: string | null;
     accounting_status: JournalEntryStatus;
+    workflow_status: BankStatementWorkflowStatus;
     source: string | null;
     source_label: string;
     reconciliation_status: ReconciliationStatus;
@@ -43,8 +45,17 @@ export interface BankStatementTransaction {
     classification_label: string;
     classification_account_id: number | null;
     operation_type: FinancialOperationType | null;
+    allowed_operation_types: FinancialOperationType[];
     can_edit_operation_type: boolean;
     can_classify: boolean;
+    can_link_account_payable: boolean;
+    linked_account_payable: {
+        id: number;
+        description: string;
+        payee_name: string;
+        status: string;
+        show_url: string;
+    } | null;
     match_status: 'none' | 'unique' | 'ambiguous';
     match_resolution: 'created' | 'kept' | 'linked' | null;
     match_candidates: Array<{

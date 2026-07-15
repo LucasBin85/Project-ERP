@@ -1,8 +1,11 @@
 <?php
 
+use App\Models\BankStatementImport;
+use App\Models\BankStatementImportTransaction;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Financial\BuildBankAccountWorkspace;
+use App\Services\Financial\OfxOperationTypePolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
@@ -24,7 +27,9 @@ it('builds bank accounts overview with current balances', function () {
     );
 
     $equity = AccountingTestHelper::account($wallet, '3.1', 'Capital Social', 'patrimonio', 'credit');
-    $expense = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
+    $expense = AccountingTestHelper::account($wallet, '5.91.1', 'Despesa Administrativa', 'despesa', 'debit');
+    $suspense = AccountingTestHelper::account($wallet, '1.1.9', 'A classificar', 'ativo', 'debit');
+    $wallet->update(['suspense_account_id' => $suspense->id]);
 
     AccountingTestHelper::createPostedEntry($wallet, now()->subDays(3)->toDateString(), [
         [$bankAccount->chartOfAccount, 'debit', 100000],
@@ -69,7 +74,10 @@ it('builds a bank account workspace with recent transactions and actions', funct
     );
 
     $equity = AccountingTestHelper::account($wallet, '3.1', 'Capital Social', 'patrimonio', 'credit');
-    $expense = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
+    $expense = AccountingTestHelper::account($wallet, '5.91.1', 'Despesa Administrativa', 'despesa', 'debit');
+
+    $suspense = AccountingTestHelper::account($wallet, '1.1.9', 'A classificar', 'ativo', 'debit');
+    $wallet->update(['suspense_account_id' => $suspense->id]);
 
     AccountingTestHelper::createPostedEntry($wallet, now()->subDays(3)->toDateString(), [
         [$bankAccount->chartOfAccount, 'debit', 100000],
@@ -84,18 +92,57 @@ it('builds a bank account workspace with recent transactions and actions', funct
         [$expense, 'debit', 10000],
         [$bankAccount->chartOfAccount, 'credit', 10000],
     ], 'ofx');
+    AccountingTestHelper::createDraftEntry($wallet, now()->toDateString(), [
+        [$bankAccount->chartOfAccount, 'debit', 7000],
+        [$suspense, 'credit', 7000],
+    ], 'ofx');
+    $paymentEntry = AccountingTestHelper::createDraftEntry($wallet, now()->toDateString(), [
+        [$suspense, 'debit', 8000],
+        [$bankAccount->chartOfAccount, 'credit', 8000],
+    ], 'ofx');
+    $paymentBankLine = $paymentEntry->lines()
+        ->where('chart_of_account_id', $bankAccount->chart_of_account_id)
+        ->firstOrFail();
+    $import = BankStatementImport::query()->create([
+        'wallet_id' => $wallet->id,
+        'bank_account_id' => $bankAccount->id,
+        'source' => 'ofx',
+        'original_filename' => 'resumo-conta.ofx',
+        'file_hash' => hash('sha256', 'resumo-conta-'.$wallet->id),
+        'status' => 'completed',
+    ]);
+    BankStatementImportTransaction::query()->create([
+        'bank_statement_import_id' => $import->id,
+        'wallet_id' => $wallet->id,
+        'bank_account_id' => $bankAccount->id,
+        'journal_entry_id' => $paymentEntry->id,
+        'journal_line_id' => $paymentBankLine->id,
+        'external_id' => 'workspace-payment-'.$paymentEntry->id,
+        'transaction_hash' => hash('sha256', 'workspace-payment-'.$paymentEntry->id),
+        'posted_at' => now()->toDateString(),
+        'description' => 'Pagamento pendente de vínculo',
+        'amount_cents' => 8000,
+        'direction' => 'out',
+        'operation_type' => OfxOperationTypePolicy::PAYMENT,
+        'status' => 'imported',
+        'resolution' => 'created',
+    ]);
 
     $data = app(BuildBankAccountWorkspace::class)->show($wallet, $bankAccount);
 
-    expect($data['summary']['statement_balance_cents'])->toBe(65000)
+    expect($data['summary']['statement_balance_cents'])->toBe(64000)
         ->and($data['summary']['accounting_balance_cents'])->toBe(75000)
-        ->and($data['summary']['current_balance_cents'])->toBe(65000)
-        ->and($data['account']['statement_balance_cents'])->toBe(65000)
+        ->and($data['summary']['current_balance_cents'])->toBe(64000)
+        ->and($data['account']['statement_balance_cents'])->toBe(64000)
         ->and($data['account']['accounting_balance_cents'])->toBe(75000)
-        ->and($data['account']['current_balance_cents'])->toBe(65000)
+        ->and($data['account']['current_balance_cents'])->toBe(64000)
         ->and($data['summary']['month_inflows_cents'])->toBe(100000)
         ->and($data['summary']['month_outflows_cents'])->toBe(25000)
         ->and($data['recent_transactions'])->toHaveCount(2)
+        ->and($data['summary']['unclassified_entries'])->toBe(1)
+        ->and($data['summary']['ready_for_accounting_entries'])->toBe(1)
+        ->and($data['summary']['pending_link_entries'])->toBe(1)
+        ->and($data['summary']['posted_entries'])->toBe(2)
         ->and($data['actions']['statement_url'])->toContain('/bank-accounts/'.$bankAccount->id.'/statement')
         ->and($data['actions'])->not->toHaveKey('ofx_import_url')
         ->and($data['actions'])->not->toHaveKey('reconciliation_url');

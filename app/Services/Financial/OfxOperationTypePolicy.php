@@ -11,6 +11,10 @@ use InvalidArgumentException;
 
 class OfxOperationTypePolicy
 {
+    public const DIRECTION_IN = 'in';
+
+    public const DIRECTION_OUT = 'out';
+
     public const TRANSFER = 'transfer';
 
     public const PAYMENT = 'payment';
@@ -75,6 +79,54 @@ class OfxOperationTypePolicy
     public function codes(): array
     {
         return array_column($this->metadata(), 'code');
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function allowedOperationTypesForDirection(string $direction): array
+    {
+        $this->assertValidDirection($direction);
+
+        return array_values(array_filter(
+            $this->codes(),
+            fn (string $operationType) => match ($direction) {
+                self::DIRECTION_IN => ! in_array($operationType, [
+                    self::PAYMENT,
+                    self::EXPENSE,
+                    self::FEE,
+                ], true),
+                self::DIRECTION_OUT => $operationType !== self::INCOME,
+            },
+        ));
+    }
+
+    public function isOperationTypeAllowedForDirection(
+        string $operationType,
+        string $direction,
+    ): bool {
+        $this->assertValidOperationType($operationType);
+        $this->assertValidDirection($direction);
+
+        return in_array(
+            $operationType,
+            $this->allowedOperationTypesForDirection($direction),
+            true,
+        );
+    }
+
+    public function validateOperationTypeForDirection(
+        string $operationType,
+        string $direction,
+    ): void {
+        if ($this->isOperationTypeAllowedForDirection($operationType, $direction)) {
+            return;
+        }
+
+        throw new InvalidArgumentException(match ($direction) {
+            self::DIRECTION_IN => 'Este tipo de operação não é permitido para uma entrada bancária.',
+            self::DIRECTION_OUT => 'Este tipo de operação não é permitido para uma saída bancária.',
+        });
     }
 
     public function supportsClassification(string $operationType): bool
@@ -228,6 +280,13 @@ class OfxOperationTypePolicy
     {
         if (! in_array($operationType, $this->codes(), true)) {
             throw new InvalidArgumentException('Tipo de operação OFX inválido.');
+        }
+    }
+
+    private function assertValidDirection(string $direction): void
+    {
+        if (! in_array($direction, [self::DIRECTION_IN, self::DIRECTION_OUT], true)) {
+            throw new InvalidArgumentException('Direção do movimento bancário inválida.');
         }
     }
 }

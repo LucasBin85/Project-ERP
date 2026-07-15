@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Financial;
 use App\DTOs\Financial\BankStatementFiltersDTO;
 use App\DTOs\Financial\OfxClassificationDTO;
 use App\Exceptions\OfxClassificationException;
+use App\Exceptions\OfxOperationTypeDirectionException;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
@@ -148,6 +149,10 @@ class BankStatementController extends Controller
                 entry: $journalEntry,
                 dto: OfxClassificationDTO::fromArray($data),
             );
+        } catch (OfxOperationTypeDirectionException $exception) {
+            return back()->withErrors([
+                'operation_type' => $exception->getMessage(),
+            ]);
         } catch (OfxClassificationException $exception) {
             return back()->withErrors([
                 'chart_of_account_id' => $exception->getMessage(),

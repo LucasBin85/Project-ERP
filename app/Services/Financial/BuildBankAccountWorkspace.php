@@ -15,6 +15,7 @@ class BuildBankAccountWorkspace
 {
     public function __construct(
         private readonly BankAccountBalanceService $balances,
+        private readonly BankAccountWorkflowSummaryService $workflowSummary,
     ) {}
 
     public function index(Wallet $wallet): array
@@ -51,6 +52,7 @@ class BuildBankAccountWorkspace
         $currentMonthStart = now()->startOfMonth()->toDateString();
         $today = now()->toDateString();
         $balances = $this->balances->calculate($wallet, $bankAccount);
+        $workflowSummary = $this->workflowSummary->handle($wallet, $bankAccount);
         $monthMovements = $this->periodMovementTotals($wallet, $bankAccount, $currentMonthStart, $today);
         $creditCards = $this->linkedCreditCards($wallet, $bankAccount);
 
@@ -66,6 +68,7 @@ class BuildBankAccountWorkspace
                 'current_card_invoice_cents' => collect($creditCards)->sum(fn (array $card) => (int) ($card['current_invoice']['balance_cents'] ?? 0)),
                 'open_reconciliations' => $this->openReconciliationsCount($wallet, $bankAccount),
                 'linked_credit_cards' => count($creditCards),
+                ...$workflowSummary,
             ],
             'recent_transactions' => $this->recentTransactions(
                 $wallet,

@@ -23,9 +23,6 @@ const bankAccountsView = useBankAccountsIndex();
 const totalStatementBalanceCents = computed(() =>
     Number(props.summary.total_statement_balance_cents ?? props.summary.total_current_balance_cents ?? 0),
 );
-const totalAccountingBalanceCents = computed(() =>
-    Number(props.summary.total_accounting_balance_cents ?? props.summary.total_current_balance_cents ?? 0),
-);
 
 function accountUrl(account: BankAccountOverview): string {
     return account.show_url ?? route('bank-accounts.show', [account.id]);
@@ -33,10 +30,6 @@ function accountUrl(account: BankAccountOverview): string {
 
 function statementBalanceCents(account: BankAccountOverview): number {
     return Number(account.statement_balance_cents ?? account.current_balance_cents ?? 0);
-}
-
-function accountingBalanceCents(account: BankAccountOverview): number {
-    return Number(account.accounting_balance_cents ?? account.current_balance_cents ?? 0);
 }
 
 function openAccount(account: BankAccountOverview) {
@@ -66,9 +59,9 @@ function openAccount(account: BankAccountOverview) {
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <ReportSummaryCard label="Saldo do extrato total" :value="formatCurrency(totalStatementBalanceCents)" tone="green" />
 
-                <ReportSummaryCard label="Saldo contábil total · somente postados" :value="formatCurrency(totalAccountingBalanceCents)" tone="blue" />
+                <ReportSummaryCard label="Contas ativas" :value="String(summary.active_accounts ?? 0)" tone="blue" />
 
-                <ReportSummaryCard label="Contas ativas" :value="String(summary.active_accounts ?? 0)" tone="neutral" />
+                <ReportSummaryCard label="Contas inativas" :value="String(summary.inactive_accounts ?? 0)" tone="neutral" />
 
                 <ReportSummaryCard label="Total de contas" :value="String(summary.accounts_count ?? 0)" tone="neutral" />
             </div>
@@ -83,7 +76,7 @@ function openAccount(account: BankAccountOverview) {
                     </div>
                 </template>
 
-                <ReportTable :empty="bankAccounts.length === 0" empty-message="Nenhuma conta bancária cadastrada." :empty-colspan="9">
+                <ReportTable :empty="bankAccounts.length === 0" empty-message="Nenhuma conta bancária cadastrada." :empty-colspan="8">
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Conta</th>
@@ -92,10 +85,6 @@ function openAccount(account: BankAccountOverview) {
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Conta contábil</th>
                             <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo inicial</th>
                             <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo do extrato</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">
-                                <span class="block">Saldo contábil</span>
-                                <span class="mt-0.5 block text-[10px] font-medium tracking-normal text-gray-500 normal-case">Somente postados</span>
-                            </th>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Último movimento</th>
                             <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Status</th>
                         </tr>
@@ -130,13 +119,6 @@ function openAccount(account: BankAccountOverview) {
                             :class="statementBalanceCents(account) >= 0 ? 'text-green-300' : 'text-red-300'"
                         >
                             {{ formatCurrency(statementBalanceCents(account)) }}
-                        </td>
-
-                        <td
-                            class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap"
-                            :class="accountingBalanceCents(account) >= 0 ? 'text-blue-300' : 'text-red-300'"
-                        >
-                            {{ formatCurrency(accountingBalanceCents(account)) }}
                         </td>
 
                         <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-300">

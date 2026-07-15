@@ -6,6 +6,7 @@ use App\Http\Controllers\Accounting\GeneralJournalController;
 use App\Http\Controllers\Accounting\IncomeStatementController;
 use App\Http\Controllers\Accounting\JournalEntryController;
 use App\Http\Controllers\Accounting\LedgerController;
+use App\Http\Controllers\Accounting\PendingJournalEntryController;
 use App\Http\Controllers\Accounting\TrialBalanceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Financial\AccountPayableController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\Financial\AccountReceivableController;
 use App\Http\Controllers\Financial\BankAccountController;
 use App\Http\Controllers\Financial\BankReconciliationController;
 use App\Http\Controllers\Financial\BankStatementController;
+use App\Http\Controllers\Financial\BankStatementSettlementController;
 use App\Http\Controllers\Financial\BankTransferController;
 use App\Http\Controllers\Financial\CashFlowController;
 use App\Http\Controllers\Financial\CreditCardController;
@@ -56,6 +58,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/Accounting/journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])
         ->name('journal-entries.post');
 
+    Route::get('/accounting/pending-entries', [PendingJournalEntryController::class, 'index'])
+        ->name('accounting.pending-entries.index');
+
+    Route::post('/accounting/pending-entries/post-selected', [PendingJournalEntryController::class, 'postSelected'])
+        ->name('accounting.pending-entries.post-selected');
+
+    Route::post('/accounting/pending-entries/post-all', [PendingJournalEntryController::class, 'postAll'])
+        ->name('accounting.pending-entries.post-all');
+
     Route::get('/general-journal', [GeneralJournalController::class, 'index'])
         ->name('general-journal.index');
 
@@ -86,6 +97,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/resolve-match', [BankStatementController::class, 'resolveMatch'])
             ->name('bank-accounts.statement.resolve-match');
+
+        Route::get('bank-accounts/{bankAccount}/statement/{journalEntry}/payable-candidates', [BankStatementSettlementController::class, 'payableCandidates'])
+            ->name('bank-accounts.statement.payable-candidates');
+
+        Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/link-payable', [BankStatementSettlementController::class, 'linkPayable'])
+            ->name('bank-accounts.statement.link-payable');
 
         Route::post('bank-accounts/ofx-preview', [BankAccountController::class, 'previewOfx'])
             ->name('bank-accounts.ofx-preview');

@@ -9,6 +9,7 @@ import { route } from 'ziggy-js';
 import InlineOfxClassification from './InlineOfxClassification.vue';
 import InlineOfxMatchResolution from './InlineOfxMatchResolution.vue';
 import InlineOfxOperationType from './InlineOfxOperationType.vue';
+import InlinePayableSettlement from './InlinePayableSettlement.vue';
 
 const props = defineProps<{
     transactions: BankStatementTransaction[];
@@ -17,8 +18,16 @@ const props = defineProps<{
     operationTypes: FinancialOperationTypeOption[];
 }>();
 
-function operationTypeLabel(operationType: BankStatementTransaction['operation_type']): string {
-    return props.operationTypes.find((option) => option.code === operationType)?.label ?? '—';
+function operationTypeLabel(transaction: BankStatementTransaction): string {
+    if (transaction.operation_type === 'investment') {
+        return transaction.type === 'inflow' ? 'Resgate de investimento' : 'Investimento / aplicação';
+    }
+
+    if (transaction.operation_type === 'other' && transaction.type === 'inflow') {
+        return 'Reembolso, estorno ou outro';
+    }
+
+    return props.operationTypes.find((option) => option.code === transaction.operation_type)?.label ?? '—';
 }
 </script>
 
@@ -30,7 +39,7 @@ function operationTypeLabel(operationType: BankStatementTransaction['operation_t
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Descrição</th>
                 <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Valor</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Origem</th>
-                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status contábil</th>
+                <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Situação</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Validação bancária</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Tipo de operação</th>
                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Classificação</th>
@@ -65,7 +74,7 @@ function operationTypeLabel(operationType: BankStatementTransaction['operation_t
             </td>
 
             <td class="px-4 py-3 text-sm whitespace-nowrap">
-                <StatusBadge :status="transaction.accounting_status" />
+                <StatusBadge :status="transaction.workflow_status" />
             </td>
 
             <td class="px-4 py-3 text-sm whitespace-nowrap">
@@ -79,11 +88,16 @@ function operationTypeLabel(operationType: BankStatementTransaction['operation_t
                     :bank-account="bankAccount"
                     :operation-types="operationTypes"
                 />
-                <span v-else class="text-gray-300">{{ operationTypeLabel(transaction.operation_type) }}</span>
+                <span v-else class="text-gray-300">{{ operationTypeLabel(transaction) }}</span>
             </td>
 
             <td class="px-4 py-3 text-sm">
-                <InlineOfxMatchResolution v-if="transaction.match_status !== 'none'" :transaction="transaction" :bank-account="bankAccount" />
+                <InlinePayableSettlement
+                    v-if="transaction.linked_account_payable || transaction.can_link_account_payable"
+                    :transaction="transaction"
+                    :bank-account="bankAccount"
+                />
+                <InlineOfxMatchResolution v-else-if="transaction.match_status !== 'none'" :transaction="transaction" :bank-account="bankAccount" />
                 <InlineOfxClassification
                     v-else-if="transaction.source === 'ofx' && transaction.accounting_status === 'draft'"
                     :transaction="transaction"

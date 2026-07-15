@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class BankStatementImportTransaction extends Model
 {
@@ -63,5 +64,10 @@ class BankStatementImportTransaction extends Model
     public function classificationAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class, 'classification_account_id');
+    }
+
+    public function settledAccountPayable(): HasOne
+    {
+        return $this->hasOne(AccountPayable::class, 'payment_journal_entry_id', 'journal_entry_id');
     }
 }

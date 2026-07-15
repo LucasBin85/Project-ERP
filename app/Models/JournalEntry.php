@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class JournalEntry extends Model
 {
@@ -36,6 +37,11 @@ class JournalEntry extends Model
     public function lines()
     {
         return $this->hasMany(JournalLine::class);
+    }
+
+    public function settledAccountPayable(): HasOne
+    {
+        return $this->hasOne(AccountPayable::class, 'payment_journal_entry_id');
     }
 
     /**

@@ -10,6 +10,7 @@ import {
     FolderTree,
     Landmark,
     LayoutDashboard,
+    ListChecks,
     Scale,
     WalletCards,
 } from 'lucide-vue-next';
@@ -34,6 +35,11 @@ export const mainNavItems: NavItem[] = [
                 title: 'Lançamentos',
                 href: route('journal-entries.index'),
                 icon: FileText,
+            },
+            {
+                title: 'Pendências contábeis',
+                href: route('accounting.pending-entries.index'),
+                icon: ListChecks,
             },
             {
                 title: 'Livro Diário',

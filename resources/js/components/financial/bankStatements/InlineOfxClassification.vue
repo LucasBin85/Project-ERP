@@ -36,10 +36,10 @@ function syncFromTransaction() {
     form.chart_of_account_id = props.transaction.classification_account_id ? String(props.transaction.classification_account_id) : '';
 }
 
-function submit(shouldPost: boolean) {
+function submit() {
     if (!props.transaction.journal_entry_id || !form.operation_type || !form.chart_of_account_id || form.processing) return;
 
-    form.should_post = shouldPost;
+    form.should_post = false;
     form.clearErrors();
     form.post(route('bank-accounts.statement.classify', [props.bankAccount.id, props.transaction.journal_entry_id]), {
         preserveScroll: true,
@@ -53,7 +53,7 @@ function submit(shouldPost: boolean) {
 function saveClassification() {
     if (Number(form.chart_of_account_id) === props.transaction.classification_account_id) return;
 
-    submit(false);
+    submit();
 }
 
 watch(() => [props.transaction.operation_type, props.transaction.classification_account_id], syncFromTransaction);
@@ -80,19 +80,12 @@ watch(() => [props.transaction.operation_type, props.transaction.classification_
             <option v-for="account in eligibleAccounts" :key="account.id" :value="String(account.id)">{{ account.code }} - {{ account.name }}</option>
         </select>
 
-        <div class="flex min-h-5 items-center justify-between gap-3 text-xs">
+        <div class="flex min-h-5 items-center gap-3 text-xs">
             <span v-if="form.processing" class="text-gray-400">Salvando...</span>
             <InputError v-else :message="form.errors.chart_of_account_id || form.errors.operation_type" />
-
-            <button
-                v-if="transaction.classification_account_id && hasValidCurrentAccount"
-                type="button"
-                :disabled="form.processing"
-                class="ml-auto font-semibold text-indigo-300 hover:text-indigo-200 disabled:opacity-50"
-                @click="submit(true)"
-            >
-                Postar
-            </button>
+            <span v-if="transaction.classification_account_id && hasValidCurrentAccount" class="ml-auto font-semibold text-green-300">
+                Classificado
+            </span>
         </div>
     </div>
 </template>

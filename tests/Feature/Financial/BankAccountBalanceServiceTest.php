@@ -19,6 +19,8 @@ it('separates the operational bank statement balance from the posted accounting 
     $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.001', 'Banco Principal');
     $equity = AccountingTestHelper::account($wallet, '3.1', 'Capital Social', 'patrimonio', 'credit');
     $expense = AccountingTestHelper::account($wallet, '5.1', 'Despesa', 'despesa', 'debit');
+    $suspense = AccountingTestHelper::account($wallet, '1.1.9', 'A classificar', 'ativo', 'debit');
+    $wallet->update(['suspense_account_id' => $suspense->id]);
 
     AccountingTestHelper::createPostedEntry($wallet, '2026-07-01', [
         [$bankAccount->chartOfAccount, 'debit', 100000],
@@ -36,10 +38,14 @@ it('separates the operational bank statement balance from the posted accounting 
         [$expense, 'debit', 5000],
         [$bankAccount->chartOfAccount, 'credit', 5000],
     ]);
+    AccountingTestHelper::createDraftEntry($wallet, '2026-07-05', [
+        [$suspense, 'debit', 7000],
+        [$bankAccount->chartOfAccount, 'credit', 7000],
+    ], 'ofx');
 
     $balances = app(BankAccountBalanceService::class)->calculate($wallet, $bankAccount);
 
-    expect($balances['statement_balance_cents'])->toBe(100000)
+    expect($balances['statement_balance_cents'])->toBe(93000)
         ->and($balances['accounting_balance_cents'])->toBe(75000);
 });
 

@@ -16,12 +16,16 @@ class PayAccountPayable
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
         private readonly PostJournalEntry $postJournalEntry,
-    ) {
-    }
+    ) {}
 
     public function execute(Wallet $wallet, AccountPayable $accountPayable, PayAccountPayableDTO $dto): AccountPayable
     {
         return DB::transaction(function () use ($wallet, $accountPayable, $dto) {
+            $accountPayable = AccountPayable::query()
+                ->whereKey($accountPayable->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             if ($accountPayable->wallet_id !== $wallet->id) {
                 abort(404);
             }
@@ -55,7 +59,7 @@ class PayAccountPayable
             $journalEntry = $this->createJournalEntry->execute([
                 'wallet_id' => $wallet->id,
                 'entry_date' => $dto->paidAt,
-                'description' => 'Pagamento: ' . $accountPayable->description,
+                'description' => 'Pagamento: '.$accountPayable->description,
                 'lines' => [
                     [
                         'chart_of_account_id' => $accountPayable->expense_account_id,

@@ -341,7 +341,12 @@ it('applies the operation type policy and resets an incompatible existing classi
     $wallet = classificationWallet();
     $bankAccount = classificationBankAccount($wallet);
     $expense = AccountingTestHelper::account($wallet, '5.9.14', 'Despesa anterior', 'despesa', 'debit');
-    $revenue = AccountingTestHelper::account($wallet, '4.9.14', 'Receita permitida', 'receita', 'credit');
+    $destinationBankAccount = FinancialTestHelper::bankAccount(
+        wallet: $wallet,
+        code: '1.1.2.914',
+        name: 'Banco destino permitido',
+    );
+    $destinationBankAccount->chartOfAccount->update(['financial_group' => 'available']);
     $entry = classificationEntry($wallet, $bankAccount, 'out', 29_000);
 
     classify($wallet, $bankAccount, $entry, $expense);
@@ -351,13 +356,13 @@ it('applies the operation type policy and resets an incompatible existing classi
         $bankAccount,
         $entry,
         destination: null,
-        operationType: OfxOperationTypePolicy::INCOME,
+        operationType: OfxOperationTypePolicy::TRANSFER,
     )->fresh('lines');
 
     expect($changedType->lines->contains('chart_of_account_id', $expense->id))->toBeFalse()
         ->and($changedType->lines->contains('chart_of_account_id', $wallet->suspense_account_id))->toBeTrue()
         ->and($changedType->is_balanced)->toBeTrue()
-        ->and(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::INCOME)
+        ->and(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::TRANSFER)
         ->and(classificationAudit($entry)->classification_account_id)->toBeNull();
 
     $beforeInvalidAttempt = classificationLinesSnapshot($changedType);
@@ -367,7 +372,7 @@ it('applies the operation type policy and resets an incompatible existing classi
         $bankAccount,
         $changedType,
         $expense,
-        operationType: OfxOperationTypePolicy::INCOME,
+        operationType: OfxOperationTypePolicy::TRANSFER,
     ))->toThrow(\RuntimeException::class);
 
     expect(classificationLinesSnapshot($changedType))->toBe($beforeInvalidAttempt);
@@ -376,13 +381,13 @@ it('applies the operation type policy and resets an incompatible existing classi
         $wallet,
         $bankAccount,
         $changedType,
-        $revenue,
-        operationType: OfxOperationTypePolicy::INCOME,
+        $destinationBankAccount->chartOfAccount,
+        operationType: OfxOperationTypePolicy::TRANSFER,
     )->fresh('lines');
 
-    expect($classified->lines->contains('chart_of_account_id', $revenue->id))->toBeTrue()
+    expect($classified->lines->contains('chart_of_account_id', $destinationBankAccount->chart_of_account_id))->toBeTrue()
         ->and($classified->is_balanced)->toBeTrue()
-        ->and(classificationAudit($entry)->classification_account_id)->toBe($revenue->id);
+        ->and(classificationAudit($entry)->classification_account_id)->toBe($destinationBankAccount->chart_of_account_id);
 });
 
 it('reclassifies an already classified OFX draft without changing the bank line', function () {
@@ -646,6 +651,38 @@ it('classifies an OFX entry through the bank statement endpoint', function () {
         ->and(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::EXPENSE)
         ->and(classificationAudit($entry)->classification_account_id)->toBe($expense->id);
 });
+
+it('rejects operation types incompatible with direction when submitted manually', function (
+    string $direction,
+    string $operationType,
+) {
+    $wallet = classificationWallet();
+    $bankAccount = classificationBankAccount($wallet);
+    $entry = classificationEntry($wallet, $bankAccount, $direction, 26_100);
+    $before = classificationLinesSnapshot($entry);
+    $statementUrl = route('bank-accounts.statement', $bankAccount);
+
+    $response = $this
+        ->actingAs($wallet->user)
+        ->withSession(['active_wallet' => $wallet->id])
+        ->from($statementUrl)
+        ->post(route('bank-accounts.statement.classify', [$bankAccount, $entry]), [
+            'operation_type' => $operationType,
+            'chart_of_account_id' => null,
+            'should_post' => false,
+        ]);
+
+    $response
+        ->assertSessionHasErrors(['operation_type'])
+        ->assertRedirect($statementUrl);
+
+    expect(classificationLinesSnapshot($entry))->toBe($before)
+        ->and(classificationAudit($entry)->operation_type)->toBeNull()
+        ->and(classificationAudit($entry)->classification_account_id)->toBeNull();
+})->with([
+    'payment on inflow' => ['in', OfxOperationTypePolicy::PAYMENT],
+    'income on outflow' => ['out', OfxOperationTypePolicy::INCOME],
+]);
 
 it('rejects inline classification when operation type was not selected', function () {
     $wallet = classificationWallet();

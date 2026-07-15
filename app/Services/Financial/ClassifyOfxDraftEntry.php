@@ -4,6 +4,7 @@ namespace App\Services\Financial;
 
 use App\DTOs\Financial\OfxClassificationDTO;
 use App\Exceptions\OfxClassificationException;
+use App\Exceptions\OfxOperationTypeDirectionException;
 use App\Models\BankAccount;
 use App\Models\BankStatementImportTransaction;
 use App\Models\ChartOfAccount;
@@ -52,6 +53,22 @@ class ClassifyOfxDraftEntry
 
             /** @var JournalLine $bankLine */
             $bankLine = $bankLines->first();
+            $direction = $bankLine->type === 'debit'
+                ? OfxOperationTypePolicy::DIRECTION_IN
+                : OfxOperationTypePolicy::DIRECTION_OUT;
+
+            try {
+                $this->operationTypes->validateOperationTypeForDirection(
+                    $dto->operationType,
+                    $direction,
+                );
+            } catch (Throwable $exception) {
+                throw new OfxOperationTypeDirectionException(
+                    $exception->getMessage(),
+                    previous: $exception,
+                );
+            }
+
             $auditTransaction = BankStatementImportTransaction::query()
                 ->where('wallet_id', $wallet->id)
                 ->where('bank_account_id', $bankAccount->id)
@@ -204,6 +221,12 @@ class ClassifyOfxDraftEntry
 
         if ($entry->status !== 'draft') {
             throw new OfxClassificationException('Lançamentos postados não podem ser classificados.');
+        }
+
+        if ($entry->settledAccountPayable()->exists()) {
+            throw new OfxClassificationException(
+                'O lançamento já está vinculado a uma conta a pagar e não pode ser reclassificado.',
+            );
         }
 
         if (! $wallet->suspense_account_id) {

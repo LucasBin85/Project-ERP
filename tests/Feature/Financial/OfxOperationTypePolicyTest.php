@@ -90,6 +90,72 @@ it('maps eligible accounts to the supported OFX operation types', function () {
         ->toBe([OfxOperationTypePolicy::OTHER]);
 });
 
+it('limits operation types according to the bank movement direction', function () {
+    $policy = app(OfxOperationTypePolicy::class);
+
+    expect($policy->allowedOperationTypesForDirection(OfxOperationTypePolicy::DIRECTION_IN))
+        ->toBe([
+            OfxOperationTypePolicy::TRANSFER,
+            OfxOperationTypePolicy::INCOME,
+            OfxOperationTypePolicy::INVESTMENT,
+            OfxOperationTypePolicy::OTHER,
+        ])
+        ->and($policy->allowedOperationTypesForDirection(OfxOperationTypePolicy::DIRECTION_OUT))
+        ->toBe([
+            OfxOperationTypePolicy::TRANSFER,
+            OfxOperationTypePolicy::PAYMENT,
+            OfxOperationTypePolicy::INVESTMENT,
+            OfxOperationTypePolicy::EXPENSE,
+            OfxOperationTypePolicy::FEE,
+            OfxOperationTypePolicy::OTHER,
+        ])
+        ->and($policy->isOperationTypeAllowedForDirection(
+            OfxOperationTypePolicy::INCOME,
+            OfxOperationTypePolicy::DIRECTION_IN,
+        ))->toBeTrue()
+        ->and($policy->isOperationTypeAllowedForDirection(
+            OfxOperationTypePolicy::TRANSFER,
+            OfxOperationTypePolicy::DIRECTION_IN,
+        ))->toBeTrue()
+        ->and($policy->isOperationTypeAllowedForDirection(
+            OfxOperationTypePolicy::PAYMENT,
+            OfxOperationTypePolicy::DIRECTION_IN,
+        ))->toBeFalse()
+        ->and($policy->isOperationTypeAllowedForDirection(
+            OfxOperationTypePolicy::PAYMENT,
+            OfxOperationTypePolicy::DIRECTION_OUT,
+        ))->toBeTrue()
+        ->and($policy->isOperationTypeAllowedForDirection(
+            OfxOperationTypePolicy::EXPENSE,
+            OfxOperationTypePolicy::DIRECTION_OUT,
+        ))->toBeTrue()
+        ->and($policy->isOperationTypeAllowedForDirection(
+            OfxOperationTypePolicy::FEE,
+            OfxOperationTypePolicy::DIRECTION_OUT,
+        ))->toBeTrue()
+        ->and($policy->isOperationTypeAllowedForDirection(
+            OfxOperationTypePolicy::TRANSFER,
+            OfxOperationTypePolicy::DIRECTION_OUT,
+        ))->toBeTrue()
+        ->and($policy->isOperationTypeAllowedForDirection(
+            OfxOperationTypePolicy::INCOME,
+            OfxOperationTypePolicy::DIRECTION_OUT,
+        ))->toBeFalse();
+});
+
+it('rejects operation types incompatible with the bank movement direction', function () {
+    $policy = app(OfxOperationTypePolicy::class);
+
+    expect(fn () => $policy->validateOperationTypeForDirection(
+        OfxOperationTypePolicy::PAYMENT,
+        OfxOperationTypePolicy::DIRECTION_IN,
+    ))->toThrow(InvalidArgumentException::class, 'entrada bancária')
+        ->and(fn () => $policy->validateOperationTypeForDirection(
+            OfxOperationTypePolicy::INCOME,
+            OfxOperationTypePolicy::DIRECTION_OUT,
+        ))->toThrow(InvalidArgumentException::class, 'saída bancária');
+});
+
 it('keeps payment and investment classifications reserved for future integrations', function () {
     ['wallet' => $wallet, 'bank_account' => $bankAccount] = createOfxPolicyScenario();
     createOfxPolicyAccount($wallet, '9.2.01', 'Despesa', 'despesa');

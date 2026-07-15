@@ -193,6 +193,7 @@ it('keeps an already classified OFX draft editable and exposes its selected acco
         ->and($draftTransaction['classification_label'])->toBe('Despesa Administrativa')
         ->and($draftTransaction['classification_account_id'])->toBe($scenario['expense']->id)
         ->and($draftTransaction['operation_type'])->toBe(OfxOperationTypePolicy::EXPENSE)
+        ->and($draftTransaction['workflow_status'])->toBe('classified')
         ->and($draftTransaction['can_edit_operation_type'])->toBeTrue()
         ->and($draftTransaction['match_status'])->toBe('none')
         ->and($draftTransaction['can_classify'])->toBeTrue();
@@ -297,9 +298,34 @@ it('builds a bank statement with complete draft and posted entries ordered from 
         ->and($transactions->pluck('source_label')->all())->toBe(['OFX', 'Manual', 'Manual'])
         ->and($transactions->pluck('reconciliation_status')->all())->toBe(['reconciled_via_ofx', 'reconciled', 'pending'])
         ->and($transactions->pluck('classification_status')->all())->toBe(['unclassified', 'classified', 'classified'])
+        ->and($transactions->pluck('workflow_status')->all())->toBe(['pending_classification', 'posted', 'posted'])
         ->and($transactions->pluck('classification_label')->all())->toBe(['A classificar', 'Despesa Administrativa', 'Receita de Serviços'])
         ->and($transactions->pluck('classification_account_id')->all())->toBe([null, $scenario['expense']->id, $scenario['revenue']->id])
         ->and($transactions->pluck('operation_type')->all())->toBe([null, null, null])
+        ->and($transactions->pluck('allowed_operation_types')->all())->toBe([
+            [
+                OfxOperationTypePolicy::TRANSFER,
+                OfxOperationTypePolicy::PAYMENT,
+                OfxOperationTypePolicy::INVESTMENT,
+                OfxOperationTypePolicy::EXPENSE,
+                OfxOperationTypePolicy::FEE,
+                OfxOperationTypePolicy::OTHER,
+            ],
+            [
+                OfxOperationTypePolicy::TRANSFER,
+                OfxOperationTypePolicy::PAYMENT,
+                OfxOperationTypePolicy::INVESTMENT,
+                OfxOperationTypePolicy::EXPENSE,
+                OfxOperationTypePolicy::FEE,
+                OfxOperationTypePolicy::OTHER,
+            ],
+            [
+                OfxOperationTypePolicy::TRANSFER,
+                OfxOperationTypePolicy::INCOME,
+                OfxOperationTypePolicy::INVESTMENT,
+                OfxOperationTypePolicy::OTHER,
+            ],
+        ])
         ->and($transactions->pluck('can_edit_operation_type')->all())->toBe([true, false, false])
         ->and($transactions->pluck('can_classify')->all())->toBe([false, false, false])
         ->and($transactions->pluck('match_status')->all())->toBe(['none', 'none', 'none'])

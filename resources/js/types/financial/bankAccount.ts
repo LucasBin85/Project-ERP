@@ -61,6 +61,10 @@ export interface BankAccountShowSummary {
     current_card_invoice_cents: number;
     open_reconciliations: number;
     linked_credit_cards: number;
+    unclassified_entries: number;
+    ready_for_accounting_entries: number;
+    pending_link_entries: number;
+    posted_entries: number;
 }
 
 export interface BankAccountCreateFormData {

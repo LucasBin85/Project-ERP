@@ -147,6 +147,16 @@ class BulkPostOfxDraftEntries
             return $this->skipped('O tipo selecionado para a operação OFX não é válido.');
         }
 
+        if (! in_array($auditTransaction->direction, [
+            OfxOperationTypePolicy::DIRECTION_IN,
+            OfxOperationTypePolicy::DIRECTION_OUT,
+        ], true) || ! $this->operationTypes->isOperationTypeAllowedForDirection(
+            $operationType,
+            $auditTransaction->direction,
+        )) {
+            return $this->skipped('O tipo selecionado não é compatível com a direção do movimento bancário.');
+        }
+
         if (in_array($operationType, self::RESERVED_FOR_AP_AR, true)) {
             return $this->skipped(
                 'Pagamentos e receitas ficam pendentes para a futura vinculação com contas a pagar/receber.',
