@@ -9,6 +9,7 @@ import { route } from 'ziggy-js';
 const props = defineProps<{
     wallet: Record<string, any>;
     expenseAccounts: Array<Record<string, any>>;
+    payableAccounts: Array<Record<string, any>>;
 }>();
 
 const accountPayable = useAccountPayableCreate();
@@ -23,8 +24,8 @@ function submit() {
 </script>
 
 <template>
-    <AppLayout title="Nova Conta a Pagar">
-        <ReportPage title="Nova Conta a Pagar" :subtitle="props.wallet?.name">
+    <AppLayout title="Novo título a pagar">
+        <ReportPage title="Novo título a pagar" :subtitle="props.wallet?.name">
             <ReportSection>
                 <template #header>
                     <div>
@@ -33,8 +34,17 @@ function submit() {
                         </h2>
 
                         <p class="mt-1 text-sm text-gray-400">
-                            O cadastro cria apenas o controle financeiro. O lançamento contábil será gerado no pagamento.
+                            O cadastro cria uma provisão contábil em rascunho para posterior postagem.
                         </p>
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de controle do fornecedor</label>
+                        <select v-model="accountPayable.form.payable_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
+                            <option value="">Selecione uma conta de controle</option>
+                            <option v-for="account in payableAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
+                        </select>
+                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.payable_account_id }}</p>
                     </div>
                 </template>
 
@@ -123,7 +133,7 @@ function submit() {
                             :disabled="!accountPayable.canSubmit.value || accountPayable.form.processing"
                             class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            Salvar conta a pagar
+                            Salvar título a pagar
                         </button>
                     </div>
                 </form>

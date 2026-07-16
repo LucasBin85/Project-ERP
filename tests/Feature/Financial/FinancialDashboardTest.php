@@ -65,8 +65,8 @@ it('builds the financial dashboard with realized and projected data', function (
         name: 'Banco Principal',
     );
 
-    $expenseAccount = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
-    $revenueAccount = AccountingTestHelper::account($wallet, '4.1', 'Receita de Serviços', 'receita', 'credit');
+    $expenseAccount = AccountingTestHelper::account($wallet, '5.8.1', 'Despesa Administrativa', 'despesa', 'debit');
+    $revenueAccount = AccountingTestHelper::account($wallet, '4.8.1', 'Receita de Serviços', 'receita', 'credit');
     $equityAccount = AccountingTestHelper::account($wallet, '3.1', 'Capital Social', 'patrimonio', 'credit');
 
     AccountingTestHelper::createPostedEntry($wallet, '2026-07-01', [

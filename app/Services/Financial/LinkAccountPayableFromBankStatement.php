@@ -94,7 +94,7 @@ class LinkAccountPayableFromBankStatement
 
             $accountPayable = AccountPayable::query()
                 ->whereKey($accountPayable->id)
-                ->with('expenseAccount')
+                ->with(['expenseAccount', 'payableAccount'])
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -113,13 +113,13 @@ class LinkAccountPayableFromBankStatement
             ]);
 
             $counterpartLine->update([
-                'chart_of_account_id' => $accountPayable->expense_account_id,
+                'chart_of_account_id' => $accountPayable->payable_account_id,
                 'memo' => 'Conta a pagar: '.$accountPayable->description,
             ]);
 
             $auditTransaction->update([
                 'journal_line_id' => $bankLine->id,
-                'classification_account_id' => $accountPayable->expense_account_id,
+                'classification_account_id' => $accountPayable->payable_account_id,
             ]);
 
             $entry->recalcBalance();
@@ -145,6 +145,7 @@ class LinkAccountPayableFromBankStatement
 
             return $accountPayable->fresh([
                 'expenseAccount',
+                'payableAccount',
                 'bankAccount',
                 'paymentJournalEntry.lines.chartOfAccount',
             ]);
@@ -213,14 +214,15 @@ class LinkAccountPayableFromBankStatement
             $this->fail('account_payable_id', 'O valor da conta a pagar é diferente do movimento bancário.');
         }
 
-        $expenseAccount = $accountPayable->expenseAccount;
+        $payableAccount = $accountPayable->payableAccount;
 
-        if (! $expenseAccount
-            || (int) $expenseAccount->wallet_id !== (int) $wallet->id
-            || $expenseAccount->type !== 'despesa'
-            || ! $expenseAccount->isPostingAllowed()
-            || $expenseAccount->children()->exists()) {
-            $this->fail('account_payable_id', 'A conta de despesa do título não é válida para classificação.');
+        if (! $payableAccount
+            || (int) $payableAccount->wallet_id !== (int) $wallet->id
+            || $payableAccount->type !== 'passivo'
+            || $payableAccount->financial_group !== 'accounts_payable'
+            || ! $payableAccount->isPostingAllowed()
+            || $payableAccount->children()->exists()) {
+            $this->fail('account_payable_id', 'A conta de controle do fornecedor não é válida para a baixa.');
         }
 
         if ($entry->entry_date === null) {

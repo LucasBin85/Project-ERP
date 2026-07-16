@@ -27,7 +27,8 @@ class FindBankStatementReceivableCandidates
             ->where('status', 'pending')
             ->where('amount_cents', $bankLine->amount_cents)
             ->whereNull('receipt_journal_entry_id')
-            ->with('revenueAccount:id,wallet_id,code,name,type,allows_posting')
+            ->whereNotNull('receivable_account_id')
+            ->with(['revenueAccount:id,wallet_id,code,name,type,allows_posting', 'receivableAccount:id,wallet_id,code,name,type,financial_group,allows_posting'])
             ->get()
             ->sort(function (AccountReceivable $left, AccountReceivable $right) use ($entry) {
                 $leftDistance = abs($left->due_date->startOfDay()->diffInDays($entry->entry_date->startOfDay(), false));

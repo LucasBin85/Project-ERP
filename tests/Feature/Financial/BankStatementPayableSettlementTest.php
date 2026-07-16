@@ -125,6 +125,7 @@ function payableSettlementPayable(array $context, array $attributes = []): Accou
 {
     return AccountPayable::query()->create(array_merge([
         'wallet_id' => $context['wallet']->id,
+        'payable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_payable')->where('allows_posting', true)->value('id'),
         'expense_account_id' => $context['expense']->id,
         'payee_name' => 'Fornecedor teste',
         'description' => 'Título vinculado ao extrato',
@@ -254,7 +255,7 @@ it('links an explicitly selected payable by reusing the OFX draft and preserving
     $this->assertDatabaseHas('journal_lines', [
         'id' => $movement['counterpart_line']->id,
         'journal_entry_id' => $movement['entry']->id,
-        'chart_of_account_id' => $context['expense']->id,
+        'chart_of_account_id' => $payable->payable_account_id,
         'type' => 'debit',
         'amount_cents' => 25_000,
     ]);
@@ -269,7 +270,7 @@ it('links an explicitly selected payable by reusing the OFX draft and preserving
         'id' => $movement['audit']->id,
         'journal_entry_id' => $movement['entry']->id,
         'journal_line_id' => $movement['bank_line']->id,
-        'classification_account_id' => $context['expense']->id,
+        'classification_account_id' => $payable->payable_account_id,
         'operation_type' => OfxOperationTypePolicy::PAYMENT,
     ]);
 
@@ -285,8 +286,8 @@ it('links an explicitly selected payable by reusing the OFX draft and preserving
 
     expect($statementTransaction['workflow_status'])->toBe('ready_for_accounting')
         ->and($statementTransaction['linked_account_payable']['id'])->toBe($payable->id)
-        ->and($statementTransaction['classification_account_id'])->toBe($context['expense']->id)
-        ->and($statementTransaction['classification_label'])->toBe($context['expense']->name)
+        ->and($statementTransaction['classification_account_id'])->toBe($payable->payable_account_id)
+        ->and($statementTransaction['classification_label'])->toBe($payable->payableAccount->name)
         ->and($statementTransaction['can_link_account_payable'])->toBeFalse()
         ->and($statementTransaction['can_edit_operation_type'])->toBeFalse()
         ->and($statementTransaction['can_classify'])->toBeFalse();
@@ -303,7 +304,7 @@ it('links an explicitly selected payable by reusing the OFX draft and preserving
 
     $this->assertDatabaseHas('journal_lines', [
         'id' => $movement['counterpart_line']->id,
-        'chart_of_account_id' => $context['expense']->id,
+        'chart_of_account_id' => $payable->payable_account_id,
     ]);
 });
 

@@ -53,7 +53,7 @@ class LinkAccountReceivableFromBankStatement
                 $this->fail('journal_entry_id', 'O movimento não é uma receita OFX de entrada válida.');
             }
 
-            $receivable = AccountReceivable::query()->whereKey($receivable->id)->with('revenueAccount')->lockForUpdate()->firstOrFail();
+            $receivable = AccountReceivable::query()->whereKey($receivable->id)->with(['revenueAccount', 'receivableAccount'])->lockForUpdate()->firstOrFail();
             if ((int) $receivable->wallet_id !== (int) $wallet->id) {
                 $this->fail('account_receivable_id', 'A conta a receber deve pertencer à wallet ativa.');
             }
@@ -63,15 +63,16 @@ class LinkAccountReceivableFromBankStatement
             if ((int) $receivable->amount_cents !== (int) $bankLine->amount_cents) {
                 $this->fail('account_receivable_id', 'O valor da conta a receber é diferente do movimento bancário.');
             }
-            $revenue = $receivable->revenueAccount;
-            if (! $revenue || (int) $revenue->wallet_id !== (int) $wallet->id || $revenue->type !== 'receita'
-                || ! $revenue->isPostingAllowed() || $revenue->children()->exists()) {
-                $this->fail('account_receivable_id', 'A conta de receita do título não é válida para classificação.');
+            $control = $receivable->receivableAccount;
+            if (! $control || (int) $control->wallet_id !== (int) $wallet->id || $control->type !== 'ativo'
+                || $control->financial_group !== 'accounts_receivable'
+                || ! $control->isPostingAllowed() || $control->children()->exists()) {
+                $this->fail('account_receivable_id', 'A conta de controle do cliente não é válida para a baixa.');
             }
 
             $originalBankLine = $bankLine->only(['chart_of_account_id', 'type', 'amount_cents', 'memo']);
-            $counterpart->update(['chart_of_account_id' => $receivable->revenue_account_id, 'memo' => 'Conta a receber: '.$receivable->description]);
-            $audit->update(['journal_line_id' => $bankLine->id, 'classification_account_id' => $receivable->revenue_account_id]);
+            $counterpart->update(['chart_of_account_id' => $receivable->receivable_account_id, 'memo' => 'Conta a receber: '.$receivable->description]);
+            $audit->update(['journal_line_id' => $bankLine->id, 'classification_account_id' => $receivable->receivable_account_id]);
             $entry->recalcBalance();
             if (! $entry->is_balanced || $entry->balance_diff_cents !== 0) {
                 $this->fail('journal_entry_id', 'O vínculo deixou o lançamento contábil desbalanceado.');
@@ -87,7 +88,7 @@ class LinkAccountReceivableFromBankStatement
                 'status' => 'received',
             ]);
 
-            return $receivable->fresh(['revenueAccount', 'bankAccount', 'receiptJournalEntry.lines.chartOfAccount']);
+            return $receivable->fresh(['revenueAccount', 'receivableAccount', 'bankAccount', 'receiptJournalEntry.lines.chartOfAccount']);
         });
     }
 

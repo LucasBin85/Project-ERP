@@ -11,8 +11,8 @@ final readonly class AccountPayableDTO
         public string $dueDate,
         public int $amountCents,
         public ?string $notes = null,
-    ) {
-    }
+        public ?int $payableAccountId = null,
+    ) {}
 
     public static function fromArray(array $data): self
     {
@@ -23,6 +23,7 @@ final readonly class AccountPayableDTO
             dueDate: (string) $data['due_date'],
             amountCents: (int) $data['amount_cents'],
             notes: isset($data['notes']) ? trim((string) $data['notes']) : null,
+            payableAccountId: isset($data['payable_account_id']) ? (int) $data['payable_account_id'] : null,
         );
     }
 }

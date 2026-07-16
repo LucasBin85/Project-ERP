@@ -14,7 +14,22 @@ use Tests\Helpers\FinancialTestHelper;
 
 uses(RefreshDatabase::class);
 
-it('creates a pending account receivable without journal entry', function () {
+it('stores a receivable title and redirects to the existing index route', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+    $revenue = $wallet->chartOfAccounts()->where('type', 'receita')->where('allows_posting', true)->firstOrFail();
+    $control = $wallet->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->firstOrFail();
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
+        ->post(route('accounts-receivable.store'), [
+            'receivable_account_id' => $control->id, 'revenue_account_id' => $revenue->id,
+            'customer_name' => 'Cliente', 'description' => 'Título novo', 'due_date' => '2026-07-31', 'amount_cents' => 10000,
+        ])->assertRedirect(route('accounts-receivable.index'))->assertSessionHas('success', 'Título a receber cadastrado com sucesso.');
+
+    $this->assertDatabaseHas('accounts_receivable', ['wallet_id' => $wallet->id, 'receivable_account_id' => $control->id, 'status' => 'pending']);
+});
+
+it('creates a pending account receivable with a draft accrual entry', function () {
     $user = User::factory()->create();
 
     $wallet = Wallet::query()->create([
@@ -22,7 +37,9 @@ it('creates a pending account receivable without journal entry', function () {
         'name' => 'Carteira Teste',
     ]);
 
-    $revenueAccount = AccountingTestHelper::account($wallet, '4.1', 'Receita de Serviços', 'receita', 'credit');
+    $revenueAccount = AccountingTestHelper::account($wallet, '4.9.1', 'Receita de Serviços', 'receita', 'credit');
+    $receivableAccount = AccountingTestHelper::account($wallet, '1.2.1', 'Clientes Diversos', 'ativo', 'debit');
+    $receivableAccount->update(['financial_group' => 'accounts_receivable']);
 
     $accountReceivable = app(CreateAccountReceivable::class)->execute(
         $wallet,
@@ -32,17 +49,22 @@ it('creates a pending account receivable without journal entry', function () {
             description: 'Serviços julho',
             dueDate: '2026-07-20',
             amountCents: 150000,
+            receivableAccountId: $receivableAccount->id,
         ),
     );
 
     expect($accountReceivable->status)->toBe('pending')
         ->and($accountReceivable->amount_cents)->toBe(150000)
+        ->and($accountReceivable->provision_journal_entry_id)->not->toBeNull()
         ->and($accountReceivable->receipt_journal_entry_id)->toBeNull();
 
-    expect(JournalEntry::query()->count())->toBe(0);
+    expect(JournalEntry::query()->count())->toBe(1)
+        ->and($accountReceivable->provisionJournalEntry->status)->toBe('draft');
+    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $accountReceivable->provision_journal_entry_id, 'chart_of_account_id' => $receivableAccount->id, 'type' => 'debit']);
+    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $accountReceivable->provision_journal_entry_id, 'chart_of_account_id' => $revenueAccount->id, 'type' => 'credit']);
 });
 
-it('receives an account receivable and creates a posted journal entry', function () {
+it('receives an account receivable against its control account and keeps the entry in draft', function () {
     $user = User::factory()->create();
 
     $wallet = Wallet::query()->create([
@@ -50,7 +72,9 @@ it('receives an account receivable and creates a posted journal entry', function
         'name' => 'Carteira Teste',
     ]);
 
-    $revenueAccount = AccountingTestHelper::account($wallet, '4.1', 'Receita de Serviços', 'receita', 'credit');
+    $revenueAccount = AccountingTestHelper::account($wallet, '4.9.1', 'Receita de Serviços', 'receita', 'credit');
+    $receivableAccount = AccountingTestHelper::account($wallet, '1.2.1', 'Clientes Diversos', 'ativo', 'debit');
+    $receivableAccount->update(['financial_group' => 'accounts_receivable']);
 
     $bankAccount = FinancialTestHelper::bankAccount(
         wallet: $wallet,
@@ -66,6 +90,7 @@ it('receives an account receivable and creates a posted journal entry', function
             description: 'Serviços julho',
             dueDate: '2026-07-20',
             amountCents: 150000,
+            receivableAccountId: $receivableAccount->id,
         ),
     );
 
@@ -82,11 +107,11 @@ it('receives an account receivable and creates a posted journal entry', function
         ->and($receivedAccountReceivable->received_at->toDateString())->toBe('2026-07-12')
         ->and($receivedAccountReceivable->bank_account_id)->toBe($bankAccount->id)
         ->and($receivedAccountReceivable->receipt_journal_entry_id)->not->toBeNull()
-        ->and($receivedAccountReceivable->receiptJournalEntry->status)->toBe('posted')
+        ->and($receivedAccountReceivable->receiptJournalEntry->status)->toBe('draft')
         ->and($receivedAccountReceivable->receiptJournalEntry->is_balanced)->toBeTrue();
 
-    expect(JournalEntry::query()->count())->toBe(1)
-        ->and(JournalLine::query()->count())->toBe(2);
+    expect(JournalEntry::query()->count())->toBe(2)
+        ->and(JournalLine::query()->count())->toBe(4);
 
     $this->assertDatabaseHas('journal_lines', [
         'journal_entry_id' => $receivedAccountReceivable->receipt_journal_entry_id,
@@ -97,7 +122,7 @@ it('receives an account receivable and creates a posted journal entry', function
 
     $this->assertDatabaseHas('journal_lines', [
         'journal_entry_id' => $receivedAccountReceivable->receipt_journal_entry_id,
-        'chart_of_account_id' => $revenueAccount->id,
+        'chart_of_account_id' => $receivableAccount->id,
         'type' => 'credit',
         'amount_cents' => 150000,
     ]);

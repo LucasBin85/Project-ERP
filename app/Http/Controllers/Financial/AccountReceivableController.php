@@ -43,6 +43,8 @@ class AccountReceivableController extends Controller
             ->where('wallet_id', $wallet->id)
             ->with([
                 'revenueAccount:id,code,name',
+                'receivableAccount:id,code,name',
+                'provisionJournalEntry:id,status',
                 'bankAccount:id,name,bank_name,bank_code,agency,account_number',
                 'receiptJournalEntry:id,status',
             ])
@@ -51,8 +53,8 @@ class AccountReceivableController extends Controller
             ->whereDate('due_date', '<=', $validated['end_date'])
             ->when($validated['search'] !== '', function ($query) use ($validated) {
                 $query->where(function ($query) use ($validated) {
-                    $query->where('customer_name', 'like', '%' . $validated['search'] . '%')
-                        ->orWhere('description', 'like', '%' . $validated['search'] . '%');
+                    $query->where('customer_name', 'like', '%'.$validated['search'].'%')
+                        ->orWhere('description', 'like', '%'.$validated['search'].'%');
                 });
             })
             ->orderBy('due_date')
@@ -80,6 +82,7 @@ class AccountReceivableController extends Controller
                 'name' => $wallet->name,
             ],
             'revenueAccounts' => $this->revenueAccounts($wallet->id),
+            'receivableAccounts' => $this->controlAccounts($wallet->id),
         ]);
     }
 
@@ -88,6 +91,7 @@ class AccountReceivableController extends Controller
         $wallet = $this->resolveActiveWallet($request);
 
         $data = $request->validate([
+            'receivable_account_id' => ['required', 'integer', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $wallet->id)->where('type', 'ativo')->where('financial_group', 'accounts_receivable')->where('allows_posting', true)],
             'revenue_account_id' => [
                 'required',
                 'integer',
@@ -103,11 +107,11 @@ class AccountReceivableController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $accountReceivable = $service->execute($wallet, AccountReceivableDTO::fromArray($data));
+        $service->execute($wallet, AccountReceivableDTO::fromArray($data));
 
         return redirect()
-            ->route('accounts-receivable.show', $accountReceivable)
-            ->with('success', 'Conta a receber cadastrada com sucesso.');
+            ->route('accounts-receivable.index')
+            ->with('success', 'Título a receber cadastrado com sucesso.');
     }
 
     public function show(Request $request, AccountReceivable $accountReceivable): Response
@@ -118,6 +122,8 @@ class AccountReceivableController extends Controller
 
         $accountReceivable->load([
             'revenueAccount',
+            'receivableAccount',
+            'provisionJournalEntry.lines.chartOfAccount',
             'bankAccount',
             'receiptJournalEntry.lines.chartOfAccount',
         ]);
@@ -184,6 +190,15 @@ class AccountReceivableController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function controlAccounts(int $walletId): array
+    {
+        return ChartOfAccount::query()->where('wallet_id', $walletId)->where('type', 'ativo')
+            ->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->whereDoesntHave('children')
+            ->orderBy('code')->get(['id', 'code', 'name'])->map(fn (ChartOfAccount $account) => [
+                'id' => $account->id, 'label' => "{$account->code} - {$account->name}",
+            ])->values()->all();
     }
 
     private function formatBankAccountLabel(BankAccount $account): string

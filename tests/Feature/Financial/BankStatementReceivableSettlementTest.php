@@ -55,7 +55,9 @@ function receivableMovement(array $context, int $amount = 25000, string $directi
 function receivableTitle(array $context, array $attributes = []): AccountReceivable
 {
     return AccountReceivable::query()->create(array_merge([
-        'wallet_id' => $context['wallet']->id, 'revenue_account_id' => $context['revenue']->id,
+        'wallet_id' => $context['wallet']->id,
+        'receivable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->value('id'),
+        'revenue_account_id' => $context['revenue']->id,
         'customer_name' => 'Cliente teste', 'description' => 'Mensalidade', 'due_date' => '2026-07-12',
         'amount_cents' => 25000, 'status' => 'pending',
     ], $attributes));
@@ -98,15 +100,15 @@ it('links an explicitly selected receivable by reusing the draft and preserving 
     expect(JournalEntry::count())->toBe($entryCount)->and(JournalLine::count())->toBe($lineCount)
         ->and($movement['bankLine']->fresh()->only(array_keys($originalBank)))->toBe($originalBank)
         ->and($movement['entry']->fresh()->settledAccountReceivable?->id)->toBe($title->id);
-    $this->assertDatabaseHas('journal_lines', ['id' => $movement['counterpart']->id, 'chart_of_account_id' => $context['revenue']->id, 'type' => 'credit']);
-    $this->assertDatabaseHas('bank_statement_import_transactions', ['id' => $movement['audit']->id, 'classification_account_id' => $context['revenue']->id]);
+    $this->assertDatabaseHas('journal_lines', ['id' => $movement['counterpart']->id, 'chart_of_account_id' => $title->receivable_account_id, 'type' => 'credit']);
+    $this->assertDatabaseHas('bank_statement_import_transactions', ['id' => $movement['audit']->id, 'classification_account_id' => $title->receivable_account_id]);
 
     $statement = app(BankStatementService::class)->build($context['wallet'], new BankStatementFiltersDTO(
         bankAccountId: $context['bankAccount']->id, startDate: '2026-07-01', endDate: '2026-07-31',
     ))->transactions->first();
     expect($statement['workflow_status'])->toBe('ready_for_accounting')
         ->and($statement['linked_account_receivable']['id'])->toBe($title->id)
-        ->and($statement['classification_account_id'])->toBe($context['revenue']->id);
+        ->and($statement['classification_account_id'])->toBe($title->receivable_account_id);
 
     $this->actingAs($context['user'])->withSession(['active_wallet' => $context['wallet']->id])
         ->get(route('accounting.pending-entries.index'))->assertOk();
@@ -138,7 +140,7 @@ it('blocks invalid amount, received title, outgoing movement, other wallet and d
     $otherUser = User::factory()->create();
     $otherWallet = $otherUser->wallets()->firstOrFail();
     $otherRevenue = AccountingTestHelper::account($otherWallet, '4.99.1', 'Receita externa', 'receita', 'credit');
-    $other = AccountReceivable::query()->create(['wallet_id' => $otherWallet->id, 'revenue_account_id' => $otherRevenue->id, 'customer_name' => 'Externo', 'description' => 'Externo', 'due_date' => '2026-07-10', 'amount_cents' => 25000, 'status' => 'pending']);
+    $other = AccountReceivable::query()->create(['wallet_id' => $otherWallet->id, 'receivable_account_id' => $otherWallet->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->value('id'), 'revenue_account_id' => $otherRevenue->id, 'customer_name' => 'Externo', 'description' => 'Externo', 'due_date' => '2026-07-10', 'amount_cents' => 25000, 'status' => 'pending']);
     $freshMovement = receivableMovement($context);
     $this->postJson(route('bank-accounts.statement.link-receivable', [$context['bankAccount'], $freshMovement['entry']]), ['account_receivable_id' => $other->id])
         ->assertUnprocessable()->assertJsonValidationErrors('account_receivable_id');

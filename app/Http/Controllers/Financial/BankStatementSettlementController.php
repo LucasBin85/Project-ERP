@@ -37,10 +37,10 @@ class BankStatementSettlementController extends Controller
                 'due_date' => $receivable->due_date->toDateString(),
                 'amount_cents' => $receivable->amount_cents,
                 'proximity_days' => (int) abs($receivable->due_date->startOfDay()->diffInDays($journalEntry->entry_date->startOfDay(), false)),
-                'revenue_account' => [
-                    'id' => $receivable->revenueAccount->id,
-                    'code' => $receivable->revenueAccount->code,
-                    'name' => $receivable->revenueAccount->name,
+                'receivable_account' => [
+                    'id' => $receivable->receivableAccount->id,
+                    'code' => $receivable->receivableAccount->code,
+                    'name' => $receivable->receivableAccount->name,
                 ],
                 'show_url' => route('accounts-receivable.show', $receivable),
             ])->values(),
@@ -104,10 +104,10 @@ class BankStatementSettlementController extends Controller
                     $payable->due_date->startOfDay()
                         ->diffInDays($journalEntry->entry_date->startOfDay(), false),
                 ),
-                'expense_account' => [
-                    'id' => $payable->expenseAccount->id,
-                    'code' => $payable->expenseAccount->code,
-                    'name' => $payable->expenseAccount->name,
+                'payable_account' => [
+                    'id' => $payable->payableAccount->id,
+                    'code' => $payable->payableAccount->code,
+                    'name' => $payable->payableAccount->name,
                 ],
                 'show_url' => route('accounts-payable.show', $payable),
             ])->values(),

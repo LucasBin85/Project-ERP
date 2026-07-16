@@ -15,6 +15,7 @@ function todayLocal(): string {
 export function useAccountPayableCreate() {
     const form = useForm({
         expense_account_id: '',
+        payable_account_id: '',
         payee_name: '',
         description: '',
         due_date: todayLocal(),
@@ -26,6 +27,7 @@ export function useAccountPayableCreate() {
     const canSubmit = computed(() => {
         return Boolean(
             form.expense_account_id &&
+                form.payable_account_id &&
                 form.payee_name.trim() &&
                 form.description.trim() &&
                 form.due_date &&

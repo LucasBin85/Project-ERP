@@ -35,7 +35,8 @@ class FindBankStatementPayableCandidates
             ->where('status', 'pending')
             ->where('amount_cents', $bankLine->amount_cents)
             ->whereNull('payment_journal_entry_id')
-            ->with('expenseAccount:id,wallet_id,code,name,type,allows_posting')
+            ->whereNotNull('payable_account_id')
+            ->with(['expenseAccount:id,wallet_id,code,name,type,allows_posting', 'payableAccount:id,wallet_id,code,name,type,financial_group,allows_posting'])
             ->get()
             ->sort(function (AccountPayable $left, AccountPayable $right) use ($entry) {
                 $leftDistance = abs(

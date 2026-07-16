@@ -11,7 +11,9 @@ class AccountPayable extends Model
 
     protected $fillable = [
         'wallet_id',
+        'payable_account_id',
         'expense_account_id',
+        'provision_journal_entry_id',
         'bank_account_id',
         'payment_journal_entry_id',
         'payee_name',
@@ -37,6 +39,16 @@ class AccountPayable extends Model
     public function expenseAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class, 'expense_account_id');
+    }
+
+    public function payableAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'payable_account_id');
+    }
+
+    public function provisionJournalEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class, 'provision_journal_entry_id');
     }
 
     public function bankAccount(): BelongsTo

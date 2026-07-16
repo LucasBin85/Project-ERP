@@ -41,9 +41,6 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                     Voltar
                 </Link>
 
-                <Link :href="actions.statement_url" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
-                    Abrir Extrato
-                </Link>
             </div>
 
             <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -73,27 +70,9 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                             </p>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-px border-t border-gray-700 bg-gray-700 lg:grid-cols-4">
-                            <div class="bg-gray-950 p-4">
-                                <p class="text-xs text-gray-500 uppercase">Sem classificação</p>
-                                <p class="mt-1 text-xl font-bold text-yellow-300">{{ summary.unclassified_entries ?? 0 }}</p>
-                            </div>
-                            <div class="bg-gray-950 p-4">
-                                <p class="text-xs text-gray-500 uppercase">Prontos para contabilidade</p>
-                                <p class="mt-1 text-xl font-bold text-green-300">{{ summary.ready_for_accounting_entries ?? 0 }}</p>
-                            </div>
-                            <div class="bg-gray-950 p-4">
-                                <p class="text-xs text-gray-500 uppercase">Vínculo pendente</p>
-                                <p class="mt-1 text-xl font-bold text-orange-300">{{ summary.pending_link_entries ?? 0 }}</p>
-                            </div>
-                            <div class="bg-gray-950 p-4">
-                                <p class="text-xs text-gray-500 uppercase">Postados</p>
-                                <p class="mt-1 text-xl font-bold text-blue-300">{{ summary.posted_entries ?? 0 }}</p>
-                            </div>
-                        </div>
-
-                        <div class="border-t border-gray-700 px-6 py-3 text-sm text-gray-400">
-                            Última atualização: {{ formatDate(account.last_transaction_at) }}
+                        <div class="flex items-center justify-between gap-4 border-t border-gray-700 px-6 py-4">
+                            <span class="text-sm text-gray-400">Última atualização: {{ formatDate(account.last_transaction_at) }}</span>
+                            <Link :href="actions.statement_url" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Abrir Extrato</Link>
                         </div>
                     </div>
                 </ReportSection>

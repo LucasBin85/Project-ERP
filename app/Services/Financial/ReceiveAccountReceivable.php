@@ -7,7 +7,6 @@ use App\Models\AccountReceivable;
 use App\Models\BankAccount;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
-use App\Services\Accounting\PostJournalEntry;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -15,9 +14,7 @@ class ReceiveAccountReceivable
 {
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
-        private readonly PostJournalEntry $postJournalEntry,
-    ) {
-    }
+    ) {}
 
     public function execute(Wallet $wallet, AccountReceivable $accountReceivable, ReceiveAccountReceivableDTO $dto): AccountReceivable
     {
@@ -44,18 +41,18 @@ class ReceiveAccountReceivable
                 ]);
             }
 
-            $accountReceivable->load('revenueAccount');
+            $accountReceivable->load('receivableAccount');
 
-            if (! $accountReceivable->revenueAccount?->allows_posting) {
+            if (! $accountReceivable->receivableAccount?->allows_posting) {
                 throw ValidationException::withMessages([
-                    'revenue_account_id' => 'Conta de receita inválida para recebimento.',
+                    'receivable_account_id' => 'Conta de controle do cliente inválida para recebimento.',
                 ]);
             }
 
             $journalEntry = $this->createJournalEntry->execute([
                 'wallet_id' => $wallet->id,
                 'entry_date' => $dto->receivedAt,
-                'description' => 'Recebimento: ' . $accountReceivable->description,
+                'description' => 'Recebimento: '.$accountReceivable->description,
                 'lines' => [
                     [
                         'chart_of_account_id' => $bankAccount->chart_of_account_id,
@@ -63,14 +60,12 @@ class ReceiveAccountReceivable
                         'amount_cents' => $accountReceivable->amount_cents,
                     ],
                     [
-                        'chart_of_account_id' => $accountReceivable->revenue_account_id,
+                        'chart_of_account_id' => $accountReceivable->receivable_account_id,
                         'type' => 'credit',
                         'amount_cents' => $accountReceivable->amount_cents,
                     ],
                 ],
             ]);
-
-            $journalEntry = $this->postJournalEntry->handle($journalEntry);
 
             $accountReceivable->update([
                 'bank_account_id' => $bankAccount->id,
@@ -81,6 +76,7 @@ class ReceiveAccountReceivable
 
             return $accountReceivable->fresh([
                 'revenueAccount',
+                'receivableAccount',
                 'bankAccount',
                 'receiptJournalEntry.lines.chartOfAccount',
             ]);

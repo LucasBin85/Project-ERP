@@ -7,7 +7,6 @@ use App\Models\AccountPayable;
 use App\Models\BankAccount;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
-use App\Services\Accounting\PostJournalEntry;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -15,7 +14,6 @@ class PayAccountPayable
 {
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
-        private readonly PostJournalEntry $postJournalEntry,
     ) {}
 
     public function execute(Wallet $wallet, AccountPayable $accountPayable, PayAccountPayableDTO $dto): AccountPayable
@@ -48,11 +46,11 @@ class PayAccountPayable
                 ]);
             }
 
-            $accountPayable->load('expenseAccount');
+            $accountPayable->load('payableAccount');
 
-            if (! $accountPayable->expenseAccount?->allows_posting) {
+            if (! $accountPayable->payableAccount?->allows_posting) {
                 throw ValidationException::withMessages([
-                    'expense_account_id' => 'Conta de despesa inválida para pagamento.',
+                    'payable_account_id' => 'Conta de controle do fornecedor inválida para pagamento.',
                 ]);
             }
 
@@ -62,7 +60,7 @@ class PayAccountPayable
                 'description' => 'Pagamento: '.$accountPayable->description,
                 'lines' => [
                     [
-                        'chart_of_account_id' => $accountPayable->expense_account_id,
+                        'chart_of_account_id' => $accountPayable->payable_account_id,
                         'type' => 'debit',
                         'amount_cents' => $accountPayable->amount_cents,
                     ],
@@ -74,8 +72,6 @@ class PayAccountPayable
                 ],
             ]);
 
-            $journalEntry = $this->postJournalEntry->handle($journalEntry);
-
             $accountPayable->update([
                 'bank_account_id' => $bankAccount->id,
                 'payment_journal_entry_id' => $journalEntry->id,
@@ -85,6 +81,7 @@ class PayAccountPayable
 
             return $accountPayable->fresh([
                 'expenseAccount',
+                'payableAccount',
                 'bankAccount',
                 'paymentJournalEntry.lines.chartOfAccount',
             ]);

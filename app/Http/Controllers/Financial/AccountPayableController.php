@@ -43,6 +43,8 @@ class AccountPayableController extends Controller
             ->where('wallet_id', $wallet->id)
             ->with([
                 'expenseAccount:id,code,name',
+                'payableAccount:id,code,name',
+                'provisionJournalEntry:id,status',
                 'bankAccount:id,name,bank_name,bank_code,agency,account_number',
                 'paymentJournalEntry:id,status',
             ])
@@ -51,8 +53,8 @@ class AccountPayableController extends Controller
             ->whereDate('due_date', '<=', $validated['end_date'])
             ->when($validated['search'] !== '', function ($query) use ($validated) {
                 $query->where(function ($query) use ($validated) {
-                    $query->where('payee_name', 'like', '%' . $validated['search'] . '%')
-                        ->orWhere('description', 'like', '%' . $validated['search'] . '%');
+                    $query->where('payee_name', 'like', '%'.$validated['search'].'%')
+                        ->orWhere('description', 'like', '%'.$validated['search'].'%');
                 });
             })
             ->orderBy('due_date')
@@ -80,6 +82,7 @@ class AccountPayableController extends Controller
                 'name' => $wallet->name,
             ],
             'expenseAccounts' => $this->expenseAccounts($wallet->id),
+            'payableAccounts' => $this->controlAccounts($wallet->id, 'passivo', 'accounts_payable'),
         ]);
     }
 
@@ -88,6 +91,7 @@ class AccountPayableController extends Controller
         $wallet = $this->resolveActiveWallet($request);
 
         $data = $request->validate([
+            'payable_account_id' => ['required', 'integer', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $wallet->id)->where('type', 'passivo')->where('financial_group', 'accounts_payable')->where('allows_posting', true)],
             'expense_account_id' => [
                 'required',
                 'integer',
@@ -103,11 +107,11 @@ class AccountPayableController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $accountPayable = $service->execute($wallet, AccountPayableDTO::fromArray($data));
+        $service->execute($wallet, AccountPayableDTO::fromArray($data));
 
         return redirect()
-            ->route('accounts-payable.show', $accountPayable)
-            ->with('success', 'Conta a pagar cadastrada com sucesso.');
+            ->route('accounts-payable.index')
+            ->with('success', 'Título a pagar cadastrado com sucesso.');
     }
 
     public function show(Request $request, AccountPayable $accountPayable): Response
@@ -118,6 +122,8 @@ class AccountPayableController extends Controller
 
         $accountPayable->load([
             'expenseAccount',
+            'payableAccount',
+            'provisionJournalEntry.lines.chartOfAccount',
             'bankAccount',
             'paymentJournalEntry.lines.chartOfAccount',
         ]);
@@ -184,6 +190,15 @@ class AccountPayableController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function controlAccounts(int $walletId, string $type, string $group): array
+    {
+        return ChartOfAccount::query()->where('wallet_id', $walletId)->where('type', $type)
+            ->where('financial_group', $group)->where('allows_posting', true)->whereDoesntHave('children')
+            ->orderBy('code')->get(['id', 'code', 'name'])->map(fn (ChartOfAccount $account) => [
+                'id' => $account->id, 'label' => "{$account->code} - {$account->name}",
+            ])->values()->all();
     }
 
     private function formatBankAccountLabel(BankAccount $account): string
