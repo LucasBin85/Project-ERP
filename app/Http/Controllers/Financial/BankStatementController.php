@@ -66,6 +66,7 @@ class BankStatementController extends Controller
             'filters' => $statement['filters'],
             'selectedBankAccount' => $statement['bank_account'],
             'transactions' => $statement['transactions'],
+            'summary' => $statement['summary'],
             'classificationAccounts' => $this->classificationAccounts(
                 wallet: $wallet,
                 bankAccount: $bankAccount,

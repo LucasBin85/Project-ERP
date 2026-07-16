@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\DTOs\Financial\AccountPayableDTO;
 use App\Models\AccountPayable;
 use App\Models\ChartOfAccount;
+use App\Models\Supplier;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
 use Illuminate\Support\Facades\DB;
@@ -16,12 +17,18 @@ class CreateAccountPayable
 
     public function execute(Wallet $wallet, AccountPayableDTO $dto): AccountPayable
     {
+        $supplier = $dto->supplierId ? Supplier::query()->where('wallet_id', $wallet->id)->where('active', true)->find($dto->supplierId) : null;
+        if ($dto->supplierId && ! $supplier) {
+            throw ValidationException::withMessages(['supplier_id' => 'Fornecedor ativo inválido.']);
+        }
+        $expenseId = $supplier?->default_expense_account_id ?? $dto->expenseAccountId;
+        $payableId = $supplier?->payable_account_id ?? $dto->payableAccountId;
         $expenseAccount = ChartOfAccount::query()
             ->where('wallet_id', $wallet->id)
             ->where('type', 'despesa')
             ->where('allows_posting', true)
             ->whereDoesntHave('children')
-            ->find($dto->expenseAccountId);
+            ->find($expenseId);
 
         if (! $expenseAccount) {
             throw ValidationException::withMessages([
@@ -33,16 +40,17 @@ class CreateAccountPayable
             ->where('wallet_id', $wallet->id)->where('type', 'passivo')
             ->where('financial_group', 'accounts_payable')->where('allows_posting', true)
             ->whereDoesntHave('children')
-            ->when($dto->payableAccountId, fn ($query) => $query->whereKey($dto->payableAccountId))
+            ->when($payableId, fn ($query) => $query->whereKey($payableId))
             ->orderBy('code')->first();
         if (! $payableAccount) {
             throw ValidationException::withMessages(['payable_account_id' => 'Conta de controle do fornecedor inválida.']);
         }
 
-        return DB::transaction(function () use ($wallet, $dto, $expenseAccount, $payableAccount) {
+        return DB::transaction(function () use ($wallet, $dto, $expenseAccount, $payableAccount, $supplier) {
             $title = AccountPayable::query()->create([
                 'wallet_id' => $wallet->id, 'payable_account_id' => $payableAccount->id,
-                'expense_account_id' => $expenseAccount->id, 'payee_name' => $dto->payeeName,
+                'supplier_id' => $supplier?->id,
+                'expense_account_id' => $expenseAccount->id, 'payee_name' => $supplier?->name ?? $dto->payeeName,
                 'description' => $dto->description, 'due_date' => $dto->dueDate,
                 'amount_cents' => $dto->amountCents, 'status' => 'pending', 'notes' => $dto->notes,
             ]);

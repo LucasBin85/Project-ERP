@@ -8,8 +8,7 @@ import { route } from 'ziggy-js';
 
 const props = defineProps<{
     wallet: Record<string, any>;
-    expenseAccounts: Array<Record<string, any>>;
-    payableAccounts: Array<Record<string, any>>;
+    suppliers: Array<Record<string, any>>;
 }>();
 
 const accountPayable = useAccountPayableCreate();
@@ -38,43 +37,13 @@ function submit() {
                         </p>
                     </div>
 
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de controle do fornecedor</label>
-                        <select v-model="accountPayable.form.payable_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
-                            <option value="">Selecione uma conta de controle</option>
-                            <option v-for="account in payableAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
-                        </select>
-                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.payable_account_id }}</p>
-                    </div>
                 </template>
 
                 <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Fornecedor / Beneficiário</label>
-                        <input
-                            v-model="accountPayable.form.payee_name"
-                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
-                            placeholder="Ex: CEEE"
-                        />
-                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.payee_name }}</p>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de despesa</label>
-                        <select
-                            v-model="accountPayable.form.expense_account_id"
-                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
-                        >
-                            <option value="">Selecione uma despesa</option>
-                            <option
-                                v-for="account in expenseAccounts"
-                                :key="account.id"
-                                :value="account.id"
-                            >
-                                {{ account.label }}
-                            </option>
-                        </select>
-                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.expense_account_id }}</p>
+                        <select v-model="accountPayable.form.supplier_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o fornecedor</option><option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option></select>
+                        <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.supplier_id }}</p>
                     </div>
 
                     <div class="md:col-span-2">

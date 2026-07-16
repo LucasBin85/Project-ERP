@@ -18,12 +18,14 @@ import type { FinancialOperationTypeOption } from '@/types/financial/operationTy
 import { Link, router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
+import { formatCurrency } from '@/lib/formatters';
 
 const props = defineProps<{
     wallet: BankStatementWallet;
     filters: BankStatementFilters;
     selectedBankAccount: BankStatementAccount | null;
     transactions: BankStatementTransaction[];
+    summary: { opening_balance_cents: number; total_inflows_cents: number; total_outflows_cents: number; closing_balance_cents: number };
     classificationAccounts: BankStatementClassificationAccount[];
     operationTypes: FinancialOperationTypeOption[];
     operational: BankStatementOperational;
@@ -201,6 +203,13 @@ onBeforeUnmount(() => {
                         </p>
                     </div>
                 </template>
+
+                <div class="grid grid-cols-2 gap-px border-b border-gray-700 bg-gray-700 md:grid-cols-4">
+                    <div class="bg-gray-950 p-4"><p class="text-xs text-gray-500">Saldo anterior</p><b class="text-gray-100">{{ formatCurrency(summary.opening_balance_cents) }}</b></div>
+                    <div class="bg-gray-950 p-4"><p class="text-xs text-gray-500">Entradas do período</p><b class="text-green-300">{{ formatCurrency(summary.total_inflows_cents) }}</b></div>
+                    <div class="bg-gray-950 p-4"><p class="text-xs text-gray-500">Saídas do período</p><b class="text-red-300">{{ formatCurrency(summary.total_outflows_cents) }}</b></div>
+                    <div class="bg-gray-950 p-4"><p class="text-xs text-gray-500">Saldo final do período</p><b class="text-white">{{ formatCurrency(summary.closing_balance_cents) }}</b></div>
+                </div>
 
                 <div class="border-b border-gray-700 p-6">
                     <label for="bank-statement-search" class="mb-2 block text-sm font-semibold text-gray-300">Buscar movimentos</label>

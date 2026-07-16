@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AccountPayable;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
+use App\Models\Supplier;
 use App\Services\Financial\CreateAccountPayable;
 use App\Services\Financial\PayAccountPayable;
 use Illuminate\Http\RedirectResponse;
@@ -81,8 +82,7 @@ class AccountPayableController extends Controller
                 'id' => $wallet->id,
                 'name' => $wallet->name,
             ],
-            'expenseAccounts' => $this->expenseAccounts($wallet->id),
-            'payableAccounts' => $this->controlAccounts($wallet->id, 'passivo', 'accounts_payable'),
+            'suppliers' => Supplier::where('wallet_id', $wallet->id)->where('active', true)->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
@@ -91,16 +91,7 @@ class AccountPayableController extends Controller
         $wallet = $this->resolveActiveWallet($request);
 
         $data = $request->validate([
-            'payable_account_id' => ['required', 'integer', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $wallet->id)->where('type', 'passivo')->where('financial_group', 'accounts_payable')->where('allows_posting', true)],
-            'expense_account_id' => [
-                'required',
-                'integer',
-                Rule::exists('chart_of_accounts', 'id')
-                    ->where('wallet_id', $wallet->id)
-                    ->where('type', 'despesa')
-                    ->where('allows_posting', true),
-            ],
-            'payee_name' => ['required', 'string', 'max:255'],
+            'supplier_id' => ['required', 'integer', Rule::exists('suppliers', 'id')->where('wallet_id', $wallet->id)->where('active', true)],
             'description' => ['required', 'string', 'max:255'],
             'due_date' => ['required', 'date'],
             'amount_cents' => ['required', 'integer', 'min:1'],

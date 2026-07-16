@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AccountReceivable;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
+use App\Models\Customer;
 use App\Services\Financial\CreateAccountReceivable;
 use App\Services\Financial\ReceiveAccountReceivable;
 use Illuminate\Http\RedirectResponse;
@@ -81,8 +82,7 @@ class AccountReceivableController extends Controller
                 'id' => $wallet->id,
                 'name' => $wallet->name,
             ],
-            'revenueAccounts' => $this->revenueAccounts($wallet->id),
-            'receivableAccounts' => $this->controlAccounts($wallet->id),
+            'customers' => Customer::where('wallet_id', $wallet->id)->where('active', true)->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
@@ -91,16 +91,7 @@ class AccountReceivableController extends Controller
         $wallet = $this->resolveActiveWallet($request);
 
         $data = $request->validate([
-            'receivable_account_id' => ['required', 'integer', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $wallet->id)->where('type', 'ativo')->where('financial_group', 'accounts_receivable')->where('allows_posting', true)],
-            'revenue_account_id' => [
-                'required',
-                'integer',
-                Rule::exists('chart_of_accounts', 'id')
-                    ->where('wallet_id', $wallet->id)
-                    ->where('type', 'receita')
-                    ->where('allows_posting', true),
-            ],
-            'customer_name' => ['required', 'string', 'max:255'],
+            'customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where('wallet_id', $wallet->id)->where('active', true)],
             'description' => ['required', 'string', 'max:255'],
             'due_date' => ['required', 'date'],
             'amount_cents' => ['required', 'integer', 'min:1'],

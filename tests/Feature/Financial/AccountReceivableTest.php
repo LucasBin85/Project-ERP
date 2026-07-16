@@ -2,6 +2,7 @@
 
 use App\DTOs\Financial\AccountReceivableDTO;
 use App\DTOs\Financial\ReceiveAccountReceivableDTO;
+use App\Models\Customer;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
@@ -19,14 +20,15 @@ it('stores a receivable title and redirects to the existing index route', functi
     $wallet = $user->wallets()->firstOrFail();
     $revenue = $wallet->chartOfAccounts()->where('type', 'receita')->where('allows_posting', true)->firstOrFail();
     $control = $wallet->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->firstOrFail();
+    $customer = Customer::create(['wallet_id' => $wallet->id, 'name' => 'Cliente', 'receivable_account_id' => $control->id, 'default_revenue_account_id' => $revenue->id, 'active' => true]);
 
     $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
         ->post(route('accounts-receivable.store'), [
-            'receivable_account_id' => $control->id, 'revenue_account_id' => $revenue->id,
-            'customer_name' => 'Cliente', 'description' => 'Título novo', 'due_date' => '2026-07-31', 'amount_cents' => 10000,
+            'customer_id' => $customer->id, 'receivable_account_id' => 999999, 'revenue_account_id' => 999999,
+            'description' => 'Título novo', 'due_date' => '2026-07-31', 'amount_cents' => 10000,
         ])->assertRedirect(route('accounts-receivable.index'))->assertSessionHas('success', 'Título a receber cadastrado com sucesso.');
 
-    $this->assertDatabaseHas('accounts_receivable', ['wallet_id' => $wallet->id, 'receivable_account_id' => $control->id, 'status' => 'pending']);
+    $this->assertDatabaseHas('accounts_receivable', ['wallet_id' => $wallet->id, 'customer_id' => $customer->id, 'receivable_account_id' => $control->id, 'revenue_account_id' => $revenue->id, 'status' => 'pending']);
 });
 
 it('creates a pending account receivable with a draft accrual entry', function () {

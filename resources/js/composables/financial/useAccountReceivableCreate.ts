@@ -9,9 +9,7 @@ function todayLocal(): string {
 
 export function useAccountReceivableCreate() {
     const form = useForm({
-        revenue_account_id: '',
-        receivable_account_id: '',
-        customer_name: '',
+        customer_id: '',
         description: '',
         due_date: todayLocal(),
         amount: '',
@@ -21,9 +19,7 @@ export function useAccountReceivableCreate() {
 
     const canSubmit = computed(() => {
         return Boolean(
-            form.revenue_account_id &&
-                form.receivable_account_id &&
-                form.customer_name.trim() &&
+            form.customer_id &&
                 form.description.trim() &&
                 form.due_date &&
                 form.amount_cents > 0,

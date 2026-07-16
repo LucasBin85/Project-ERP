@@ -18,6 +18,8 @@ use App\Http\Controllers\Financial\BankStatementSettlementController;
 use App\Http\Controllers\Financial\BankTransferController;
 use App\Http\Controllers\Financial\CashFlowController;
 use App\Http\Controllers\Financial\CreditCardController;
+use App\Http\Controllers\Financial\SupplierController;
+use App\Http\Controllers\Financial\CustomerController;
 use App\Http\Controllers\Financial\OfxImportController;
 use App\Http\Controllers\FinancialPositionController;
 use App\Http\Controllers\WalletController;
@@ -145,6 +147,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::resource('accounts-receivable', AccountReceivableController::class)
             ->only(['index', 'create', 'store', 'show']);
+
+        Route::resource('suppliers', SupplierController::class)->only(['index', 'create', 'store', 'edit', 'update']);
+        Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'edit', 'update']);
 
         Route::post('credit-cards/{creditCard}/transactions', [CreditCardController::class, 'storeTransaction'])
             ->name('credit-cards.transactions.store');

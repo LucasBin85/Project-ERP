@@ -4,6 +4,7 @@ use App\DTOs\Financial\AccountPayableDTO;
 use App\DTOs\Financial\PayAccountPayableDTO;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Financial\CreateAccountPayable;
@@ -19,14 +20,15 @@ it('stores a payable title and redirects to the existing index route', function 
     $wallet = $user->wallets()->firstOrFail();
     $expense = $wallet->chartOfAccounts()->where('type', 'despesa')->where('allows_posting', true)->firstOrFail();
     $control = $wallet->chartOfAccounts()->where('financial_group', 'accounts_payable')->where('allows_posting', true)->firstOrFail();
+    $supplier = Supplier::create(['wallet_id' => $wallet->id, 'name' => 'Fornecedor', 'payable_account_id' => $control->id, 'default_expense_account_id' => $expense->id, 'active' => true]);
 
     $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
         ->post(route('accounts-payable.store'), [
-            'payable_account_id' => $control->id, 'expense_account_id' => $expense->id,
-            'payee_name' => 'Fornecedor', 'description' => 'Título novo', 'due_date' => '2026-07-31', 'amount_cents' => 10000,
+            'supplier_id' => $supplier->id, 'payable_account_id' => 999999, 'expense_account_id' => 999999,
+            'description' => 'Título novo', 'due_date' => '2026-07-31', 'amount_cents' => 10000,
         ])->assertRedirect(route('accounts-payable.index'))->assertSessionHas('success', 'Título a pagar cadastrado com sucesso.');
 
-    $this->assertDatabaseHas('accounts_payable', ['wallet_id' => $wallet->id, 'payable_account_id' => $control->id, 'status' => 'pending']);
+    $this->assertDatabaseHas('accounts_payable', ['wallet_id' => $wallet->id, 'supplier_id' => $supplier->id, 'payable_account_id' => $control->id, 'expense_account_id' => $expense->id, 'status' => 'pending']);
 });
 
 it('creates a pending account payable with a draft accrual entry', function () {

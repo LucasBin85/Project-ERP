@@ -11,6 +11,7 @@ class AccountReceivable extends Model
 
     protected $fillable = [
         'wallet_id',
+        'customer_id',
         'receivable_account_id',
         'revenue_account_id',
         'provision_journal_entry_id',
@@ -34,6 +35,11 @@ class AccountReceivable extends Model
     public function wallet(): BelongsTo
     {
         return $this->belongsTo(Wallet::class);
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function revenueAccount(): BelongsTo

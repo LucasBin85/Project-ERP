@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\DTOs\Financial\AccountReceivableDTO;
 use App\Models\AccountReceivable;
 use App\Models\ChartOfAccount;
+use App\Models\Customer;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
 use Illuminate\Support\Facades\DB;
@@ -16,12 +17,18 @@ class CreateAccountReceivable
 
     public function execute(Wallet $wallet, AccountReceivableDTO $dto): AccountReceivable
     {
+        $customer = $dto->customerId ? Customer::query()->where('wallet_id', $wallet->id)->where('active', true)->find($dto->customerId) : null;
+        if ($dto->customerId && ! $customer) {
+            throw ValidationException::withMessages(['customer_id' => 'Cliente ativo inválido.']);
+        }
+        $revenueId = $customer?->default_revenue_account_id ?? $dto->revenueAccountId;
+        $receivableId = $customer?->receivable_account_id ?? $dto->receivableAccountId;
         $revenueAccount = ChartOfAccount::query()
             ->where('wallet_id', $wallet->id)
             ->where('type', 'receita')
             ->where('allows_posting', true)
             ->whereDoesntHave('children')
-            ->find($dto->revenueAccountId);
+            ->find($revenueId);
 
         if (! $revenueAccount) {
             throw ValidationException::withMessages([
@@ -33,16 +40,17 @@ class CreateAccountReceivable
             ->where('wallet_id', $wallet->id)->where('type', 'ativo')
             ->where('financial_group', 'accounts_receivable')->where('allows_posting', true)
             ->whereDoesntHave('children')
-            ->when($dto->receivableAccountId, fn ($query) => $query->whereKey($dto->receivableAccountId))
+            ->when($receivableId, fn ($query) => $query->whereKey($receivableId))
             ->orderBy('code')->first();
         if (! $receivableAccount) {
             throw ValidationException::withMessages(['receivable_account_id' => 'Conta de controle do cliente inválida.']);
         }
 
-        return DB::transaction(function () use ($wallet, $dto, $revenueAccount, $receivableAccount) {
+        return DB::transaction(function () use ($wallet, $dto, $revenueAccount, $receivableAccount, $customer) {
             $title = AccountReceivable::query()->create([
                 'wallet_id' => $wallet->id, 'receivable_account_id' => $receivableAccount->id,
-                'revenue_account_id' => $revenueAccount->id, 'customer_name' => $dto->customerName,
+                'customer_id' => $customer?->id,
+                'revenue_account_id' => $revenueAccount->id, 'customer_name' => $customer?->name ?? $dto->customerName,
                 'description' => $dto->description, 'due_date' => $dto->dueDate,
                 'amount_cents' => $dto->amountCents, 'status' => 'pending', 'notes' => $dto->notes,
             ]);

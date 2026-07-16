@@ -8,8 +8,7 @@ import { route } from 'ziggy-js';
 
 const props = defineProps<{
     wallet: Record<string, any>;
-    revenueAccounts: Array<Record<string, any>>;
-    receivableAccounts: Array<Record<string, any>>;
+    customers: Array<Record<string, any>>;
 }>();
 
 const accountReceivable = useAccountReceivableCreate();
@@ -30,30 +29,13 @@ function submit() {
                         <p class="mt-1 text-sm text-gray-400">O cadastro cria uma provisão contábil em rascunho para posterior postagem.</p>
                     </div>
 
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de controle do cliente</label>
-                        <select v-model="accountReceivable.form.receivable_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
-                            <option value="">Selecione uma conta de controle</option>
-                            <option v-for="account in receivableAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
-                        </select>
-                        <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.receivable_account_id }}</p>
-                    </div>
                 </template>
 
                 <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Cliente</label>
-                        <input v-model="accountReceivable.form.customer_name" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="Ex: Cliente ABC" />
-                        <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.customer_name }}</p>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de receita</label>
-                        <select v-model="accountReceivable.form.revenue_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
-                            <option value="">Selecione uma receita</option>
-                            <option v-for="account in revenueAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
-                        </select>
-                        <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.revenue_account_id }}</p>
+                        <select v-model="accountReceivable.form.customer_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o cliente</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select>
+                        <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.customer_id }}</p>
                     </div>
 
                     <div class="md:col-span-2">
