@@ -28,6 +28,16 @@ class Wallet extends Model
         return $this->hasMany(ChartOfAccount::class);
     }
 
+    public function suppliers()
+    {
+        return $this->hasMany(Supplier::class);
+    }
+
+    public function customers()
+    {
+        return $this->hasMany(Customer::class);
+    }
+
     public function suspenseAccount()
     {
         return $this->belongsTo(ChartOfAccount::class, 'suspense_account_id');

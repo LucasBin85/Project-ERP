@@ -17,7 +17,7 @@ class CreateAccountPayable
 
     public function execute(Wallet $wallet, AccountPayableDTO $dto): AccountPayable
     {
-        $supplier = $dto->supplierId ? Supplier::query()->where('wallet_id', $wallet->id)->where('active', true)->find($dto->supplierId) : null;
+        $supplier = $dto->supplierId ? Supplier::query()->validForPayables($wallet->id)->find($dto->supplierId) : null;
         if ($dto->supplierId && ! $supplier) {
             throw ValidationException::withMessages(['supplier_id' => 'Fornecedor ativo inválido.']);
         }

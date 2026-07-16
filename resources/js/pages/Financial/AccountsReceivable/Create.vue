@@ -5,6 +5,7 @@ import { useAccountReceivableCreate } from '@/composables/financial/useAccountRe
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import { computed } from 'vue';
 
 const props = defineProps<{
     wallet: Record<string, any>;
@@ -12,6 +13,7 @@ const props = defineProps<{
 }>();
 
 const accountReceivable = useAccountReceivableCreate();
+const selectedCustomer = computed(() => props.customers.find((customer) => customer.id === Number(accountReceivable.form.customer_id)));
 
 function submit() {
     if (!accountReceivable.canSubmit.value) return;
@@ -35,6 +37,10 @@ function submit() {
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Cliente</label>
                         <select v-model="accountReceivable.form.customer_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o cliente</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select>
+                        <div v-if="selectedCustomer" class="mt-2 space-y-1 rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-gray-300">
+                            <p>Conta de controle: {{ selectedCustomer.receivable_account.code }} - {{ selectedCustomer.receivable_account.name }}</p>
+                            <p>Receita padrÃ£o: {{ selectedCustomer.default_revenue_account.code }} - {{ selectedCustomer.default_revenue_account.name }}</p>
+                        </div>
                         <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.customer_id }}</p>
                     </div>
 

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 
 class Supplier extends Model
 {
@@ -18,5 +19,22 @@ class Supplier extends Model
     public function defaultExpenseAccount()
     {
         return $this->belongsTo(ChartOfAccount::class, 'default_expense_account_id');
+    }
+
+    public function scopeValidForPayables(Builder $query, int $walletId): Builder
+    {
+        return $query->where('wallet_id', $walletId)
+            ->where('active', true)
+            ->whereHas('payableAccount', fn (Builder $account) => $account
+                ->where('wallet_id', $walletId)
+                ->where('type', 'passivo')
+                ->where('financial_group', 'accounts_payable')
+                ->where('allows_posting', true)
+                ->whereDoesntHave('children'))
+            ->whereHas('defaultExpenseAccount', fn (Builder $account) => $account
+                ->where('wallet_id', $walletId)
+                ->where('type', 'despesa')
+                ->where('allows_posting', true)
+                ->whereDoesntHave('children'));
     }
 }

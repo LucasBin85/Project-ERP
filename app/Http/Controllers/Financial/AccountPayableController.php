@@ -82,7 +82,9 @@ class AccountPayableController extends Controller
                 'id' => $wallet->id,
                 'name' => $wallet->name,
             ],
-            'suppliers' => Supplier::where('wallet_id', $wallet->id)->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'suppliers' => Supplier::query()->validForPayables($wallet->id)
+                ->with(['payableAccount:id,code,name', 'defaultExpenseAccount:id,code,name'])
+                ->orderBy('name')->get(['id', 'name', 'payable_account_id', 'default_expense_account_id']),
         ]);
     }
 
@@ -91,7 +93,9 @@ class AccountPayableController extends Controller
         $wallet = $this->resolveActiveWallet($request);
 
         $data = $request->validate([
-            'supplier_id' => ['required', 'integer', Rule::exists('suppliers', 'id')->where('wallet_id', $wallet->id)->where('active', true)],
+            'supplier_id' => ['required', 'integer', Rule::exists('suppliers', 'id')->where(
+                fn ($query) => $query->whereIn('id', Supplier::query()->validForPayables($wallet->id)->select('id'))
+            )],
             'description' => ['required', 'string', 'max:255'],
             'due_date' => ['required', 'date'],
             'amount_cents' => ['required', 'integer', 'min:1'],

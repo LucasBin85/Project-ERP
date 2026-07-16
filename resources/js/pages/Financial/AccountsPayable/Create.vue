@@ -5,6 +5,7 @@ import { useAccountPayableCreate } from '@/composables/financial/useAccountPayab
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import { computed } from 'vue';
 
 const props = defineProps<{
     wallet: Record<string, any>;
@@ -12,6 +13,7 @@ const props = defineProps<{
 }>();
 
 const accountPayable = useAccountPayableCreate();
+const selectedSupplier = computed(() => props.suppliers.find((supplier) => supplier.id === Number(accountPayable.form.supplier_id)));
 
 function submit() {
     if (!accountPayable.canSubmit.value) {
@@ -43,6 +45,10 @@ function submit() {
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Fornecedor / Beneficiário</label>
                         <select v-model="accountPayable.form.supplier_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o fornecedor</option><option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">{{ supplier.name }}</option></select>
+                        <div v-if="selectedSupplier" class="mt-2 space-y-1 rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-gray-300">
+                            <p>Conta de controle: {{ selectedSupplier.payable_account.code }} - {{ selectedSupplier.payable_account.name }}</p>
+                            <p>Despesa padrÃ£o: {{ selectedSupplier.default_expense_account.code }} - {{ selectedSupplier.default_expense_account.name }}</p>
+                        </div>
                         <p class="mt-1 text-sm text-red-400">{{ accountPayable.form.errors.supplier_id }}</p>
                     </div>
 

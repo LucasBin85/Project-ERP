@@ -82,7 +82,9 @@ class AccountReceivableController extends Controller
                 'id' => $wallet->id,
                 'name' => $wallet->name,
             ],
-            'customers' => Customer::where('wallet_id', $wallet->id)->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'customers' => Customer::query()->validForReceivables($wallet->id)
+                ->with(['receivableAccount:id,code,name', 'defaultRevenueAccount:id,code,name'])
+                ->orderBy('name')->get(['id', 'name', 'receivable_account_id', 'default_revenue_account_id']),
         ]);
     }
 
@@ -91,7 +93,9 @@ class AccountReceivableController extends Controller
         $wallet = $this->resolveActiveWallet($request);
 
         $data = $request->validate([
-            'customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where('wallet_id', $wallet->id)->where('active', true)],
+            'customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where(
+                fn ($query) => $query->whereIn('id', Customer::query()->validForReceivables($wallet->id)->select('id'))
+            )],
             'description' => ['required', 'string', 'max:255'],
             'due_date' => ['required', 'date'],
             'amount_cents' => ['required', 'integer', 'min:1'],

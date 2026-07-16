@@ -17,7 +17,7 @@ class CreateAccountReceivable
 
     public function execute(Wallet $wallet, AccountReceivableDTO $dto): AccountReceivable
     {
-        $customer = $dto->customerId ? Customer::query()->where('wallet_id', $wallet->id)->where('active', true)->find($dto->customerId) : null;
+        $customer = $dto->customerId ? Customer::query()->validForReceivables($wallet->id)->find($dto->customerId) : null;
         if ($dto->customerId && ! $customer) {
             throw ValidationException::withMessages(['customer_id' => 'Cliente ativo inválido.']);
         }
