@@ -47,10 +47,10 @@ class CreateBaseChartOfAccounts
     {
         $pairs = [
             'Fornecedores Diversos' => 'Despesas Administrativas',
-            'Energia elÃ©trica a pagar' => 'Energia elÃ©trica',
+            'Energia elétrica a pagar' => 'Energia elétrica',
             'Internet e telefonia a pagar' => 'Internet e telefonia',
             'Aluguel a pagar' => 'Aluguel',
-            'Ãgua e saneamento a pagar' => 'Ãgua e saneamento',
+            'Água e saneamento a pagar' => 'Água e saneamento',
             'Impostos e taxas a pagar' => 'Impostos e taxas',
         ];
 
@@ -169,10 +169,10 @@ class CreateBaseChartOfAccounts
                                 'allows_posting' => true,
                                 'financial_group' => 'accounts_payable',
                             ],
-                            ['code' => '2.1.2', 'name' => 'Energia elÃ©trica a pagar', 'type' => 'passivo', 'allows_posting' => true, 'financial_group' => 'accounts_payable'],
+                            ['code' => '2.1.2', 'name' => 'Energia elétrica a pagar', 'type' => 'passivo', 'allows_posting' => true, 'financial_group' => 'accounts_payable'],
                             ['code' => '2.1.3', 'name' => 'Internet e telefonia a pagar', 'type' => 'passivo', 'allows_posting' => true, 'financial_group' => 'accounts_payable'],
                             ['code' => '2.1.4', 'name' => 'Aluguel a pagar', 'type' => 'passivo', 'allows_posting' => true, 'financial_group' => 'accounts_payable'],
-                            ['code' => '2.1.5', 'name' => 'Ãgua e saneamento a pagar', 'type' => 'passivo', 'allows_posting' => true, 'financial_group' => 'accounts_payable'],
+                            ['code' => '2.1.5', 'name' => 'Água e saneamento a pagar', 'type' => 'passivo', 'allows_posting' => true, 'financial_group' => 'accounts_payable'],
                             ['code' => '2.1.6', 'name' => 'Impostos e taxas a pagar', 'type' => 'passivo', 'allows_posting' => true, 'financial_group' => 'accounts_payable'],
                         ],
                     ],
@@ -241,10 +241,10 @@ class CreateBaseChartOfAccounts
                                 'type' => 'despesa',
                                 'allows_posting' => true,
                             ],
-                            ['code' => '5.1.2', 'name' => 'Energia elÃ©trica', 'type' => 'despesa', 'allows_posting' => true],
+                            ['code' => '5.1.2', 'name' => 'Energia elétrica', 'type' => 'despesa', 'allows_posting' => true],
                             ['code' => '5.1.3', 'name' => 'Internet e telefonia', 'type' => 'despesa', 'allows_posting' => true],
                             ['code' => '5.1.4', 'name' => 'Aluguel', 'type' => 'despesa', 'allows_posting' => true],
-                            ['code' => '5.1.5', 'name' => 'Ãgua e saneamento', 'type' => 'despesa', 'allows_posting' => true],
+                            ['code' => '5.1.5', 'name' => 'Água e saneamento', 'type' => 'despesa', 'allows_posting' => true],
                             ['code' => '5.1.6', 'name' => 'Impostos e taxas', 'type' => 'despesa', 'allows_posting' => true],
                         ],
                     ],

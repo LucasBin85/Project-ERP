@@ -16,7 +16,28 @@ it('creates a structural chart without example bank accounts', function () {
         ->and($wallet->suppliers()->count())->toBe(6)
         ->and($wallet->suppliers()->whereNull('payable_account_id')->exists())->toBeFalse()
         ->and($wallet->suppliers()->whereNull('default_expense_account_id')->exists())->toBeFalse();
+
+    $this->assertDatabaseHas('chart_of_accounts', ['wallet_id' => $wallet->id, 'name' => 'Energia elétrica']);
+    $this->assertDatabaseHas('chart_of_accounts', ['wallet_id' => $wallet->id, 'name' => 'Água e saneamento']);
+    $this->assertDatabaseMissing('chart_of_accounts', ['wallet_id' => $wallet->id, 'name' => 'Energia elÃ©trica']);
+    $this->assertDatabaseMissing('chart_of_accounts', ['wallet_id' => $wallet->id, 'name' => 'Ãgua e saneamento']);
 });
+
+it('blocks direct creation inside payable and receivable control groups', function (string $code, string $message) {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+    $parent = $wallet->chartOfAccounts()->where('code', $code)->firstOrFail();
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])->from(route('chart-of-accounts.index'))
+        ->post(route('chart-of-accounts.store'), [
+            'name' => 'Conta solta', 'parent_id' => $parent->id, 'allows_posting' => true,
+        ])->assertRedirect(route('chart-of-accounts.index'))->assertSessionHasErrors(['allows_posting' => $message]);
+
+    $this->assertDatabaseMissing('chart_of_accounts', ['wallet_id' => $wallet->id, 'name' => 'Conta solta']);
+})->with([
+    ['2.1', 'Crie contas em Contas a Pagar pelo cadastro de Fornecedores / Contas a Pagar para gerar também a despesa padrão.'],
+    ['1.2', 'Crie contas em Contas a Receber pelo cadastro de Clientes / Contas a Receber para gerar também a receita padrão.'],
+]);
 
 it('runs the default seeder with structural data only', function () {
     $this->seed(DatabaseSeeder::class);

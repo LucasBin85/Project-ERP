@@ -19,6 +19,25 @@ it('creates suppliers with valid control and default expense accounts in the act
     $this->assertDatabaseHas('suppliers', ['wallet_id' => $wallet->id, 'name' => 'CEEE', 'payable_account_id' => $control->id]);
 });
 
+it('automatically creates and links payable and expense accounts for a supplier', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])->post(route('suppliers.store'), [
+        'name' => 'CEEE', 'default_expense_name' => 'Energia elétrica', 'active' => true,
+    ])->assertRedirect(route('suppliers.index'));
+
+    $supplier = Supplier::query()->where('wallet_id', $wallet->id)->where('name', 'CEEE')->firstOrFail();
+    expect($supplier->payableAccount->parent->code)->toBe('2.1')
+        ->and($supplier->payableAccount->name)->toBe('CEEE')
+        ->and($supplier->payableAccount->type)->toBe('passivo')
+        ->and($supplier->payableAccount->allows_posting)->toBeTrue()
+        ->and($supplier->defaultExpenseAccount->parent->code)->toBe('5.1')
+        ->and($supplier->defaultExpenseAccount->name)->toBe('Energia elétrica')
+        ->and($supplier->defaultExpenseAccount->type)->toBe('despesa')
+        ->and($supplier->defaultExpenseAccount->allows_posting)->toBeTrue();
+});
+
 it('rejects supplier accounts from another wallet or with invalid types', function () {
     $user = User::factory()->create();
     $wallet = $user->wallets()->firstOrFail();
@@ -43,6 +62,21 @@ it('creates customers and rejects accounts outside their accounting roles', func
     $expense = $wallet->chartOfAccounts()->where('type', 'despesa')->where('allows_posting', true)->firstOrFail();
     $this->post(route('customers.store'), ['name' => 'Inválido', 'receivable_account_id' => $expense->id, 'default_revenue_account_id' => $expense->id])
         ->assertSessionHasErrors(['receivable_account_id', 'default_revenue_account_id']);
+});
+
+it('automatically creates and links receivable and revenue accounts for a customer', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])->post(route('customers.store'), [
+        'name' => 'Cliente Novo', 'default_revenue_name' => 'Serviços recorrentes', 'active' => true,
+    ])->assertRedirect(route('customers.index'));
+
+    $customer = Customer::query()->where('wallet_id', $wallet->id)->where('name', 'Cliente Novo')->firstOrFail();
+    expect($customer->receivableAccount->parent->code)->toBe('1.2')
+        ->and($customer->receivableAccount->name)->toBe('Cliente Novo')
+        ->and($customer->defaultRevenueAccount->parent->code)->toBe('4.1')
+        ->and($customer->defaultRevenueAccount->name)->toBe('Serviços recorrentes');
 });
 
 it('lists only valid suppliers in the new payable title', function () {

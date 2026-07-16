@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ChartOfAccountController extends Controller
 {
@@ -72,6 +73,14 @@ class ChartOfAccountController extends Controller
 
         if (! empty($data['parent_id'])) {
             $parent = $wallet->chartOfAccounts()->findOrFail($data['parent_id']);
+        }
+
+        if ($parent && $this->belongsToCounterpartyGroup($parent)) {
+            throw ValidationException::withMessages([
+                'allows_posting' => $parent->type === 'passivo'
+                    ? 'Crie contas em Contas a Pagar pelo cadastro de Fornecedores / Contas a Pagar para gerar também a despesa padrão.'
+                    : 'Crie contas em Contas a Receber pelo cadastro de Clientes / Contas a Receber para gerar também a receita padrão.',
+            ]);
         }
 
         $type = $parent?->type ?? ($data['type'] ?? 'ativo');
@@ -187,5 +196,18 @@ class ChartOfAccountController extends Controller
             ->value('code');
 
         return $lastRootCode ? (string) ((int) $lastRootCode + 1) : '1';
+    }
+
+    private function belongsToCounterpartyGroup(ChartOfAccount $account): bool
+    {
+        while ($account) {
+            if (in_array($account->financial_group, ['accounts_payable', 'accounts_receivable'], true)) {
+                return true;
+            }
+
+            $account = $account->parent;
+        }
+
+        return false;
     }
 }

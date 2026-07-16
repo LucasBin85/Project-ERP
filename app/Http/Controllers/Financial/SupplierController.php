@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
 use App\Models\ChartOfAccount;
 use App\Models\Supplier;
+use App\Services\Financial\CreateSupplier;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -36,10 +37,10 @@ class SupplierController extends Controller
         return Inertia::render('Financial/Suppliers/Form', $this->props($wallet->id) + ['supplier' => $supplier]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, CreateSupplier $service)
     {
         $wallet = $this->resolveActiveWallet($request);
-        Supplier::create(['wallet_id' => $wallet->id] + $this->validated($request, $wallet->id));
+        $service->execute($wallet, $this->validated($request, $wallet->id, creating: true));
 
         return redirect()->route('suppliers.index')->with('success', 'Fornecedor cadastrado com sucesso.');
     }
@@ -53,9 +54,9 @@ class SupplierController extends Controller
         return redirect()->route('suppliers.index')->with('success', 'Fornecedor atualizado com sucesso.');
     }
 
-    private function validated(Request $request, int $walletId, ?int $id = null): array
+    private function validated(Request $request, int $walletId, ?int $id = null, bool $creating = false): array
     {
-        return $request->validate(['name' => ['required', 'string', 'max:255', Rule::unique('suppliers')->where('wallet_id', $walletId)->ignore($id)], 'document' => ['nullable', 'string', 'max:50'], 'payable_account_id' => ['required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'passivo')->where('financial_group', 'accounts_payable')->where('allows_posting', true)], 'default_expense_account_id' => ['required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'despesa')->where('allows_posting', true)], 'active' => ['boolean']]);
+        return $request->validate(['name' => ['required', 'string', 'max:255', Rule::unique('suppliers')->where('wallet_id', $walletId)->ignore($id)], 'document' => ['nullable', 'string', 'max:50'], 'payable_account_id' => [$creating ? 'nullable' : 'required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'passivo')->where('financial_group', 'accounts_payable')->where('allows_posting', true)], 'default_expense_account_id' => [$creating ? 'nullable' : 'required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'despesa')->where('allows_posting', true)], 'default_expense_name' => ['nullable', 'string', 'max:255'], 'active' => ['boolean']]);
     }
 
     private function props(int $walletId): array

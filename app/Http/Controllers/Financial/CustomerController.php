@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
+use App\Services\Financial\CreateCustomer;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -36,10 +37,10 @@ class CustomerController extends Controller
         return Inertia::render('Financial/Customers/Form', $this->props($wallet->id) + ['customer' => $customer]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, CreateCustomer $service)
     {
         $wallet = $this->resolveActiveWallet($request);
-        Customer::create(['wallet_id' => $wallet->id] + $this->validated($request, $wallet->id));
+        $service->execute($wallet, $this->validated($request, $wallet->id, creating: true));
 
         return redirect()->route('customers.index')->with('success', 'Cliente cadastrado com sucesso.');
     }
@@ -53,9 +54,9 @@ class CustomerController extends Controller
         return redirect()->route('customers.index')->with('success', 'Cliente atualizado com sucesso.');
     }
 
-    private function validated(Request $request, int $walletId, ?int $id = null): array
+    private function validated(Request $request, int $walletId, ?int $id = null, bool $creating = false): array
     {
-        return $request->validate(['name' => ['required', 'string', 'max:255', Rule::unique('customers')->where('wallet_id', $walletId)->ignore($id)], 'document' => ['nullable', 'string', 'max:50'], 'receivable_account_id' => ['required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'ativo')->where('financial_group', 'accounts_receivable')->where('allows_posting', true)], 'default_revenue_account_id' => ['required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'receita')->where('allows_posting', true)], 'active' => ['boolean']]);
+        return $request->validate(['name' => ['required', 'string', 'max:255', Rule::unique('customers')->where('wallet_id', $walletId)->ignore($id)], 'document' => ['nullable', 'string', 'max:50'], 'receivable_account_id' => [$creating ? 'nullable' : 'required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'ativo')->where('financial_group', 'accounts_receivable')->where('allows_posting', true)], 'default_revenue_account_id' => [$creating ? 'nullable' : 'required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'receita')->where('allows_posting', true)], 'default_revenue_name' => ['nullable', 'string', 'max:255'], 'active' => ['boolean']]);
     }
 
     private function props(int $walletId): array
