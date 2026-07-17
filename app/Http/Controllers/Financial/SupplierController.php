@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ChartOfAccount;
 use App\Models\Supplier;
 use App\Services\Financial\CreateSupplier;
+use App\Support\NormalizedName;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
@@ -66,7 +67,18 @@ class SupplierController extends Controller
 
     private function validated(Request $request, int $walletId, ?int $id = null, bool $creating = false): array
     {
-        return $request->validate(['name' => ['required', 'string', 'max:255', Rule::unique('suppliers')->where('wallet_id', $walletId)->ignore($id)], 'document' => ['nullable', 'string', 'max:50'], 'payable_account_id' => [$creating ? 'nullable' : 'required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'passivo')->where('financial_group', 'accounts_payable')->where('allows_posting', true)], 'default_expense_account_id' => [$creating ? 'nullable' : 'required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'despesa')->where('allows_posting', true)], 'default_expense_name' => ['nullable', 'string', 'max:255'], 'active' => ['boolean']]);
+        $request->merge(['name' => NormalizedName::display($request->input('name'))]);
+        $normalizedUnique = function (string $attribute, mixed $value, \Closure $fail) use ($walletId, $id): void {
+            $duplicate = Supplier::query()->where('wallet_id', $walletId)
+                ->when($id, fn ($query) => $query->whereKeyNot($id))->pluck('name')
+                ->contains(fn (string $name) => NormalizedName::key($name) === NormalizedName::key($value));
+
+            if ($duplicate) {
+                $fail('Já existe um fornecedor com este nome.');
+            }
+        };
+
+        return $request->validate(['name' => ['required', 'string', 'max:255', $normalizedUnique, Rule::unique('suppliers')->where('wallet_id', $walletId)->ignore($id)], 'document' => ['nullable', 'string', 'max:50'], 'payable_account_id' => [$creating ? 'nullable' : 'required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'passivo')->where('financial_group', 'accounts_payable')->where('allows_posting', true)], 'default_expense_account_id' => [$creating ? 'nullable' : 'required', Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $walletId)->where('type', 'despesa')->where('allows_posting', true)], 'default_expense_name' => ['nullable', 'string', 'max:255'], 'active' => ['boolean']]);
     }
 
     private function props(int $walletId): array

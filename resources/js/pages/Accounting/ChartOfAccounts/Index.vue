@@ -16,6 +16,8 @@ const props = defineProps<{
   expenseAccounts: any[]
   receivableControlAccounts: any[]
   revenueAccounts: any[]
+  supplierNames: string[]
+  customerNames: string[]
 }>()
 
 const chart = useChartOfAccountsIndex(props)
@@ -76,6 +78,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     :show="chart.showSupplierDialog.value"
     :control-accounts="props.payableControlAccounts"
     :expense-accounts="props.expenseAccounts"
+    :existing-names="props.supplierNames"
     @close="chart.showSupplierDialog.value = false"
     @created="chart.counterpartyCreated"
   />
@@ -83,6 +86,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     :show="chart.showCustomerDialog.value"
     :control-accounts="props.receivableControlAccounts"
     :revenue-accounts="props.revenueAccounts"
+    :existing-names="props.customerNames"
     @close="chart.showCustomerDialog.value = false"
     @created="chart.counterpartyCreated"
   />

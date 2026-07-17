@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Models\ChartOfAccount;
 use App\Models\Wallet;
+use App\Models\Supplier;
+use App\Models\Customer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -58,6 +60,8 @@ class ChartOfAccountController extends Controller
             'expenseAccounts' => $this->postingAccounts($wallet, 'despesa'),
             'receivableControlAccounts' => $this->postingAccounts($wallet, 'ativo', 'accounts_receivable'),
             'revenueAccounts' => $this->postingAccounts($wallet, 'receita'),
+            'supplierNames' => Supplier::query()->where('wallet_id', $wallet->id)->pluck('name'),
+            'customerNames' => Customer::query()->where('wallet_id', $wallet->id)->pluck('name'),
         ]);
     }
 

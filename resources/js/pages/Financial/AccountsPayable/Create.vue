@@ -14,15 +14,18 @@ const props = defineProps<{
     suppliers: Array<Record<string, any>>;
     payableControlAccounts: Array<Record<string, any>>;
     expenseAccounts: Array<Record<string, any>>;
+    supplierNames: string[];
 }>();
 
 const accountPayable = useAccountPayableCreate();
 const suppliers = ref([...props.suppliers]);
+const supplierNames = ref([...props.supplierNames]);
 const showSupplierDialog = ref(false);
 const selectedSupplier = computed(() => suppliers.value.find((supplier) => supplier.id === Number(accountPayable.form.supplier_id)));
 
 function supplierCreated(supplier: Record<string, any>) {
     suppliers.value.push(supplier);
+    supplierNames.value.push(supplier.name);
     suppliers.value.sort((a, b) => a.name.localeCompare(b.name));
     accountPayable.form.supplier_id = String(supplier.id);
 }
@@ -126,6 +129,6 @@ function submit() {
                 </form>
             </ReportSection>
         </ReportPage>
-        <SupplierQuickCreateDialog :show="showSupplierDialog" :control-accounts="payableControlAccounts" :expense-accounts="expenseAccounts" @close="showSupplierDialog = false" @created="supplierCreated" />
+        <SupplierQuickCreateDialog :show="showSupplierDialog" :control-accounts="payableControlAccounts" :expense-accounts="expenseAccounts" :existing-names="supplierNames" @close="showSupplierDialog = false" @created="supplierCreated" />
     </AppLayout>
 </template>

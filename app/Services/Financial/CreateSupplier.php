@@ -30,7 +30,7 @@ class CreateSupplier
                 $expenseAccountId = $this->createPostingAccount(
                     $wallet,
                     '5.1',
-                    $data['default_expense_name'] ?: $data['name'],
+                    ($data['default_expense_name'] ?? null) ?: $data['name'],
                     'despesa',
                 )->id;
             }

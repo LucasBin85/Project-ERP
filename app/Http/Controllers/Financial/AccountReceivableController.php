@@ -87,6 +87,7 @@ class AccountReceivableController extends Controller
                 ->orderBy('name')->get(['id', 'name', 'receivable_account_id', 'default_revenue_account_id']),
             'receivableControlAccounts' => $this->controlAccounts($wallet->id),
             'revenueAccounts' => $this->revenueAccounts($wallet->id),
+            'customerNames' => Customer::query()->where('wallet_id', $wallet->id)->pluck('name'),
         ]);
     }
 

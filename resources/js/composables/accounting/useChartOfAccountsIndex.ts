@@ -3,6 +3,7 @@ import { router, useForm } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import { useToast } from 'vue-toastification'
 import type { TreeNode } from '@/types/types'
+import { normalizeName } from '@/lib/normalizedName'
 
 export function useChartOfAccountsIndex(props) {
     const showModal = ref(false)
@@ -43,12 +44,12 @@ export function useChartOfAccountsIndex(props) {
     })
 
     const isDuplicateName = computed(() => {
-        const name = form.name.trim().toLowerCase()
+        const name = normalizeName(form.name)
         if (!name) return false
 
         return allNodes.value.some(node =>
             node.parent_id === form.parent_id &&
-            node.name.trim().toLowerCase() === name &&
+            normalizeName(node.name) === name &&
             node.id !== editingId.value,
         )
     })
@@ -60,7 +61,7 @@ export function useChartOfAccountsIndex(props) {
 
         return Boolean(
             current &&
-            current.name.trim().toLowerCase() === form.name.trim().toLowerCase(),
+            normalizeName(current.name) === normalizeName(form.name),
         )
     })
 
@@ -114,7 +115,7 @@ export function useChartOfAccountsIndex(props) {
         showSupplierDialog.value = false
         showCustomerDialog.value = false
         toast.success('Cadastro e contas vinculadas criados!')
-        router.reload({ only: ['tree', 'payableControlAccounts', 'expenseAccounts', 'receivableControlAccounts', 'revenueAccounts'] })
+        router.reload({ only: ['tree', 'payableControlAccounts', 'expenseAccounts', 'receivableControlAccounts', 'revenueAccounts', 'supplierNames', 'customerNames'] })
     }
 
     function openEdit(node: TreeNode) {

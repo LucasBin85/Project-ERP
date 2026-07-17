@@ -14,15 +14,18 @@ const props = defineProps<{
     customers: Array<Record<string, any>>;
     receivableControlAccounts: Array<Record<string, any>>;
     revenueAccounts: Array<Record<string, any>>;
+    customerNames: string[];
 }>();
 
 const accountReceivable = useAccountReceivableCreate();
 const customers = ref([...props.customers]);
+const customerNames = ref([...props.customerNames]);
 const showCustomerDialog = ref(false);
 const selectedCustomer = computed(() => customers.value.find((customer) => customer.id === Number(accountReceivable.form.customer_id)));
 
 function customerCreated(customer: Record<string, any>) {
     customers.value.push(customer);
+    customerNames.value.push(customer.name);
     customers.value.sort((a, b) => a.name.localeCompare(b.name));
     accountReceivable.form.customer_id = String(customer.id);
 }
@@ -89,6 +92,6 @@ function submit() {
                 </form>
             </ReportSection>
         </ReportPage>
-        <CustomerQuickCreateDialog :show="showCustomerDialog" :control-accounts="receivableControlAccounts" :revenue-accounts="revenueAccounts" @close="showCustomerDialog = false" @created="customerCreated" />
+        <CustomerQuickCreateDialog :show="showCustomerDialog" :control-accounts="receivableControlAccounts" :revenue-accounts="revenueAccounts" :existing-names="customerNames" @close="showCustomerDialog = false" @created="customerCreated" />
     </AppLayout>
 </template>

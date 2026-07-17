@@ -21,7 +21,7 @@ class CreateCustomer
             }
 
             if (! $revenueAccountId) {
-                $revenueAccountId = $this->createPostingAccount($wallet, '4.1', $data['default_revenue_name'] ?: $data['name'], 'receita')->id;
+                $revenueAccountId = $this->createPostingAccount($wallet, '4.1', ($data['default_revenue_name'] ?? null) ?: $data['name'], 'receita')->id;
             }
 
             return Customer::query()->create([

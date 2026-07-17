@@ -121,6 +121,39 @@ it('rejects foreign wallet accounts in quick creation', function () {
     ])->assertUnprocessable()->assertJsonValidationErrors(['payable_account_id', 'default_expense_account_id']);
 });
 
+it('rejects normalized duplicate supplier names in the backend', function (string $duplicate) {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
+        ->postJson(route('suppliers.quick-store'), ['name' => $duplicate, 'active' => true])
+        ->assertUnprocessable()->assertJsonValidationErrors(['name'])
+        ->assertJsonPath('errors.name.0', 'Já existe um fornecedor com este nome.');
+})->with(['trimmed' => '  Fornecedores Diversos  ', 'case insensitive' => 'FORNECEDORES DIVERSOS']);
+
+it('rejects normalized duplicate customer names in the backend', function (string $duplicate) {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+    $control = $wallet->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->firstOrFail();
+    $revenue = $wallet->chartOfAccounts()->where('type', 'receita')->where('allows_posting', true)->firstOrFail();
+    Customer::query()->create(['wallet_id' => $wallet->id, 'name' => 'Cliente Teste', 'receivable_account_id' => $control->id, 'default_revenue_account_id' => $revenue->id, 'active' => true]);
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
+        ->postJson(route('customers.quick-store'), ['name' => $duplicate, 'active' => true])
+        ->assertUnprocessable()->assertJsonValidationErrors(['name'])
+        ->assertJsonPath('errors.name.0', 'Já existe um cliente com este nome.');
+})->with(['trimmed' => '  Cliente Teste  ', 'case insensitive' => 'CLIENTE TESTE']);
+
+it('normalizes whitespace before storing a new counterparty name', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
+        ->postJson(route('suppliers.quick-store'), ['name' => '  Novo   Fornecedor  ', 'active' => true])->assertCreated();
+
+    $this->assertDatabaseHas('suppliers', ['wallet_id' => $wallet->id, 'name' => 'Novo Fornecedor']);
+});
+
 it('lists only valid suppliers in the new payable title', function () {
     $user = User::factory()->create();
     $wallet = $user->wallets()->firstOrFail();
