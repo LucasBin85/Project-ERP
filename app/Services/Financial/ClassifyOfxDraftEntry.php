@@ -21,6 +21,7 @@ class ClassifyOfxDraftEntry
         private readonly PostJournalEntry $postJournalEntry,
         private readonly OfxOperationTypePolicy $operationTypes,
         private readonly FindMatchingOfxJournalLine $matchingJournalLines,
+        private readonly ClassifyBankStatementTransfer $classifyTransfer,
     ) {}
 
     public function execute(
@@ -157,6 +158,14 @@ class ClassifyOfxDraftEntry
                 $auditTransaction->save();
 
                 return $entry->fresh(['lines.chartOfAccount']);
+            }
+
+            if ($dto->operationType === OfxOperationTypePolicy::TRANSFER) {
+                if ($dto->shouldPost) {
+                    throw new OfxClassificationException('Transferências devem ser postadas em Pendências Contábeis.');
+                }
+
+                return $this->classifyTransfer->execute($wallet, $bankAccount, $entry, $dto->destinationAccountId);
             }
 
             $destinationAccount = ChartOfAccount::query()->find($dto->destinationAccountId);

@@ -1,8 +1,10 @@
 <?php
 
 use App\DTOs\Financial\OfxImportResultDTO;
+use App\DTOs\Financial\OfxClassificationDTO;
 use App\Exceptions\OfxImportException;
 use App\Models\BankAccount;
+use App\Models\BankAccountTransfer;
 use App\Models\BankStatementImport;
 use App\Models\BankStatementImportTransaction;
 use App\Models\ChartOfAccount;
@@ -12,6 +14,8 @@ use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateBankImportEntry;
 use App\Services\Financial\ConfirmOfxBankStatement;
+use App\Services\Financial\ClassifyOfxDraftEntry;
+use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\ParseOfxStatement;
 use App\Services\Financial\PreviewOfxBankStatement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -858,6 +862,37 @@ it('previews and confirms through a wallet-bound cached token and prevents token
     $this->post(route('ofx-imports.confirm'), $payload)
         ->assertSessionHasErrors('preview_token');
 
-    expect(JournalEntry::query()->count())->toBe(2)
+expect(JournalEntry::query()->count())->toBe(2)
         ->and(BankStatementImport::query()->count())->toBe(1);
+});
+
+it('links the counterpart OFX to an existing transfer without duplicating the journal entry', function () {
+    $wallet = createWalletForOfxImport();
+    $origin = FinancialTestHelper::bankAccount($wallet, '1.1.2.910', 'Conta origem');
+    $destination = FinancialTestHelper::bankAccount($wallet, '1.1.2.911', 'Conta destino');
+    $outOfx = singleOfxTransaction('TRANSFER-OUT', '2026-07-20', 50_000, 'out');
+    $outPreview = previewOfx($wallet, $origin, $outOfx, 'origem.ofx');
+    $outResult = confirmOfxPreview($wallet, $origin, $outOfx, $outPreview, filename: 'origem.ofx');
+    $entry = $outResult->import->transactions->first()->journalEntry;
+
+    app(ClassifyOfxDraftEntry::class)->execute($wallet, $origin, $entry, new OfxClassificationDTO(
+        operationType: OfxOperationTypePolicy::TRANSFER,
+        destinationAccountId: $destination->chart_of_account_id,
+        shouldPost: false,
+    ));
+    expect(JournalEntry::query()->count())->toBe(1)
+        ->and(BankAccountTransfer::query()->firstOrFail()->validation_status)->toBe('pending_counterpart_ofx');
+
+    $inOfx = singleOfxTransaction('TRANSFER-IN', '2026-07-20', 50_000, 'in');
+    $inPreview = previewOfx($wallet, $destination, $inOfx, 'destino.ofx');
+    $result = confirmOfxPreview($wallet, $destination, $inOfx, $inPreview, filename: 'destino.ofx');
+
+    expect($result->linked)->toBe(1)
+        ->and($result->created)->toBe(0)
+        ->and(JournalEntry::query()->count())->toBe(1)
+        ->and(BankAccountTransfer::query()->firstOrFail()->validation_status)->toBe('fully_validated');
+    $this->assertDatabaseHas('bank_statement_import_transactions', [
+        'bank_account_id' => $destination->id, 'journal_entry_id' => $entry->id,
+        'operation_type' => OfxOperationTypePolicy::TRANSFER, 'resolution' => 'linked_transfer',
+    ]);
 });

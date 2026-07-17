@@ -30,6 +30,13 @@ const eligibleAccounts = computed(() =>
 );
 
 const hasValidCurrentAccount = computed(() => eligibleAccounts.value.some((account) => account.id === props.transaction.classification_account_id));
+const transferLabel = computed(() => props.transaction.type === 'outflow' ? 'Conta de destino' : 'Conta de origem');
+
+function accountLabel(account: BankStatementClassificationAccount): string {
+    if (props.transaction.operation_type !== 'transfer' || !account.bank_account) return `${account.code} - ${account.name}`;
+    const details = [account.bank_account.bank_name, account.bank_account.agency, account.bank_account.account_number].filter(Boolean).join(' · ');
+    return `${account.bank_account.name}${details ? ` (${details})` : ''}`;
+}
 
 function syncFromTransaction() {
     form.operation_type = props.transaction.operation_type ?? '';
@@ -73,11 +80,11 @@ watch(() => [props.transaction.operation_type, props.transaction.classification_
             v-model="form.chart_of_account_id"
             :disabled="form.processing || !transaction.can_classify"
             class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="Conta contábil de classificação"
+            :aria-label="transaction.operation_type === 'transfer' ? transferLabel : 'Conta contábil de classificação'"
             @change="saveClassification"
         >
-            <option value="" disabled>Selecionar conta...</option>
-            <option v-for="account in eligibleAccounts" :key="account.id" :value="String(account.id)">{{ account.code }} - {{ account.name }}</option>
+            <option value="" disabled>{{ transaction.operation_type === 'transfer' ? transferLabel : 'Selecionar conta...' }}</option>
+            <option v-for="account in eligibleAccounts" :key="account.id" :value="String(account.id)">{{ accountLabel(account) }}</option>
         </select>
 
         <div class="flex min-h-5 items-center gap-3 text-xs">

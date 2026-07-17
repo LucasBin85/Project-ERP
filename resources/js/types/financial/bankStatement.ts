@@ -1,7 +1,7 @@
 import type { FinancialOperationType } from '@/types/financial/operationType';
 
 export type JournalEntryStatus = 'draft' | 'posted';
-export type ReconciliationStatus = 'pending' | 'reconciled' | 'reconciled_via_ofx';
+export type ReconciliationStatus = 'pending' | 'reconciled' | 'reconciled_via_ofx' | 'awaiting_counterpart_ofx';
 export type ClassificationStatus = 'classified' | 'unclassified';
 export type BankStatementWorkflowStatus = 'pending_classification' | 'classified' | 'pending_link' | 'ready_for_accounting' | 'posted';
 
@@ -22,6 +22,7 @@ export interface BankStatementClassificationAccount {
     type: string;
     financial_group: string | null;
     allowed_operation_types: FinancialOperationType[];
+    bank_account?: { id: number; name: string; bank_name: string | null; agency: string | null; account_number: string | null; statement_url: string } | null;
 }
 
 export interface BankStatementFilters {
@@ -78,6 +79,7 @@ export interface BankStatementTransaction {
     outflow_cents: number | null;
     amount_cents: number;
     running_balance_cents: number;
+    transfer: { id: number; status: string; counterpart_name: string; counterpart_statement_url: string } | null;
 }
 
 export interface BankStatementOperational {

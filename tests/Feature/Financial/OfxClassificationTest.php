@@ -3,6 +3,7 @@
 use App\DTOs\Financial\BankStatementFiltersDTO;
 use App\DTOs\Financial\OfxClassificationDTO;
 use App\Models\BankAccount;
+use App\Models\BankAccountTransfer;
 use App\Models\BankStatementImport;
 use App\Models\BankStatementImportTransaction;
 use App\Models\ChartOfAccount;
@@ -11,7 +12,10 @@ use App\Models\JournalLine;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateBankImportEntry;
+use App\Services\Accounting\AssessJournalEntryPostingReadiness;
+use App\Services\Accounting\PostJournalEntry;
 use App\Services\Financial\BankStatementService;
+use App\Services\Financial\BankAccountBalanceService;
 use App\Services\Financial\ClassifyOfxDraftEntry;
 use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\ResolveOfxDraftMatch;
@@ -199,6 +203,57 @@ it('classifies an OFX outflow as an expense without changing the bank line', fun
         ->and($classified->balance_diff_cents)->toBe(0)
         ->and(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::EXPENSE)
         ->and(classificationAudit($entry)->classification_account_id)->toBe($expense->id);
+});
+
+it('classifies an OFX outflow as one draft bank transfer and affects both operational balances', function () {
+    $wallet = classificationWallet();
+    $origin = classificationBankAccount($wallet);
+    $destination = FinancialTestHelper::bankAccount($wallet, '1.1.2.902', 'Banco destino');
+    $entry = classificationEntry($wallet, $origin, 'out', 50_000);
+
+    $classified = classify($wallet, $origin, $entry, $destination->chartOfAccount, false, OfxOperationTypePolicy::TRANSFER)->fresh('lines');
+
+    expect($classified->status)->toBe('draft')->and($classified->lines)->toHaveCount(2)
+        ->and(BankAccountTransfer::query()->count())->toBe(1);
+    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $entry->id, 'chart_of_account_id' => $origin->chart_of_account_id, 'type' => 'credit', 'amount_cents' => 50_000]);
+    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $entry->id, 'chart_of_account_id' => $destination->chart_of_account_id, 'type' => 'debit', 'amount_cents' => 50_000]);
+    $balances = app(BankAccountBalanceService::class)->calculateMany($wallet, collect([$origin, $destination]));
+    expect($balances[$origin->id]['statement_balance_cents'])->toBe(-50_000)
+        ->and($balances[$destination->id]['statement_balance_cents'])->toBe(50_000);
+    expect(app(AssessJournalEntryPostingReadiness::class)->handle($wallet, $classified)->ready)->toBeTrue();
+    app(PostJournalEntry::class)->handle($classified);
+    $postedBalances = app(BankAccountBalanceService::class)->calculateMany($wallet, collect([$origin, $destination]));
+    expect($postedBalances[$origin->id]['statement_balance_cents'])->toBe(-50_000)
+        ->and($postedBalances[$destination->id]['statement_balance_cents'])->toBe(50_000);
+});
+
+it('classifies an OFX inflow as a transfer from the selected origin account', function () {
+    $wallet = classificationWallet();
+    $current = classificationBankAccount($wallet);
+    $origin = FinancialTestHelper::bankAccount($wallet, '1.1.2.903', 'Banco origem');
+    $entry = classificationEntry($wallet, $current, 'in', 35_000);
+
+    classify($wallet, $current, $entry, $origin->chartOfAccount, false, OfxOperationTypePolicy::TRANSFER);
+
+    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $entry->id, 'chart_of_account_id' => $current->chart_of_account_id, 'type' => 'debit']);
+    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $entry->id, 'chart_of_account_id' => $origin->chart_of_account_id, 'type' => 'credit']);
+    $this->assertDatabaseHas('bank_account_transfers', ['from_bank_account_id' => $origin->id, 'to_bank_account_id' => $current->id, 'validation_status' => 'pending_counterpart_ofx']);
+});
+
+it('rejects invalid transfer counterpart accounts', function () {
+    $wallet = classificationWallet();
+    $current = classificationBankAccount($wallet);
+    $entry = classificationEntry($wallet, $current, 'out', 10_000);
+    $expense = AccountingTestHelper::account($wallet, '5.9.99', 'Despesa inválida', 'despesa', 'debit');
+    $inactive = FinancialTestHelper::bankAccount($wallet, '1.1.2.904', 'Banco inativo', ['is_active' => false]);
+
+    expect(fn () => classify($wallet, $current, $entry, $current->chartOfAccount, false, OfxOperationTypePolicy::TRANSFER))->toThrow(\App\Exceptions\OfxClassificationException::class)
+        ->and(fn () => classify($wallet, $current, $entry, $expense, false, OfxOperationTypePolicy::TRANSFER))->toThrow(\App\Exceptions\OfxClassificationException::class);
+    expect(fn () => classify($wallet, $current, $entry, $inactive->chartOfAccount, false, OfxOperationTypePolicy::TRANSFER))->toThrow(\App\Exceptions\OfxClassificationException::class);
+
+    $foreignWallet = classificationWallet();
+    $foreign = classificationBankAccount($foreignWallet);
+    expect(fn () => classify($wallet, $current, $entry, $foreign->chartOfAccount, false, OfxOperationTypePolicy::TRANSFER))->toThrow(\App\Exceptions\OfxClassificationException::class);
 });
 
 it('keeps a legacy OFX audit without a journal line editable and repairs its link', function () {

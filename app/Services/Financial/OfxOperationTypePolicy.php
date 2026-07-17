@@ -158,7 +158,11 @@ class OfxOperationTypePolicy
             ->whereKeyNot($bankAccount->chart_of_account_id);
 
         return match ($operationType) {
-            self::TRANSFER => $query->where('financial_group', 'available'),
+            self::TRANSFER => $query->whereExists(function ($bankQuery) use ($wallet) {
+                $bankQuery->selectRaw('1')->from('bank_accounts')
+                    ->whereColumn('bank_accounts.chart_of_account_id', 'chart_of_accounts.id')
+                    ->where('bank_accounts.wallet_id', $wallet->id)->where('bank_accounts.is_active', true);
+            }),
             self::EXPENSE, self::FEE => $query->where('type', 'despesa'),
             self::INCOME => $query->where('type', 'receita'),
             self::OTHER => $query,
@@ -194,7 +198,10 @@ class OfxOperationTypePolicy
         return array_values(array_filter(
             $this->codes(),
             fn (string $operationType) => $this->supportsClassification($operationType)
-                && $this->passesOperationTypeRules($account, $operationType),
+                && $this->passesOperationTypeRules($account, $operationType)
+                && ($operationType !== self::TRANSFER || BankAccount::query()
+                    ->where('wallet_id', $wallet->id)->where('is_active', true)
+                    ->where('chart_of_account_id', $account->id)->exists()),
         ));
     }
 
@@ -209,7 +216,10 @@ class OfxOperationTypePolicy
 
         return $this->supportsClassification($operationType)
             && $this->passesBaseAccountRules($wallet, $bankAccount, $account)
-            && $this->passesOperationTypeRules($account, $operationType);
+            && $this->passesOperationTypeRules($account, $operationType)
+            && ($operationType !== self::TRANSFER || BankAccount::query()
+                ->where('wallet_id', $wallet->id)->where('is_active', true)
+                ->where('chart_of_account_id', $account->id)->exists());
     }
 
     public function validateAccount(

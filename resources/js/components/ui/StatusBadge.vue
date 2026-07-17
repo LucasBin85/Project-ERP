@@ -23,6 +23,7 @@ const classes: Record<string, string> = {
     pending: 'bg-blue-950 text-blue-300',
     unclassified: 'bg-yellow-950 text-yellow-300',
     pending_classification: 'bg-yellow-950 text-yellow-300',
+    awaiting_counterpart_ofx: 'bg-amber-950 text-amber-300',
     pending_link: 'bg-orange-950 text-orange-300',
     ready_for_accounting: 'bg-green-950 text-green-300',
     skipped_duplicate: 'bg-gray-800 text-gray-300',

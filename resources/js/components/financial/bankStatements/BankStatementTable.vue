@@ -104,6 +104,11 @@ function operationTypeLabel(transaction: BankStatementTransaction): string {
                     :bank-account="bankAccount"
                 />
                 <InlineOfxMatchResolution v-else-if="transaction.match_status !== 'none'" :transaction="transaction" :bank-account="bankAccount" />
+                <div v-else-if="transaction.transfer" class="space-y-1 text-xs">
+                    <span class="inline-flex rounded bg-blue-950 px-2 py-1 font-semibold text-blue-300">Transferência</span>
+                    <p><Link :href="transaction.transfer.counterpart_statement_url" class="text-indigo-300 hover:underline">{{ transaction.transfer.counterpart_name }}</Link></p>
+                    <p :class="transaction.transfer.status === 'fully_validated' ? 'text-green-300' : 'text-amber-300'">{{ transaction.transfer.status === 'fully_validated' ? 'Validada nas duas contas' : 'Aguardando OFX da contraparte' }}</p>
+                </div>
                 <InlineOfxClassification
                     v-else-if="transaction.source === 'ofx' && transaction.accounting_status === 'draft'"
                     :transaction="transaction"

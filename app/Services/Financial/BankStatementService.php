@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\DTOs\Financial\BankStatementDTO;
 use App\DTOs\Financial\BankStatementFiltersDTO;
 use App\Models\BankAccount;
+use App\Models\BankAccountTransfer;
 use App\Models\BankReconciliationItem;
 use App\Models\BankReconciliationStatementItem;
 use App\Models\BankStatementImportTransaction;
@@ -49,6 +50,10 @@ class BankStatementService
         $ofxOriginLineIds = $ofxTransactionsByLineId->keys();
         $reconciledLineIds = $this->reconciledLineIds($periodLines->pluck('id'));
         $ofxValidatedLineIds = $this->ofxValidatedLineIds($wallet, $bankAccount, $periodLines);
+        $transfersByEntryId = BankAccountTransfer::query()
+            ->with(['fromBankAccount:id,name', 'toBankAccount:id,name'])
+            ->where('wallet_id', $wallet->id)->whereIn('journal_entry_id', $periodLines->pluck('journal_entry_id'))
+            ->get()->keyBy('journal_entry_id');
 
         $runningBalance = $openingBalanceCents;
         $totalInflowsCents = 0;
@@ -65,6 +70,7 @@ class BankStatementService
                 $wallet,
                 $bankAccount,
                 $ofxTransactionsByLineId,
+                $transfersByEntryId,
             ) {
                 $entry = $line->journalEntry;
                 $amountCents = (int) $line->amount_cents;
@@ -78,10 +84,12 @@ class BankStatementService
 
                 $classification = $this->classification($wallet, $line);
                 $auditTransaction = $ofxTransactionsByLineId->get((int) $line->id);
+                $transfer = $transfersByEntryId->get((int) $entry?->id);
                 $linkedAccountPayable = $entry?->settledAccountPayable;
                 $linkedAccountReceivable = $entry?->settledAccountReceivable;
                 $canEditOfx = $entry?->source === 'ofx'
                     && $entry?->status === 'draft'
+                    && ! $transfer
                     && $ofxOriginLineIds->contains((int) $line->id)
                     && $classification['is_editable']
                     && ! $linkedAccountPayable
@@ -93,7 +101,7 @@ class BankStatementService
                     auditTransaction: $auditTransaction,
                     canEdit: $canEditOfx,
                 );
-                $operationType = $auditTransaction?->operation_type;
+                $operationType = $transfer ? OfxOperationTypePolicy::TRANSFER : $auditTransaction?->operation_type;
                 $direction = $line->type === 'debit'
                     ? OfxOperationTypePolicy::DIRECTION_IN
                     : OfxOperationTypePolicy::DIRECTION_OUT;
@@ -119,8 +127,10 @@ class BankStatementService
                     'accounting_status' => $entry?->status,
                     'workflow_status' => $workflowStatus,
                     'source' => $entry?->source,
-                    'source_label' => $this->sourceLabel($entry?->source),
-                    'reconciliation_status' => $this->reconciliationStatus(
+                    'source_label' => $transfer && ! $auditTransaction ? 'Transferência' : $this->sourceLabel($entry?->source),
+                    'reconciliation_status' => $transfer && ! $auditTransaction
+                        ? 'awaiting_counterpart_ofx'
+                        : $this->reconciliationStatus(
                         $line,
                         $ofxValidatedLineIds,
                         $reconciledLineIds,
@@ -164,6 +174,15 @@ class BankStatementService
                     'match_status' => $match['status'],
                     'match_candidates' => $match['candidates'],
                     'match_resolution' => $auditTransaction?->resolution,
+                    'transfer' => $transfer ? [
+                        'id' => $transfer->id,
+                        'status' => $transfer->validation_status,
+                        'counterpart_name' => (int) $bankAccount->id === (int) $transfer->from_bank_account_id
+                            ? $transfer->toBankAccount?->name : $transfer->fromBankAccount?->name,
+                        'counterpart_statement_url' => route('bank-accounts.statement',
+                            (int) $bankAccount->id === (int) $transfer->from_bank_account_id
+                                ? $transfer->to_bank_account_id : $transfer->from_bank_account_id),
+                    ] : null,
                     'type' => $inflowCents > 0 ? 'inflow' : 'outflow',
                     'inflow_cents' => $inflowCents ?: null,
                     'outflow_cents' => $outflowCents ?: null,

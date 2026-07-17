@@ -66,6 +66,7 @@ it('maps eligible accounts to the supported OFX operation types', function () {
     $expense = createOfxPolicyAccount($wallet, '9.2.01', 'Despesa', 'despesa');
     $income = createOfxPolicyAccount($wallet, '9.3.01', 'Receita', 'receita');
     $available = createOfxPolicyAccount($wallet, '9.4.01', 'Outro banco', 'ativo', true, 'available');
+    BankAccount::query()->create(['wallet_id' => $wallet->id, 'chart_of_account_id' => $available->id, 'name' => 'Outro banco', 'bank_name' => 'Outro banco', 'account_type' => 'checking', 'opening_balance_cents' => 0, 'is_active' => true]);
     $liability = createOfxPolicyAccount($wallet, '9.5.01', 'Passivo', 'passivo');
 
     $policy = app(OfxOperationTypePolicy::class);
@@ -82,10 +83,7 @@ it('maps eligible accounts to the supported OFX operation types', function () {
             OfxOperationTypePolicy::OTHER,
         ])
         ->and($policy->allowedOperationTypesForAccount($wallet, $bankAccount, $available))
-        ->toBe([
-            OfxOperationTypePolicy::TRANSFER,
-            OfxOperationTypePolicy::OTHER,
-        ])
+        ->toBe([OfxOperationTypePolicy::TRANSFER, OfxOperationTypePolicy::OTHER])
         ->and($policy->allowedOperationTypesForAccount($wallet, $bankAccount, $liability))
         ->toBe([OfxOperationTypePolicy::OTHER]);
 });

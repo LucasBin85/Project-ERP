@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\DTOs\Financial\OfxImportResultDTO;
 use App\Exceptions\OfxImportException;
 use App\Models\BankAccount;
+use App\Models\BankAccountTransfer;
 use App\Models\BankStatementImport;
 use App\Models\BankStatementImportTransaction;
 use App\Models\Wallet;
@@ -184,6 +185,39 @@ class ConfirmOfxBankStatement
                     continue;
                 }
 
+                $pendingTransfer = $this->pendingTransferCounterpart(
+                    wallet: $wallet,
+                    bankAccount: $lockedBankAccount,
+                    date: $transaction->postedAt,
+                    amountCents: $transaction->amountCents,
+                    direction: $transaction->direction,
+                );
+
+                if ($pendingTransfer) {
+                    $lineId = $transaction->direction === 'in'
+                        ? $pendingTransfer->to_journal_line_id
+                        : $pendingTransfer->from_journal_line_id;
+                    $audit = $this->recordAuditTransaction(
+                        import: $import, wallet: $wallet, bankAccount: $lockedBankAccount,
+                        row: $row, transaction: $transaction, resolution: 'linked_transfer', status: 'imported',
+                        journalEntryId: $pendingTransfer->journal_entry_id, journalLineId: $lineId,
+                    );
+                    $otherBankAccountId = $transaction->direction === 'in'
+                        ? $pendingTransfer->from_bank_account_id
+                        : $pendingTransfer->to_bank_account_id;
+                    $audit->update([
+                        'operation_type' => OfxOperationTypePolicy::TRANSFER,
+                        'classification_account_id' => BankAccount::query()->whereKey($otherBankAccountId)->value('chart_of_account_id'),
+                    ]);
+                    $pendingTransfer->update([
+                        $transaction->direction === 'in' ? 'to_import_transaction_id' : 'from_import_transaction_id' => $audit->id,
+                        'validation_status' => 'fully_validated',
+                    ]);
+                    $linked++;
+                    $this->addToTotals($transaction->direction, $transaction->amountCents, $totalIn, $totalOut);
+                    continue;
+                }
+
                 if ($action !== 'create' || ! in_array($row['situation'], ['new', 'ambiguous_match'], true)) {
                     throw new OfxImportException('Não foi possível resolver uma das linhas confirmadas do OFX.');
                 }
@@ -343,5 +377,19 @@ class ConfirmOfxBankStatement
         }
 
         $totalOut += $amountCents;
+    }
+
+    private function pendingTransferCounterpart(Wallet $wallet, BankAccount $bankAccount, string $date, int $amountCents, string $direction): ?BankAccountTransfer
+    {
+        $query = BankAccountTransfer::query()->where('wallet_id', $wallet->id)
+            ->whereDate('transfer_date', $date)->where('amount_cents', $amountCents)
+            ->where('validation_status', 'pending_counterpart_ofx');
+
+        $direction === 'in'
+            ? $query->where('to_bank_account_id', $bankAccount->id)->whereNull('to_import_transaction_id')
+            : $query->where('from_bank_account_id', $bankAccount->id)->whereNull('from_import_transaction_id');
+
+        $candidates = $query->lockForUpdate()->limit(2)->get();
+        return $candidates->count() === 1 ? $candidates->first() : null;
     }
 }

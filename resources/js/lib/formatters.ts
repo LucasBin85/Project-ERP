@@ -61,6 +61,7 @@ export function formatStatus(status?: string | null): string {
         classified: 'Classificado',
         unclassified: 'A classificar',
         pending_classification: 'Pendente de classificação',
+        awaiting_counterpart_ofx: 'Aguardando OFX',
         pending_link: 'Vínculo pendente',
         ready_for_accounting: 'Pronto para contabilidade',
         completed: 'Concluído',

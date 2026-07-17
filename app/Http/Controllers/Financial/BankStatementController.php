@@ -248,7 +248,10 @@ class BankStatementController extends Controller
             ->whereDoesntHave('children')
             ->orderBy('code')
             ->get(['id', 'wallet_id', 'code', 'name', 'type', 'financial_group', 'allows_posting'])
-            ->map(fn (ChartOfAccount $account) => [
+            ->map(function (ChartOfAccount $account) use ($wallet, $bankAccount, $operationTypes) {
+                $linkedBank = BankAccount::query()->with('bank:id,short_name')->where('wallet_id', $wallet->id)
+                    ->where('chart_of_account_id', $account->id)->where('is_active', true)->first();
+                return [
                 'id' => $account->id,
                 'code' => $account->code,
                 'name' => $account->name,
@@ -259,7 +262,14 @@ class BankStatementController extends Controller
                     $bankAccount,
                     $account,
                 ),
-            ])
+                'bank_account' => $linkedBank ? [
+                    'id' => $linkedBank->id, 'name' => $linkedBank->name,
+                    'bank_name' => $linkedBank->bank?->short_name ?? $linkedBank->bank_name,
+                    'agency' => $linkedBank->agency, 'account_number' => $linkedBank->account_number,
+                    'statement_url' => route('bank-accounts.statement', $linkedBank),
+                ] : null,
+                ];
+            })
             ->values()
             ->all();
     }
