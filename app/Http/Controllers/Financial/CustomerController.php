@@ -8,6 +8,7 @@ use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Services\Financial\CreateCustomer;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -43,6 +44,15 @@ class CustomerController extends Controller
         $service->execute($wallet, $this->validated($request, $wallet->id, creating: true));
 
         return redirect()->route('customers.index')->with('success', 'Cliente cadastrado com sucesso.');
+    }
+
+    public function quickStore(Request $request, CreateCustomer $service): JsonResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        $customer = $service->execute($wallet, $this->validated($request, $wallet->id, creating: true));
+        $customer->load(['receivableAccount:id,code,name', 'defaultRevenueAccount:id,code,name']);
+
+        return response()->json(['customer' => $customer], 201);
     }
 
     public function update(Request $request, Customer $customer)

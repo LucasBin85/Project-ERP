@@ -6,6 +6,8 @@ import type { TreeNode } from '@/types/types'
 
 export function useChartOfAccountsIndex(props) {
     const showModal = ref(false)
+    const showSupplierDialog = ref(false)
+    const showCustomerDialog = ref(false)
     const isEditing = ref(false)
     const editingId = ref<number | null>(null)
 
@@ -83,6 +85,16 @@ export function useChartOfAccountsIndex(props) {
     }
 
     function openCreate(node: TreeNode | null) {
+        if (node?.code === '2.1' || node?.code?.startsWith('2.1.')) {
+            showSupplierDialog.value = true
+            return
+        }
+
+        if (node?.code === '1.2' || node?.code?.startsWith('1.2.')) {
+            showCustomerDialog.value = true
+            return
+        }
+
         isEditing.value = false
         editingId.value = null
         resetForm()
@@ -96,6 +108,13 @@ export function useChartOfAccountsIndex(props) {
 
     function openCreateBankAccount() {
         router.visit(route('bank-accounts.create'))
+    }
+
+    function counterpartyCreated() {
+        showSupplierDialog.value = false
+        showCustomerDialog.value = false
+        toast.success('Cadastro e contas vinculadas criados!')
+        router.reload({ only: ['tree', 'payableControlAccounts', 'expenseAccounts', 'receivableControlAccounts', 'revenueAccounts'] })
     }
 
     function openEdit(node: TreeNode) {
@@ -181,6 +200,8 @@ export function useChartOfAccountsIndex(props) {
 
     return {
         showModal,
+        showSupplierDialog,
+        showCustomerDialog,
         isEditing,
         editingId,
         form,
@@ -189,6 +210,7 @@ export function useChartOfAccountsIndex(props) {
         canSubmit,
         openCreate,
         openCreateBankAccount,
+        counterpartyCreated,
         openEdit,
         closeModal,
         submit,

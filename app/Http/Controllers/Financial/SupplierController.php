@@ -8,6 +8,7 @@ use App\Models\ChartOfAccount;
 use App\Models\Supplier;
 use App\Services\Financial\CreateSupplier;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -43,6 +44,15 @@ class SupplierController extends Controller
         $service->execute($wallet, $this->validated($request, $wallet->id, creating: true));
 
         return redirect()->route('suppliers.index')->with('success', 'Fornecedor cadastrado com sucesso.');
+    }
+
+    public function quickStore(Request $request, CreateSupplier $service): JsonResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        $supplier = $service->execute($wallet, $this->validated($request, $wallet->id, creating: true));
+        $supplier->load(['payableAccount:id,code,name', 'defaultExpenseAccount:id,code,name']);
+
+        return response()->json(['supplier' => $supplier], 201);
     }
 
     public function update(Request $request, Supplier $supplier)

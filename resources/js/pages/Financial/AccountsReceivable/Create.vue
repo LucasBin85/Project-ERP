@@ -6,14 +6,26 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import { computed } from 'vue';
+import { ref } from 'vue';
+import CustomerQuickCreateDialog from '@/components/financial/counterparties/CustomerQuickCreateDialog.vue';
 
 const props = defineProps<{
     wallet: Record<string, any>;
     customers: Array<Record<string, any>>;
+    receivableControlAccounts: Array<Record<string, any>>;
+    revenueAccounts: Array<Record<string, any>>;
 }>();
 
 const accountReceivable = useAccountReceivableCreate();
-const selectedCustomer = computed(() => props.customers.find((customer) => customer.id === Number(accountReceivable.form.customer_id)));
+const customers = ref([...props.customers]);
+const showCustomerDialog = ref(false);
+const selectedCustomer = computed(() => customers.value.find((customer) => customer.id === Number(accountReceivable.form.customer_id)));
+
+function customerCreated(customer: Record<string, any>) {
+    customers.value.push(customer);
+    customers.value.sort((a, b) => a.name.localeCompare(b.name));
+    accountReceivable.form.customer_id = String(customer.id);
+}
 
 function submit() {
     if (!accountReceivable.canSubmit.value) return;
@@ -36,7 +48,7 @@ function submit() {
                 <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Cliente</label>
-                        <select v-model="accountReceivable.form.customer_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o cliente</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select>
+                        <div class="flex gap-2"><select v-model="accountReceivable.form.customer_id" class="min-w-0 flex-1 rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o cliente</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select><button type="button" class="rounded-lg border border-indigo-500 px-3 py-2 text-sm text-indigo-300" @click="showCustomerDialog = true">Cadastrar cliente</button></div>
                         <div v-if="selectedCustomer" class="mt-2 space-y-1 rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-gray-300">
                             <p>Conta de controle: {{ selectedCustomer.receivable_account.code }} - {{ selectedCustomer.receivable_account.name }}</p>
                             <p>Receita padrÃ£o: {{ selectedCustomer.default_revenue_account.code }} - {{ selectedCustomer.default_revenue_account.name }}</p>
@@ -77,5 +89,6 @@ function submit() {
                 </form>
             </ReportSection>
         </ReportPage>
+        <CustomerQuickCreateDialog :show="showCustomerDialog" :control-accounts="receivableControlAccounts" :revenue-accounts="revenueAccounts" @close="showCustomerDialog = false" @created="customerCreated" />
     </AppLayout>
 </template>

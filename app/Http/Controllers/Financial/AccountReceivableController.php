@@ -85,6 +85,8 @@ class AccountReceivableController extends Controller
             'customers' => Customer::query()->validForReceivables($wallet->id)
                 ->with(['receivableAccount:id,code,name', 'defaultRevenueAccount:id,code,name'])
                 ->orderBy('name')->get(['id', 'name', 'receivable_account_id', 'default_revenue_account_id']),
+            'receivableControlAccounts' => $this->controlAccounts($wallet->id),
+            'revenueAccounts' => $this->revenueAccounts($wallet->id),
         ]);
     }
 

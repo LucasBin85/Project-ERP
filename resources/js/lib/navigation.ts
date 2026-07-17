@@ -92,13 +92,11 @@ export const mainNavItems: NavItem[] = [
                 href: route('accounts-payable.index'),
                 icon: FileText,
             },
-            { title: 'Fornecedores', href: route('suppliers.index'), icon: FileText },
             {
                 title: 'Contas a Receber',
                 href: route('accounts-receivable.index'),
                 icon: FileText,
             },
-            { title: 'Clientes', href: route('customers.index'), icon: FileText },
             {
                 title: 'Cartões de Crédito',
                 href: route('credit-cards.index'),

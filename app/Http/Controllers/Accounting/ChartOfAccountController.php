@@ -54,6 +54,10 @@ class ChartOfAccountController extends Controller
             'tree' => $buildTree($accounts),
             'activeWallet' => $wallet->id,
             'financialGroups' => ChartOfAccount::financialGroups(),
+            'payableControlAccounts' => $this->postingAccounts($wallet, 'passivo', 'accounts_payable'),
+            'expenseAccounts' => $this->postingAccounts($wallet, 'despesa'),
+            'receivableControlAccounts' => $this->postingAccounts($wallet, 'ativo', 'accounts_receivable'),
+            'revenueAccounts' => $this->postingAccounts($wallet, 'receita'),
         ]);
     }
 
@@ -209,5 +213,13 @@ class ChartOfAccountController extends Controller
         }
 
         return false;
+    }
+
+    private function postingAccounts(Wallet $wallet, string $type, ?string $financialGroup = null): array
+    {
+        return $wallet->chartOfAccounts()->where('type', $type)
+            ->when($financialGroup, fn ($query) => $query->where('financial_group', $financialGroup))
+            ->where('allows_posting', true)->whereDoesntHave('children')->orderBy('code')
+            ->get(['id', 'code', 'name'])->toArray();
     }
 }

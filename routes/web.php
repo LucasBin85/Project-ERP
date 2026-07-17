@@ -148,6 +148,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('accounts-receivable', AccountReceivableController::class)
             ->only(['index', 'create', 'store', 'show']);
 
+        Route::post('suppliers/quick-store', [SupplierController::class, 'quickStore'])->name('suppliers.quick-store');
+        Route::post('customers/quick-store', [CustomerController::class, 'quickStore'])->name('customers.quick-store');
         Route::resource('suppliers', SupplierController::class)->only(['index', 'create', 'store', 'edit', 'update']);
         Route::resource('customers', CustomerController::class)->only(['index', 'create', 'store', 'edit', 'update']);
 

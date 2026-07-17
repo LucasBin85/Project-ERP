@@ -85,6 +85,8 @@ class AccountPayableController extends Controller
             'suppliers' => Supplier::query()->validForPayables($wallet->id)
                 ->with(['payableAccount:id,code,name', 'defaultExpenseAccount:id,code,name'])
                 ->orderBy('name')->get(['id', 'name', 'payable_account_id', 'default_expense_account_id']),
+            'payableControlAccounts' => $this->controlAccounts($wallet->id, 'passivo', 'accounts_payable'),
+            'expenseAccounts' => $this->expenseAccounts($wallet->id),
         ]);
     }
 

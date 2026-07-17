@@ -38,6 +38,21 @@ it('automatically creates and links payable and expense accounts for a supplier'
         ->and($supplier->defaultExpenseAccount->allows_posting)->toBeTrue();
 });
 
+it('quick creates a valid supplier and returns both linked accounts', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+
+    $response = $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
+        ->postJson(route('suppliers.quick-store'), ['name' => 'Fornecedor rápido', 'default_expense_name' => 'Fretes', 'active' => true]);
+
+    $response->assertCreated()->assertJsonPath('supplier.name', 'Fornecedor rápido')
+        ->assertJsonPath('supplier.payable_account.name', 'Fornecedor rápido')
+        ->assertJsonPath('supplier.default_expense_account.name', 'Fretes');
+    $supplier = Supplier::query()->findOrFail($response->json('supplier.id'));
+    expect($supplier->payableAccount->parent->code)->toBe('2.1')
+        ->and($supplier->defaultExpenseAccount->parent->code)->toBe('5.1');
+});
+
 it('rejects supplier accounts from another wallet or with invalid types', function () {
     $user = User::factory()->create();
     $wallet = $user->wallets()->firstOrFail();
@@ -79,6 +94,33 @@ it('automatically creates and links receivable and revenue accounts for a custom
         ->and($customer->defaultRevenueAccount->name)->toBe('Serviços recorrentes');
 });
 
+it('quick creates a valid customer and returns both linked accounts', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+
+    $response = $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
+        ->postJson(route('customers.quick-store'), ['name' => 'Cliente rápido', 'default_revenue_name' => 'Mensalidade', 'active' => true]);
+
+    $response->assertCreated()->assertJsonPath('customer.name', 'Cliente rápido')
+        ->assertJsonPath('customer.receivable_account.name', 'Cliente rápido')
+        ->assertJsonPath('customer.default_revenue_account.name', 'Mensalidade');
+    $customer = Customer::query()->findOrFail($response->json('customer.id'));
+    expect($customer->receivableAccount->parent->code)->toBe('1.2')
+        ->and($customer->defaultRevenueAccount->parent->code)->toBe('4.1');
+});
+
+it('rejects foreign wallet accounts in quick creation', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+    $foreignWallet = User::factory()->create()->wallets()->firstOrFail();
+    $foreignPayable = $foreignWallet->chartOfAccounts()->where('financial_group', 'accounts_payable')->where('allows_posting', true)->firstOrFail();
+    $foreignExpense = $foreignWallet->chartOfAccounts()->where('type', 'despesa')->where('allows_posting', true)->firstOrFail();
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])->postJson(route('suppliers.quick-store'), [
+        'name' => 'Inválido', 'payable_account_id' => $foreignPayable->id, 'default_expense_account_id' => $foreignExpense->id, 'active' => true,
+    ])->assertUnprocessable()->assertJsonValidationErrors(['payable_account_id', 'default_expense_account_id']);
+});
+
 it('lists only valid suppliers in the new payable title', function () {
     $user = User::factory()->create();
     $wallet = $user->wallets()->firstOrFail();
@@ -94,6 +136,8 @@ it('lists only valid suppliers in the new payable title', function () {
     $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])->get(route('accounts-payable.create'))
         ->assertInertia(fn (Assert $page) => $page->component('Financial/AccountsPayable/Create')
             ->has('suppliers', 7)
+            ->has('payableControlAccounts', 6)
+            ->has('expenseAccounts', 6)
             ->where('suppliers.5.name', 'VÃ¡lido')
             ->has('suppliers.5.payable_account')
             ->has('suppliers.5.default_expense_account'));
@@ -110,6 +154,8 @@ it('lists only valid customers in the new receivable title', function () {
     $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])->get(route('accounts-receivable.create'))
         ->assertInertia(fn (Assert $page) => $page->component('Financial/AccountsReceivable/Create')
             ->has('customers', 1)
+            ->has('receivableControlAccounts', 1)
+            ->has('revenueAccounts', 1)
             ->where('customers.0.name', 'Cliente vÃ¡lido')
             ->has('customers.0.receivable_account')
             ->has('customers.0.default_revenue_account'));

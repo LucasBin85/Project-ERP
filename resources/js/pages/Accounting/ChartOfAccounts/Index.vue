@@ -6,10 +6,16 @@ import { Head } from '@inertiajs/vue3'
 import { type BreadcrumbItem } from '@/types'
 import { useChartOfAccountsIndex } from '@/composables/accounting/useChartOfAccountsIndex'
 import type { TreeNode } from '@/types/types'
+import SupplierQuickCreateDialog from '@/components/financial/counterparties/SupplierQuickCreateDialog.vue'
+import CustomerQuickCreateDialog from '@/components/financial/counterparties/CustomerQuickCreateDialog.vue'
 
 const props = defineProps<{
   tree: TreeNode[]
   financialGroups?: string[]
+  payableControlAccounts: any[]
+  expenseAccounts: any[]
+  receivableControlAccounts: any[]
+  revenueAccounts: any[]
 }>()
 
 const chart = useChartOfAccountsIndex(props)
@@ -65,5 +71,19 @@ const breadcrumbs: BreadcrumbItem[] = [
     @update-name="chart.form.name = $event"
     @update-allows-posting="chart.form.allows_posting = $event"
     @update-financial-group="chart.form.financial_group = $event"
+  />
+  <SupplierQuickCreateDialog
+    :show="chart.showSupplierDialog.value"
+    :control-accounts="props.payableControlAccounts"
+    :expense-accounts="props.expenseAccounts"
+    @close="chart.showSupplierDialog.value = false"
+    @created="chart.counterpartyCreated"
+  />
+  <CustomerQuickCreateDialog
+    :show="chart.showCustomerDialog.value"
+    :control-accounts="props.receivableControlAccounts"
+    :revenue-accounts="props.revenueAccounts"
+    @close="chart.showCustomerDialog.value = false"
+    @created="chart.counterpartyCreated"
   />
 </template>
