@@ -79,7 +79,14 @@ export interface BankStatementTransaction {
     outflow_cents: number | null;
     amount_cents: number;
     running_balance_cents: number;
-    transfer: { id: number; status: string; counterpart_name: string; counterpart_statement_url: string } | null;
+    transfer: {
+        id: number;
+        status: string;
+        counterpart_name: string;
+        counterpart_statement_url: string;
+        match_status: 'none' | 'unique' | 'ambiguous';
+        match_candidates: Array<{ audit_id: number; journal_entry_id: number; description: string; counterpart_name: string }>;
+    } | null;
 }
 
 export interface BankStatementOperational {

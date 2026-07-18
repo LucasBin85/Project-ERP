@@ -19,6 +19,9 @@ use App\Services\Financial\BankAccountBalanceService;
 use App\Services\Financial\ClassifyOfxDraftEntry;
 use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\ResolveOfxDraftMatch;
+use App\Services\Financial\FindMatchingOfxTransferEntries;
+use App\Services\Financial\MergeBankTransferOfxEntries;
+use App\Services\Accounting\BuildPendingJournalEntries;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
@@ -254,6 +257,73 @@ it('rejects invalid transfer counterpart accounts', function () {
     $foreignWallet = classificationWallet();
     $foreign = classificationBankAccount($foreignWallet);
     expect(fn () => classify($wallet, $current, $entry, $foreign->chartOfAccount, false, OfxOperationTypePolicy::TRANSFER))->toThrow(\App\Exceptions\OfxClassificationException::class);
+});
+
+it('detects and safely merges two separately imported OFX transfer entries', function () {
+    $wallet = classificationWallet();
+    $origin = classificationBankAccount($wallet);
+    $destination = FinancialTestHelper::bankAccount($wallet, '1.1.2.905', 'Banco contraparte');
+    $outEntry = classificationEntry($wallet, $origin, 'out', 42_500);
+    $inEntry = classificationEntry($wallet, $destination, 'in', 42_500);
+    $inAudit = classificationAudit($inEntry);
+
+    classify($wallet, $origin, $outEntry, $destination->chartOfAccount, false, OfxOperationTypePolicy::TRANSFER);
+    $transfer = BankAccountTransfer::query()->firstOrFail();
+    $matches = app(FindMatchingOfxTransferEntries::class)->candidates($transfer, $origin);
+
+    expect($matches)->toHaveCount(1)->and($matches->first()->id)->toBe($inAudit->id);
+    $statement = app(BankStatementService::class)->build($wallet, new BankStatementFiltersDTO(
+        bankAccountId: $origin->id, startDate: '2026-07-01', endDate: '2026-07-31', search: '',
+    ))->toArray()['transactions'][0];
+    expect($statement['transfer']['match_status'])->toBe('unique')
+        ->and($statement['transfer']['match_candidates'][0]['audit_id'])->toBe($inAudit->id);
+
+    app(MergeBankTransferOfxEntries::class)->execute($wallet, $origin, $outEntry, $inAudit->id);
+    $transfer->refresh();
+
+    expect(JournalEntry::query()->count())->toBe(1)
+        ->and(JournalLine::query()->where('journal_entry_id', $outEntry->id)->count())->toBe(2)
+        ->and(JournalLine::query()->where('journal_entry_id', $outEntry->id)->where('chart_of_account_id', $wallet->suspense_account_id)->exists())->toBeFalse()
+        ->and($inAudit->fresh()->journal_entry_id)->toBe($outEntry->id)
+        ->and($inAudit->fresh()->journal_line_id)->toBe($transfer->to_journal_line_id)
+        ->and($transfer->validation_status)->toBe('fully_validated')
+        ->and(app(BuildPendingJournalEntries::class)->handle($wallet))->toHaveCount(1);
+
+    $balances = app(BankAccountBalanceService::class)->calculateMany($wallet, collect([$origin, $destination]));
+    expect($balances[$origin->id]['statement_balance_cents'])->toBe(-42_500)
+        ->and($balances[$destination->id]['statement_balance_cents'])->toBe(42_500);
+});
+
+it('requires explicit selection for multiple OFX transfer candidates', function () {
+    $wallet = classificationWallet();
+    $origin = classificationBankAccount($wallet);
+    $destination = FinancialTestHelper::bankAccount($wallet, '1.1.2.906', 'Banco ambíguo');
+    $outEntry = classificationEntry($wallet, $origin, 'out', 18_000);
+    classificationEntry($wallet, $destination, 'in', 18_000);
+    classificationEntry($wallet, $destination, 'in', 18_000);
+    classify($wallet, $origin, $outEntry, $destination->chartOfAccount, false, OfxOperationTypePolicy::TRANSFER);
+    $transfer = BankAccountTransfer::query()->firstOrFail();
+
+    expect(app(FindMatchingOfxTransferEntries::class)->candidates($transfer, $origin))->toHaveCount(2)
+        ->and(JournalEntry::query()->count())->toBe(3)
+        ->and($transfer->validation_status)->toBe('pending_counterpart_ofx');
+});
+
+it('does not offer incompatible or unsafe OFX entries as transfer candidates', function () {
+    $wallet = classificationWallet();
+    $origin = classificationBankAccount($wallet);
+    $destination = FinancialTestHelper::bankAccount($wallet, '1.1.2.907', 'Banco seguro');
+    $outEntry = classificationEntry($wallet, $origin, 'out', 9_000);
+    $wrongDirection = classificationEntry($wallet, $destination, 'out', 9_000);
+    $wrongAmount = classificationEntry($wallet, $destination, 'in', 9_001);
+    $posted = classificationEntry($wallet, $destination, 'in', 9_000);
+    $posted->update(['status' => 'posted', 'posted_at' => now()]);
+    classify($wallet, $origin, $outEntry, $destination->chartOfAccount, false, OfxOperationTypePolicy::TRANSFER);
+
+    expect(app(FindMatchingOfxTransferEntries::class)->candidates(BankAccountTransfer::query()->firstOrFail(), $origin))->toBeEmpty();
+    expect(fn () => app(MergeBankTransferOfxEntries::class)->execute(
+        $wallet, $origin, $outEntry, classificationAudit($wrongDirection)->id,
+    ))->toThrow(\App\Exceptions\OfxClassificationException::class);
 });
 
 it('keeps a legacy OFX audit without a journal line editable and repairs its link', function () {

@@ -9,6 +9,7 @@ import { route } from 'ziggy-js';
 import InlineOfxClassification from './InlineOfxClassification.vue';
 import InlineOfxMatchResolution from './InlineOfxMatchResolution.vue';
 import InlineOfxOperationType from './InlineOfxOperationType.vue';
+import InlineOfxTransferMatch from './InlineOfxTransferMatch.vue';
 import InlinePayableSettlement from './InlinePayableSettlement.vue';
 import InlineReceivableSettlement from './InlineReceivableSettlement.vue';
 
@@ -104,6 +105,11 @@ function operationTypeLabel(transaction: BankStatementTransaction): string {
                     :bank-account="bankAccount"
                 />
                 <InlineOfxMatchResolution v-else-if="transaction.match_status !== 'none'" :transaction="transaction" :bank-account="bankAccount" />
+                <InlineOfxTransferMatch
+                    v-else-if="transaction.transfer && transaction.transfer.match_status !== 'none'"
+                    :transaction="transaction"
+                    :bank-account="bankAccount"
+                />
                 <div v-else-if="transaction.transfer" class="space-y-1 text-xs">
                     <span class="inline-flex rounded bg-blue-950 px-2 py-1 font-semibold text-blue-300">Transferência</span>
                     <p><Link :href="transaction.transfer.counterpart_statement_url" class="text-indigo-300 hover:underline">{{ transaction.transfer.counterpart_name }}</Link></p>

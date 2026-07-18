@@ -20,6 +20,7 @@ class BankStatementService
 {
     public function __construct(
         private readonly FindMatchingOfxJournalLine $matchingJournalLines,
+        private readonly FindMatchingOfxTransferEntries $matchingTransfers,
         private readonly OfxOperationTypePolicy $operationTypes,
         private readonly AssessJournalEntryPostingReadiness $postingReadiness,
     ) {}
@@ -85,6 +86,9 @@ class BankStatementService
                 $classification = $this->classification($wallet, $line);
                 $auditTransaction = $ofxTransactionsByLineId->get((int) $line->id);
                 $transfer = $transfersByEntryId->get((int) $entry?->id);
+                $transferCandidates = $transfer
+                    ? $this->matchingTransfers->candidates($transfer, $bankAccount)
+                    : collect();
                 $linkedAccountPayable = $entry?->settledAccountPayable;
                 $linkedAccountReceivable = $entry?->settledAccountReceivable;
                 $canEditOfx = $entry?->source === 'ofx'
@@ -182,6 +186,14 @@ class BankStatementService
                         'counterpart_statement_url' => route('bank-accounts.statement',
                             (int) $bankAccount->id === (int) $transfer->from_bank_account_id
                                 ? $transfer->to_bank_account_id : $transfer->from_bank_account_id),
+                        'match_status' => $transferCandidates->isEmpty()
+                            ? 'none' : ($transferCandidates->count() === 1 ? 'unique' : 'ambiguous'),
+                        'match_candidates' => $transferCandidates->map(fn ($candidate) => [
+                            'audit_id' => $candidate->id,
+                            'journal_entry_id' => $candidate->journal_entry_id,
+                            'description' => $candidate->description,
+                            'counterpart_name' => $candidate->bankAccount?->name,
+                        ])->values()->all(),
                     ] : null,
                     'type' => $inflowCents > 0 ? 'inflow' : 'outflow',
                     'inflow_cents' => $inflowCents ?: null,

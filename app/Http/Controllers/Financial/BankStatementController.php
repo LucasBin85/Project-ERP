@@ -16,6 +16,7 @@ use App\Models\Wallet;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\BulkPostOfxDraftEntries;
 use App\Services\Financial\ClassifyOfxDraftEntry;
+use App\Services\Financial\MergeBankTransferOfxEntries;
 use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\ResolveOfxDraftMatch;
 use Illuminate\Http\JsonResponse;
@@ -212,6 +213,26 @@ class BankStatementController extends Controller
                 ? 'OFX vinculado ao lançamento manual com sucesso.'
                 : 'Lançamento OFX mantido para classificação.',
         );
+    }
+
+    public function mergeTransfer(
+        Request $request,
+        BankAccount $bankAccount,
+        JournalEntry $journalEntry,
+        MergeBankTransferOfxEntries $service,
+    ): RedirectResponse {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id, 404);
+        abort_unless((int) $journalEntry->wallet_id === (int) $wallet->id, 404);
+        $data = $request->validate(['audit_id' => ['required', 'integer']]);
+
+        try {
+            $service->execute($wallet, $bankAccount, $journalEntry, (int) $data['audit_id']);
+        } catch (OfxClassificationException $exception) {
+            return back()->withErrors(['transfer_match' => $exception->getMessage()]);
+        }
+
+        return back()->with('success', 'Transferências OFX vinculadas com sucesso.');
     }
 
     private function operationalContext(BankAccount $bankAccount, string $startDate): array

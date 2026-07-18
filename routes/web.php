@@ -100,6 +100,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/resolve-match', [BankStatementController::class, 'resolveMatch'])
             ->name('bank-accounts.statement.resolve-match');
 
+        Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/merge-transfer', [BankStatementController::class, 'mergeTransfer'])
+            ->name('bank-accounts.statement.merge-transfer');
+
         Route::get('bank-accounts/{bankAccount}/statement/{journalEntry}/payable-candidates', [BankStatementSettlementController::class, 'payableCandidates'])
             ->name('bank-accounts.statement.payable-candidates');
 
