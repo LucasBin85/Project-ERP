@@ -116,7 +116,7 @@ function backToUpload() {
 
 function confirmImport() {
     ofxImport.confirm((message) => {
-        completedMessage.value = message ?? 'Importação OFX concluída com sucesso.';
+        completedMessage.value = message ?? 'Importação do extrato concluída com sucesso.';
         closeTimer = window.setTimeout(() => {
             open.value = false;
             resetDialog();
@@ -212,7 +212,7 @@ watch(
 
                 <form v-else-if="!ofxImport.preview.value" class="space-y-6" @submit.prevent="ofxImport.loadPreview()">
                     <div class="space-y-2">
-                        <label for="bank-statement-ofx-file" class="block text-sm font-semibold text-gray-300">Arquivo OFX</label>
+                        <label for="bank-statement-ofx-file" class="block text-sm font-semibold text-gray-300">Arquivo do extrato</label>
                         <input
                             id="bank-statement-ofx-file"
                             ref="fileInput"
@@ -221,7 +221,7 @@ watch(
                             class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-sm text-white file:mr-4 file:rounded file:border-0 file:bg-gray-800 file:px-3 file:py-1 file:text-gray-200"
                             @change="ofxImport.selectFile"
                         />
-                        <p class="text-xs text-gray-500">Nenhum lançamento será criado durante a pré-visualização.</p>
+                        <p class="text-xs text-gray-500">Formatos aceitos: OFX, CSV e PDF textual. Nenhum lançamento será criado durante a pré-visualização.</p>
                         <InputError :message="ofxImport.previewForm.errors.ofx_file" />
                         <InputError :message="ofxImport.previewForm.errors.bank_account_id" />
                     </div>

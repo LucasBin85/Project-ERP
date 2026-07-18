@@ -17,6 +17,7 @@ use App\Services\Financial\ConfirmOfxBankStatement;
 use App\Services\Financial\ClassifyOfxDraftEntry;
 use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\ParseOfxStatement;
+use App\Services\Financial\ParseMercadoPagoPdfStatement;
 use App\Services\Financial\PreviewOfxBankStatement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -932,4 +933,24 @@ it('recognizes common Mercado Pago transactions from a textual PDF stream', func
     expect($preview['rows'])->toHaveCount(2)->and($preview['rows'][0]['direction'])->toBe('in')
         ->and($preview['rows'][0]['amount_cents'])->toBe(15_000)->and($preview['rows'][1]['direction'])->toBe('out')
         ->and($preview['rows'][1]['amount_cents'])->toBe(3_590);
+    $result = app(ConfirmOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'mercado-pago.pdf', $preview['file_hash'], defaultOfxDecisions($preview), $preview['rows']);
+    expect($result->created)->toBe(2)->and($result->import->source)->toBe('pdf');
+    $reimport = app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'mercado-pago.pdf');
+    expect(collect($reimport['rows'])->every(fn ($row) => $row['situation'] === 'already_imported'))->toBeTrue();
+});
+
+it('parses the sanitized multiline Mercado Pago extracted-text fixture into dated signed blocks', function () {
+    $text = file_get_contents(base_path('tests/Fixtures/mercado_pago_extracted.txt'));
+    $transactions = app(ParseMercadoPagoPdfStatement::class)->parse($text);
+    expect($transactions)->toHaveCount(3)
+        ->and($transactions[0]->postedAt)->toBe('2026-07-20')->and($transactions[0]->direction)->toBe('in')->and($transactions[0]->amountCents)->toBe(15_000)
+        ->and($transactions[0]->description)->toContain('Pix recebido')
+        ->and($transactions[1]->postedAt)->toBe('2026-07-21')->and($transactions[1]->direction)->toBe('out')->and($transactions[1]->amountCents)->toBe(3_590)
+        ->and($transactions[2]->direction)->toBe('in')->and($transactions[2]->amountCents)->toBe(125);
+});
+
+it('returns the useful layout error when a textual PDF has no recognizable transactions', function () {
+    $contents = "%PDF-1.4\nBT (Relatorio Mercado Pago sem movimentos financeiros) Tj ET\n%%EOF";
+    expect(fn () => app(\App\Services\Financial\ParsePdfStatement::class)->parse($contents))
+        ->toThrow(RuntimeException::class, 'O PDF foi lido, mas o layout ainda não foi reconhecido.');
 });

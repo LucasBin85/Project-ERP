@@ -1,0 +1,21 @@
+Extrato da conta Mercado Pago
+Período consultado 01/07/2026 a 31/07/2026
+
+20/07/2026
+Pix recebido
+Cliente exemplo
+Referência MP-001
+R$ 150,00
+Saldo R$ 1.250,00
+
+21/07/26
+Pagamento de boleto
+Concessionária exemplo
+Referência MP-002
+R$ 35,90
+Saldo R$ 1.214,10
+
+22/07/2026
+Rendimento
+R$ 1,25
+Saldo R$ 1.215,35

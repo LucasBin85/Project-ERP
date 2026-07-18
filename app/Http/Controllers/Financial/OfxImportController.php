@@ -99,7 +99,7 @@ class OfxImportController extends Controller
             report($exception);
 
             return back()
-                ->withErrors(['ofx_file' => 'Não foi possível ler o arquivo OFX. Tente novamente.'])
+                ->withErrors(['ofx_file' => 'Não foi possível ler o arquivo do extrato. Tente OFX, CSV ou PDF textual.'])
                 ->withInput();
         }
 
@@ -142,7 +142,7 @@ class OfxImportController extends Controller
             || (int) ($context['user_id'] ?? 0) !== (int) $request->user()?->id
             || (int) ($context['wallet_id'] ?? 0) !== (int) $wallet->id) {
             return back()->withErrors([
-                'preview_token' => 'A pré-visualização expirou. Selecione o arquivo OFX novamente.',
+                'preview_token' => 'A pré-visualização expirou. Selecione o arquivo do extrato novamente.',
             ]);
         }
 
@@ -188,7 +188,7 @@ class OfxImportController extends Controller
 
             return redirect()
                 ->route('bank-accounts.statement', $bankAccount)
-                ->withErrors(['ofx_import' => 'Não foi possível concluir a importação OFX. Nenhum lançamento foi criado.'])
+                ->withErrors(['ofx_import' => 'Não foi possível concluir a importação do extrato. Nenhum lançamento foi criado.'])
                 ->with('ofx_preview', $context['preview']);
         }
 
