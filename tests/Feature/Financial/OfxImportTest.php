@@ -921,5 +921,15 @@ it('previews a conservative textual PDF and rejects scanned PDFs', function () {
     $result = app(ConfirmOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'extrato.pdf', $preview['file_hash'], defaultOfxDecisions($preview), $preview['rows']);
     expect($result->created)->toBe(2)->and($result->import->source)->toBe('pdf');
     expect(fn () => app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, "%PDF-1.4\n/image data\n%%EOF", 'scan.pdf'))
-        ->toThrow(RuntimeException::class, 'Não foi possível interpretar este PDF automaticamente. Tente OFX ou CSV.');
+        ->toThrow(RuntimeException::class, 'O PDF não contém texto extraível. PDFs escaneados exigem OCR; tente OFX ou CSV.');
+});
+
+it('recognizes common Mercado Pago transactions from a textual PDF stream', function () {
+    $wallet = createWalletForOfxImport();
+    $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.922', 'Mercado Pago');
+    $contents = "%PDF-1.4\nstream\nBT (Extrato Mercado Pago) Tj (20/07/2026) Tj (Pix recebido de Cliente) Tj (R$ 150,00) Tj (21/07/2026) Tj (Transferencia enviada) Tj (R$ 35,90) Tj ET\nendstream\n%%EOF";
+    $preview = app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'mercado-pago.pdf');
+    expect($preview['rows'])->toHaveCount(2)->and($preview['rows'][0]['direction'])->toBe('in')
+        ->and($preview['rows'][0]['amount_cents'])->toBe(15_000)->and($preview['rows'][1]['direction'])->toBe('out')
+        ->and($preview['rows'][1]['amount_cents'])->toBe(3_590);
 });

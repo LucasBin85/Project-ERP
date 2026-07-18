@@ -40,6 +40,7 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                 >
                     Voltar
                 </Link>
+                <Link :href="route('bank-accounts.edit', [account.id])" class="rounded-lg border border-indigo-500 px-4 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-950/40">Editar conta</Link>
 
             </div>
 

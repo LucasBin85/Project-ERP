@@ -125,7 +125,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('bank-accounts.ofx-preview');
 
         Route::resource('bank-accounts', BankAccountController::class)
-            ->only(['index', 'create', 'store', 'show']);
+            ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
 
         Route::resource('bank-transfers', BankTransferController::class)
             ->only(['index', 'create', 'store', 'show']);

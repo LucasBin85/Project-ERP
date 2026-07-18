@@ -103,6 +103,18 @@ it('creates a receivable provision and links the current statement entry as its 
         ->and($movement['entry']->fresh('lines')->lines->contains('chart_of_account_id', $context['wallet']->suspense_account_id))->toBeFalse();
 });
 
+it('ignores a divergent date when creating a receivable from the statement endpoint', function () {
+    $context = receivableSettlementContext(); $movement = receivableMovement($context);
+    $customer = Customer::query()->create(['wallet_id' => $context['wallet']->id, 'name' => 'Cliente data fixa', 'active' => true,
+        'receivable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->value('id'), 'default_revenue_account_id' => $context['revenue']->id]);
+    $this->actingAs($context['user'])->withSession(['active_wallet' => $context['wallet']->id])->post(route('bank-accounts.statement.create-link-receivable', [$context['bankAccount'], $movement['entry']]), [
+        'customer_id' => $customer->id, 'description' => 'Data fixa', 'due_date' => '2030-01-01',
+    ])->assertSessionHasNoErrors();
+    $receivable = AccountReceivable::query()->sole();
+    expect($receivable->due_date->toDateString())->toBe('2026-07-10')->and($receivable->received_at->toDateString())->toBe('2026-07-10')
+        ->and($receivable->provisionJournalEntry->entry_date->toDateString())->toBe('2026-07-10');
+});
+
 it('links an explicitly selected receivable by reusing the draft and preserving the bank line', function () {
     $context = receivableSettlementContext();
     $movement = receivableMovement($context);

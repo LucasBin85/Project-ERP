@@ -113,10 +113,13 @@ function createAndLinkPayable() {
             :aria-expanded="expanded"
             @click="toggleCandidates"
         >
-            Vincular conta a pagar
+            Criar ou vincular título a pagar
         </button>
 
-        <div v-if="expanded" class="space-y-2 rounded-xl border border-gray-700 bg-gray-950 p-3">
+        <div v-if="expanded" class="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4" @click.self="expanded = false">
+          <div class="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-xl border border-gray-700 bg-gray-950 p-5 shadow-2xl">
+            <div class="flex items-center justify-between"><p class="font-bold text-white">Conta a pagar do extrato</p><button type="button" class="text-gray-400" @click="expanded = false">Fechar</button></div>
+            <div class="grid grid-cols-2 gap-2 rounded bg-gray-900 p-3 text-xs text-gray-300"><p>Valor: <strong>{{ formatCurrency(Math.abs(transaction.amount_cents)) }}</strong></p><p>Data do movimento: <strong>{{ formatDate(transaction.date) }}</strong></p></div>
             <p v-if="loading" class="text-xs text-gray-400">Buscando títulos pendentes...</p>
             <p v-else-if="loadError" class="text-xs text-red-300">{{ loadError }}</p>
             <div v-else-if="candidates.length === 0" class="space-y-2">
@@ -125,7 +128,6 @@ function createAndLinkPayable() {
                 <select v-model="createForm.supplier_id" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white"><option value="" disabled>Fornecedor...</option><option v-for="supplier in localSuppliers" :key="supplier.id" :value="String(supplier.id)">{{ supplier.name }}</option></select>
                 <button type="button" class="text-left font-semibold text-indigo-300 hover:underline" @click="showQuickSupplier = true">Cadastrar fornecedor rápido</button>
                 <input v-model="createForm.description" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" placeholder="Descrição" />
-                <input v-model="createForm.due_date" type="date" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" />
                 <textarea v-model="createForm.notes" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" placeholder="Observações opcionais" />
                 <button type="button" :disabled="createForm.processing || !createForm.supplier_id" class="w-full rounded bg-indigo-600 px-3 py-2 font-semibold text-white disabled:opacity-50" @click="createAndLinkPayable">Criar título a pagar e vincular</button>
                 <InputError :message="Object.values(createForm.errors)[0]" />
@@ -156,6 +158,7 @@ function createAndLinkPayable() {
             </template>
 
             <InputError :message="form.errors.account_payable_id || Object.values(form.errors)[0]" />
+          </div>
         </div>
     </div>
     <SupplierQuickCreateDialog :show="showQuickSupplier" :existing-names="localSuppliers.map((item) => item.name)" @close="showQuickSupplier = false" @created="supplierCreated" />

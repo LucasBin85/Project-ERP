@@ -212,3 +212,28 @@ it('rejects a duplicate of a legacy account identified by bank code', function (
 
     expect(BankAccount::query()->count())->toBe(1);
 });
+
+it('edits bank account registration without changing its accounting link or existing entries', function () {
+    $user = User::factory()->create(); $wallet = $user->wallets()->firstOrFail();
+    $bank = Bank::query()->create(['code' => '260', 'name' => 'Mercado Pago', 'short_name' => 'Mercado Pago', 'ispb' => '10573521', 'active' => true]);
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])->post(route('bank-accounts.store'), [
+        'bank_id' => $bank->id, 'name' => 'Nome errado', 'agency' => '1', 'account_number' => '123', 'account_type' => 'checking', 'opening_balance_cents' => 0,
+    ]);
+    $account = BankAccount::query()->sole(); $chartId = $account->chart_of_account_id;
+    $response = $this->put(route('bank-accounts.update', $account), [
+        'bank_id' => $bank->id, 'name' => 'Mercado Pago principal', 'agency' => '0001', 'account_number' => '987654', 'account_type' => 'checking', 'is_active' => true,
+    ]);
+    $response->assertRedirect(route('bank-accounts.show', $account));
+    expect($account->fresh()->name)->toBe('Mercado Pago principal')->and($account->fresh()->agency)->toBe('0001')
+        ->and($account->fresh()->account_number)->toBe('987654')->and($account->fresh()->chart_of_account_id)->toBe($chartId);
+    $this->get(route('bank-accounts.show', $account))->assertOk()->assertInertia(fn (Assert $page) => $page->where('account.name', 'Mercado Pago principal'));
+});
+
+it('does not allow editing a bank account outside the active wallet', function () {
+    $user = User::factory()->create(); $wallet = $user->wallets()->firstOrFail();
+    $other = Wallet::query()->create(['user_id' => $user->id, 'name' => 'Outra']);
+    $parent = $other->chartOfAccounts()->where('code', '1.1.2')->firstOrFail();
+    $chart = $other->chartOfAccounts()->create(['parent_id' => $parent->id, 'code' => '1.1.2.900', 'name' => 'Outra conta', 'type' => 'ativo', 'normal_balance' => 'debit', 'allows_posting' => true]);
+    $account = BankAccount::query()->create(['wallet_id' => $other->id, 'chart_of_account_id' => $chart->id, 'name' => 'Outra conta', 'account_type' => 'checking']);
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])->get(route('bank-accounts.edit', $account))->assertNotFound();
+});

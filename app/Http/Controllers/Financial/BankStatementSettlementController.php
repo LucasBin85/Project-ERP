@@ -31,10 +31,10 @@ class BankStatementSettlementController extends Controller
         abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id && (int) $journalEntry->wallet_id === (int) $wallet->id, 404);
         $data = $request->validate([
             'supplier_id' => ['required', 'integer', Rule::exists('suppliers', 'id')->where('wallet_id', $wallet->id)->where('active', true)],
-            'description' => ['required', 'string', 'max:255'], 'due_date' => ['required', 'date'], 'notes' => ['nullable', 'string', 'max:2000'],
+            'description' => ['required', 'string', 'max:255'], 'due_date' => ['nullable', 'date'], 'notes' => ['nullable', 'string', 'max:2000'],
         ]);
         $service->execute($wallet, $bankAccount, $journalEntry, new AccountPayableDTO(
-            expenseAccountId: 0, payeeName: '', description: $data['description'], dueDate: $data['due_date'],
+            expenseAccountId: 0, payeeName: '', description: $data['description'], dueDate: $journalEntry->entry_date->toDateString(),
             amountCents: (int) $journalEntry->lines()->where('chart_of_account_id', $bankAccount->chart_of_account_id)->value('amount_cents'),
             notes: $data['notes'] ?? null, supplierId: (int) $data['supplier_id'],
         ));
@@ -47,10 +47,10 @@ class BankStatementSettlementController extends Controller
         abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id && (int) $journalEntry->wallet_id === (int) $wallet->id, 404);
         $data = $request->validate([
             'customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where('wallet_id', $wallet->id)->where('active', true)],
-            'description' => ['required', 'string', 'max:255'], 'due_date' => ['required', 'date'], 'notes' => ['nullable', 'string', 'max:2000'],
+            'description' => ['required', 'string', 'max:255'], 'due_date' => ['nullable', 'date'], 'notes' => ['nullable', 'string', 'max:2000'],
         ]);
         $service->execute($wallet, $bankAccount, $journalEntry, new AccountReceivableDTO(
-            revenueAccountId: 0, customerName: '', description: $data['description'], dueDate: $data['due_date'],
+            revenueAccountId: 0, customerName: '', description: $data['description'], dueDate: $journalEntry->entry_date->toDateString(),
             amountCents: (int) $journalEntry->lines()->where('chart_of_account_id', $bankAccount->chart_of_account_id)->value('amount_cents'),
             notes: $data['notes'] ?? null, customerId: (int) $data['customer_id'],
         ));

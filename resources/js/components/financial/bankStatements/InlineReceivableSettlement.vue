@@ -52,8 +52,11 @@ function createAndLinkReceivable() {
         <p class="text-xs text-gray-400">Classificação: {{ transaction.classification_label }}</p>
     </div>
     <div v-else-if="transaction.can_link_account_receivable" class="min-w-72 space-y-2">
-        <button type="button" class="rounded-lg border border-indigo-500/60 px-3 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-950/40" @click="toggle">Vincular conta a receber</button>
-        <div v-if="expanded" class="space-y-2 rounded-xl border border-gray-700 bg-gray-950 p-3">
+        <button type="button" class="rounded-lg border border-indigo-500/60 px-3 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-950/40" @click="toggle">Criar ou vincular título a receber</button>
+        <div v-if="expanded" class="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4" @click.self="expanded = false">
+          <div class="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-xl border border-gray-700 bg-gray-950 p-5 shadow-2xl">
+            <div class="flex items-center justify-between"><p class="font-bold text-white">Conta a receber do extrato</p><button type="button" class="text-gray-400" @click="expanded = false">Fechar</button></div>
+            <div class="grid grid-cols-2 gap-2 rounded bg-gray-900 p-3 text-xs text-gray-300"><p>Valor: <strong>{{ formatCurrency(Math.abs(transaction.amount_cents)) }}</strong></p><p>Data do movimento: <strong>{{ formatDate(transaction.date) }}</strong></p></div>
             <p v-if="loading" class="text-xs text-gray-400">Buscando títulos pendentes...</p>
             <p v-else-if="loadError" class="text-xs text-red-300">{{ loadError }}</p>
             <div v-else-if="!candidates.length" class="space-y-2">
@@ -62,7 +65,6 @@ function createAndLinkReceivable() {
                 <select v-model="createForm.customer_id" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white"><option value="" disabled>Cliente...</option><option v-for="customer in localCustomers" :key="customer.id" :value="String(customer.id)">{{ customer.name }}</option></select>
                 <button type="button" class="text-left font-semibold text-indigo-300 hover:underline" @click="showQuickCustomer = true">Cadastrar cliente rápido</button>
                 <input v-model="createForm.description" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" placeholder="Descrição" />
-                <input v-model="createForm.due_date" type="date" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" />
                 <textarea v-model="createForm.notes" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" placeholder="Observações opcionais" />
                 <button type="button" :disabled="createForm.processing || !createForm.customer_id" class="w-full rounded bg-indigo-600 px-3 py-2 font-semibold text-white disabled:opacity-50" @click="createAndLinkReceivable">Criar título a receber e vincular</button>
                 <InputError :message="Object.values(createForm.errors)[0]" />
@@ -75,6 +77,7 @@ function createAndLinkReceivable() {
                 <button type="button" :disabled="form.processing || !form.account_receivable_id" class="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="linkReceivable">{{ form.processing ? 'Vinculando...' : 'Confirmar vínculo' }}</button>
             </template>
             <InputError :message="form.errors.account_receivable_id || Object.values(form.errors)[0]" />
+          </div>
         </div>
     </div>
     <CustomerQuickCreateDialog :show="showQuickCustomer" :existing-names="localCustomers.map((item) => item.name)" @close="showQuickCustomer = false" @created="customerCreated" />

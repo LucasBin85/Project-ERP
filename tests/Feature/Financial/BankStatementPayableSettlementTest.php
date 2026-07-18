@@ -228,6 +228,18 @@ it('creates a payable provision and links the current statement entry as its pay
         ->and($movement['entry']->fresh('lines')->lines->contains('chart_of_account_id', $context['wallet']->suspense_account_id))->toBeFalse();
 });
 
+it('ignores a divergent date when creating a payable from the statement endpoint', function () {
+    $context = payableSettlementContext(); $movement = payableSettlementMovement($context, date: '2026-07-10');
+    $supplier = Supplier::query()->create(['wallet_id' => $context['wallet']->id, 'name' => 'Fornecedor data fixa', 'active' => true,
+        'payable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_payable')->where('allows_posting', true)->value('id'), 'default_expense_account_id' => $context['expense']->id]);
+    $this->actingAs($context['user'])->withSession(['active_wallet' => $context['wallet']->id])->post(route('bank-accounts.statement.create-link-payable', [$context['bankAccount'], $movement['entry']]), [
+        'supplier_id' => $supplier->id, 'description' => 'Data fixa', 'due_date' => '2030-01-01',
+    ])->assertSessionHasNoErrors();
+    $payable = AccountPayable::query()->sole();
+    expect($payable->due_date->toDateString())->toBe('2026-07-10')->and($payable->paid_at->toDateString())->toBe('2026-07-10')
+        ->and($payable->provisionJournalEntry->entry_date->toDateString())->toBe('2026-07-10');
+});
+
 it('links an explicitly selected payable by reusing the OFX draft and preserving its bank line', function () {
     $context = payableSettlementContext();
     $movement = payableSettlementMovement($context);
