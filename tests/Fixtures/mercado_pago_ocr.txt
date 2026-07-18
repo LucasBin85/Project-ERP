@@ -1,0 +1,15 @@
+Extrato Mercado Pago
+
+20 / 07 / 2026
+Pix rece bido
+Cliente exemplo
+R $ 150 , 00
+
+21 / 07 / 26
+Pagamento de boleto
+Empresa exemplo
+R $ 35 , 90
+
+22 / 07 / 2026
+Rendimento
+R $ 1 , 25

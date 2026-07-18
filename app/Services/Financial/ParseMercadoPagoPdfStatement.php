@@ -45,6 +45,10 @@ class ParseMercadoPagoPdfStatement
     {
         $text = preg_replace('/[\x{00AD}\x{200B}-\x{200D}\x{2060}\x{FEFF}]/u', '', $text);
         $text = str_replace(["\r\n", "\r", "\t"], ["\n", "\n", ' '], $text);
+        $text = preg_replace('/(?<=\d)\s*\/\s*(?=\d)/u', '/', $text);
+        $text = preg_replace('/R\s*\$\s*/ui', 'R$ ', $text);
+        $text = preg_replace('/(?<=\d)\s*([,.])\s*(?=\d{2}\b)/u', '$1', $text);
+        $text = preg_replace('/(?<=\d)\s+(?=\d{3}(?:\D|$))/u', '.', $text);
         $text = preg_replace('/[ ]{2,}/', ' ', $text);
         return trim(preg_replace('/\n{3,}/', "\n\n", $text));
     }

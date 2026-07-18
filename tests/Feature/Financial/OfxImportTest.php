@@ -922,7 +922,7 @@ it('previews a conservative textual PDF and rejects scanned PDFs', function () {
     $result = app(ConfirmOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'extrato.pdf', $preview['file_hash'], defaultOfxDecisions($preview), $preview['rows']);
     expect($result->created)->toBe(2)->and($result->import->source)->toBe('pdf');
     expect(fn () => app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, "%PDF-1.4\n/image data\n%%EOF", 'scan.pdf'))
-        ->toThrow(RuntimeException::class, 'O PDF não contém texto extraível. PDFs escaneados exigem OCR; tente OFX ou CSV.');
+        ->toThrow(RuntimeException::class, 'Este PDF parece ser baseado em imagem. Para importar este tipo de PDF, habilite OCR local ou use outro formato.');
 });
 
 it('recognizes common Mercado Pago transactions from a textual PDF stream', function () {
@@ -953,4 +953,14 @@ it('returns the useful layout error when a textual PDF has no recognizable trans
     $contents = "%PDF-1.4\nBT (Relatorio Mercado Pago sem movimentos financeiros) Tj ET\n%%EOF";
     expect(fn () => app(\App\Services\Financial\ParsePdfStatement::class)->parse($contents))
         ->toThrow(RuntimeException::class, 'O PDF foi lido, mas o layout ainda não foi reconhecido.');
+});
+
+it('normalizes simulated Mercado Pago OCR text into conservative signed transactions', function () {
+    $text = file_get_contents(base_path('tests/Fixtures/mercado_pago_ocr.txt'));
+    $transactions = app(ParseMercadoPagoPdfStatement::class)->parse($text);
+
+    expect($transactions)->toHaveCount(3)
+        ->and($transactions[0]->postedAt)->toBe('2026-07-20')->and($transactions[0]->direction)->toBe('in')->and($transactions[0]->amountCents)->toBe(15_000)
+        ->and($transactions[1]->postedAt)->toBe('2026-07-21')->and($transactions[1]->direction)->toBe('out')->and($transactions[1]->amountCents)->toBe(3_590)
+        ->and($transactions[2]->direction)->toBe('in')->and($transactions[2]->amountCents)->toBe(125);
 });
