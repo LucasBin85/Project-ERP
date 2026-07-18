@@ -16,7 +16,7 @@ class ConfirmOfxBankStatement
 {
     public function __construct(
         private readonly PreviewOfxBankStatement $preview,
-        private readonly ParseOfxStatement $parser,
+        private readonly ParseStatementFile $parser,
         private readonly CreateBankImportEntry $createBankImportEntry,
         private readonly FindMatchingOfxJournalLine $matchingJournalLines,
     ) {}
@@ -34,7 +34,7 @@ class ConfirmOfxBankStatement
         array $decisions,
         array $expectedRows,
     ): OfxImportResultDTO {
-        if (! hash_equals($expectedFileHash, hash('sha256', $contents))) {
+        if (! hash_equals($expectedFileHash, hash('sha256', $this->parser->format($originalFilename).'|'.$contents))) {
             throw new OfxImportException('O arquivo não corresponde à pré-visualização confirmada.');
         }
 
@@ -77,7 +77,7 @@ class ConfirmOfxBankStatement
 
             $this->ensurePreviewIsCurrent($expectedRows, $currentPreview['rows']);
 
-            $parsed = $this->parser->parse($contents);
+            $parsed = $this->parser->parse($contents, $originalFilename);
             $transactions = $parsed['transactions'];
             $this->ensureDecisionsCoverPreview($decisions, $currentPreview['rows']);
             $decisionsByRowKey = collect($decisions)->keyBy('row_key');
@@ -85,7 +85,7 @@ class ConfirmOfxBankStatement
             $import = BankStatementImport::query()->create([
                 'wallet_id' => $wallet->id,
                 'bank_account_id' => $lockedBankAccount->id,
-                'source' => 'ofx',
+                'source' => $this->parser->format($originalFilename),
                 'original_filename' => $originalFilename,
                 'file_hash' => $expectedFileHash,
                 'statement_started_at' => $parsed['started_at'],
@@ -229,7 +229,7 @@ class ConfirmOfxBankStatement
                     direction: $transaction->direction,
                     entryDate: $transaction->postedAt,
                     description: $transaction->description,
-                    source: 'ofx',
+                    source: $this->parser->format($originalFilename),
                     externalId: $row['external_id'],
                     autoPostIfBalanced: false,
                 );
@@ -347,6 +347,7 @@ class ConfirmOfxBankStatement
             'bank_statement_import_id' => $import->id,
             'wallet_id' => $wallet->id,
             'bank_account_id' => $bankAccount->id,
+            'file_format' => $import->source,
             'journal_entry_id' => $journalEntryId,
             'journal_line_id' => $journalLineId,
             'classification_account_id' => null,

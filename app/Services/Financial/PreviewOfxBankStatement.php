@@ -12,7 +12,7 @@ use App\Models\Wallet;
 class PreviewOfxBankStatement
 {
     public function __construct(
-        private readonly ParseOfxStatement $parser,
+        private readonly ParseStatementFile $parser,
         private readonly FindMatchingOfxJournalLine $matchingJournalLines,
         private readonly OfxTransactionIdentity $identity,
         private readonly ValidateOfxBankAccount $accountValidation,
@@ -32,9 +32,9 @@ class PreviewOfxBankStatement
     ): array {
         $this->validateContext($wallet, $bankAccount);
 
-        $parsed = $this->parser->parse($contents);
+        $parsed = $this->parser->parse($contents, $originalFilename);
         $accountValidation = $this->accountValidation->execute($bankAccount, $parsed['account']);
-        $fileHash = hash('sha256', $contents);
+        $fileHash = hash('sha256', $this->parser->format($originalFilename).'|'.$contents);
         $rows = [];
         $identitiesInFile = [];
 

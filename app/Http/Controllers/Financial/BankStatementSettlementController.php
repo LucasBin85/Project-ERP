@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Financial;
 
+use App\DTOs\Financial\AccountPayableDTO;
+use App\DTOs\Financial\AccountReceivableDTO;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
 use App\Models\AccountPayable;
@@ -12,6 +14,8 @@ use App\Services\Financial\FindBankStatementPayableCandidates;
 use App\Services\Financial\FindBankStatementReceivableCandidates;
 use App\Services\Financial\LinkAccountPayableFromBankStatement;
 use App\Services\Financial\LinkAccountReceivableFromBankStatement;
+use App\Services\Financial\CreateAndLinkAccountPayableFromBankStatement;
+use App\Services\Financial\CreateAndLinkAccountReceivableFromBankStatement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,6 +24,38 @@ use Illuminate\Validation\Rule;
 class BankStatementSettlementController extends Controller
 {
     use ResolvesActiveWallet;
+
+    public function createAndLinkPayable(Request $request, BankAccount $bankAccount, JournalEntry $journalEntry, CreateAndLinkAccountPayableFromBankStatement $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id && (int) $journalEntry->wallet_id === (int) $wallet->id, 404);
+        $data = $request->validate([
+            'supplier_id' => ['required', 'integer', Rule::exists('suppliers', 'id')->where('wallet_id', $wallet->id)->where('active', true)],
+            'description' => ['required', 'string', 'max:255'], 'due_date' => ['required', 'date'], 'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $service->execute($wallet, $bankAccount, $journalEntry, new AccountPayableDTO(
+            expenseAccountId: 0, payeeName: '', description: $data['description'], dueDate: $data['due_date'],
+            amountCents: (int) $journalEntry->lines()->where('chart_of_account_id', $bankAccount->chart_of_account_id)->value('amount_cents'),
+            notes: $data['notes'] ?? null, supplierId: (int) $data['supplier_id'],
+        ));
+        return back()->with('success', 'Conta a pagar criada e vinculada. Os lançamentos estão prontos para a contabilidade.');
+    }
+
+    public function createAndLinkReceivable(Request $request, BankAccount $bankAccount, JournalEntry $journalEntry, CreateAndLinkAccountReceivableFromBankStatement $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id && (int) $journalEntry->wallet_id === (int) $wallet->id, 404);
+        $data = $request->validate([
+            'customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where('wallet_id', $wallet->id)->where('active', true)],
+            'description' => ['required', 'string', 'max:255'], 'due_date' => ['required', 'date'], 'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $service->execute($wallet, $bankAccount, $journalEntry, new AccountReceivableDTO(
+            revenueAccountId: 0, customerName: '', description: $data['description'], dueDate: $data['due_date'],
+            amountCents: (int) $journalEntry->lines()->where('chart_of_account_id', $bankAccount->chart_of_account_id)->value('amount_cents'),
+            notes: $data['notes'] ?? null, customerId: (int) $data['customer_id'],
+        ));
+        return back()->with('success', 'Conta a receber criada e vinculada. Os lançamentos estão prontos para a contabilidade.');
+    }
 
     public function receivableCandidates(Request $request, BankAccount $bankAccount, JournalEntry $journalEntry, FindBankStatementReceivableCandidates $service): JsonResponse
     {

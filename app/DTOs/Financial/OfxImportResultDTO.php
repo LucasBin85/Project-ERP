@@ -16,8 +16,10 @@ final readonly class OfxImportResultDTO
 
     public function message(): string
     {
+        $label = strtoupper((string) ($this->import->source ?: 'arquivo'));
         $message = sprintf(
-            'OFX importado: %d novos, %d vinculados, %d duplicados ignorados.',
+            '%s importado: %d novos, %d vinculados, %d duplicados ignorados.',
+            $label,
             $this->created,
             $this->linked,
             $this->duplicates,

@@ -5,17 +5,22 @@ import type { BankStatementAccount, BankStatementTransaction } from '@/types/fin
 import { Link, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { route } from 'ziggy-js';
+import CustomerQuickCreateDialog from '@/components/financial/counterparties/CustomerQuickCreateDialog.vue';
 
 interface Candidate {
     id: number; customer_name: string; description: string; due_date: string; amount_cents: number;
 }
-const props = defineProps<{ transaction: BankStatementTransaction; bankAccount: BankStatementAccount }>();
+const props = defineProps<{ transaction: BankStatementTransaction; bankAccount: BankStatementAccount; customers: Array<{ id: number; name: string }> }>();
 const expanded = ref(false);
 const loading = ref(false);
 const loaded = ref(false);
 const candidates = ref<Candidate[]>([]);
 const loadError = ref<string | null>(null);
 const form = useForm({ account_receivable_id: '' });
+const createForm = useForm({ customer_id: '', description: props.transaction.description ?? '', due_date: props.transaction.date ?? '', notes: '' });
+const showQuickCustomer = ref(false);
+const localCustomers = ref([...props.customers]);
+function customerCreated(customer: { id: number; name: string }) { localCustomers.value.push(customer); createForm.customer_id = String(customer.id); }
 
 async function loadCandidates() {
     if (!props.transaction.journal_entry_id || loading.value || loaded.value) return;
@@ -33,6 +38,10 @@ function linkReceivable() {
     if (!props.transaction.journal_entry_id || !form.account_receivable_id) return;
     form.post(route('bank-accounts.statement.link-receivable', [props.bankAccount.id, props.transaction.journal_entry_id]), { preserveScroll: true, onSuccess: () => { expanded.value = false; } });
 }
+function createAndLinkReceivable() {
+    if (!props.transaction.journal_entry_id || !createForm.customer_id) return;
+    createForm.post(route('bank-accounts.statement.create-link-receivable', [props.bankAccount.id, props.transaction.journal_entry_id]), { preserveScroll: true });
+}
 </script>
 
 <template>
@@ -47,7 +56,17 @@ function linkReceivable() {
         <div v-if="expanded" class="space-y-2 rounded-xl border border-gray-700 bg-gray-950 p-3">
             <p v-if="loading" class="text-xs text-gray-400">Buscando títulos pendentes...</p>
             <p v-else-if="loadError" class="text-xs text-red-300">{{ loadError }}</p>
-            <p v-else-if="!candidates.length" class="text-xs text-amber-300">Nenhum título pendente com o mesmo valor.</p>
+            <div v-else-if="!candidates.length" class="space-y-2">
+                <p class="text-xs text-amber-300">Nenhum título pendente com o mesmo valor.</p>
+                <p class="font-semibold text-white">Criar título a receber e vincular</p>
+                <select v-model="createForm.customer_id" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white"><option value="" disabled>Cliente...</option><option v-for="customer in localCustomers" :key="customer.id" :value="String(customer.id)">{{ customer.name }}</option></select>
+                <button type="button" class="text-left font-semibold text-indigo-300 hover:underline" @click="showQuickCustomer = true">Cadastrar cliente rápido</button>
+                <input v-model="createForm.description" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" placeholder="Descrição" />
+                <input v-model="createForm.due_date" type="date" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" />
+                <textarea v-model="createForm.notes" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" placeholder="Observações opcionais" />
+                <button type="button" :disabled="createForm.processing || !createForm.customer_id" class="w-full rounded bg-indigo-600 px-3 py-2 font-semibold text-white disabled:opacity-50" @click="createAndLinkReceivable">Criar título a receber e vincular</button>
+                <InputError :message="Object.values(createForm.errors)[0]" />
+            </div>
             <template v-else>
                 <select v-model="form.account_receivable_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-sm text-white" aria-label="Conta a receber para vincular">
                     <option value="" disabled>Selecione explicitamente...</option>
@@ -58,4 +77,5 @@ function linkReceivable() {
             <InputError :message="form.errors.account_receivable_id || Object.values(form.errors)[0]" />
         </div>
     </div>
+    <CustomerQuickCreateDialog :show="showQuickCustomer" :existing-names="localCustomers.map((item) => item.name)" @close="showQuickCustomer = false" @created="customerCreated" />
 </template>

@@ -12,6 +12,7 @@ class BankStatementImportTransaction extends Model
         'bank_statement_import_id',
         'wallet_id',
         'bank_account_id',
+        'file_format',
         'journal_entry_id',
         'journal_line_id',
         'classification_account_id',

@@ -896,3 +896,30 @@ it('links the counterpart OFX to an existing transfer without duplicating the jo
         'operation_type' => OfxOperationTypePolicy::TRANSFER, 'resolution' => 'linked_transfer',
     ]);
 });
+
+it('previews confirms and deduplicates a CSV statement with signed localized amounts', function () {
+    $wallet = createWalletForOfxImport();
+    $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.920', 'Conta CSV');
+    $contents = "data;descrição;valor\n20/07/2026;Compra mercado;-123,45\n21/07/2026;Recebimento;250,00\n";
+    $preview = app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'extrato.csv');
+    expect($preview['rows'])->toHaveCount(2)
+        ->and($preview['rows'][0]['direction'])->toBe('out')->and($preview['rows'][0]['amount_cents'])->toBe(12_345)
+        ->and($preview['rows'][1]['direction'])->toBe('in')->and($preview['rows'][1]['amount_cents'])->toBe(25_000);
+    $result = app(ConfirmOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'extrato.csv', $preview['file_hash'], defaultOfxDecisions($preview), $preview['rows']);
+    expect($result->created)->toBe(2)->and($result->import->source)->toBe('csv')
+        ->and($result->import->transactions->every(fn ($audit) => $audit->file_format === 'csv'))->toBeTrue();
+    $second = app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'extrato.csv');
+    expect(collect($second['rows'])->every(fn ($row) => $row['situation'] === 'already_imported'))->toBeTrue();
+});
+
+it('previews a conservative textual PDF and rejects scanned PDFs', function () {
+    $wallet = createWalletForOfxImport();
+    $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.921', 'Conta PDF');
+    $contents = "%PDF-1.4\nBT\n(20/07/2026;Tarifa bancaria;-15,90) Tj\n(21/07/2026;Credito recebido;300,00) Tj\nET\n%%EOF";
+    $preview = app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'extrato.pdf');
+    expect($preview['rows'])->toHaveCount(2)->and($preview['rows'][0]['amount_cents'])->toBe(1_590);
+    $result = app(ConfirmOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'extrato.pdf', $preview['file_hash'], defaultOfxDecisions($preview), $preview['rows']);
+    expect($result->created)->toBe(2)->and($result->import->source)->toBe('pdf');
+    expect(fn () => app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, "%PDF-1.4\n/image data\n%%EOF", 'scan.pdf'))
+        ->toThrow(RuntimeException::class, 'Não foi possível interpretar este PDF automaticamente. Tente OFX ou CSV.');
+});

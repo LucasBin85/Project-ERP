@@ -11,6 +11,9 @@ use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Models\Supplier;
+use App\DTOs\Financial\AccountPayableDTO;
+use App\Services\Financial\CreateAndLinkAccountPayableFromBankStatement;
 use App\Services\Accounting\CreateBankImportEntry;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\ClassifyOfxDraftEntry;
@@ -205,6 +208,24 @@ it('lists only pending payable candidates with the same wallet and amount ordere
         ->assertJsonPath('candidates.2.id', $farther->id)
         ->assertJsonPath('candidates.0.proximity_days', 1)
         ->assertJsonMissingPath('selected_candidate_id');
+});
+
+it('creates a payable provision and links the current statement entry as its payment', function () {
+    $context = payableSettlementContext();
+    $movement = payableSettlementMovement($context);
+    $supplier = Supplier::query()->create([
+        'wallet_id' => $context['wallet']->id, 'name' => 'Fornecedor do extrato', 'active' => true,
+        'payable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_payable')->where('allows_posting', true)->value('id'),
+        'default_expense_account_id' => $context['expense']->id,
+    ]);
+    $payable = app(CreateAndLinkAccountPayableFromBankStatement::class)->execute(
+        $context['wallet'], $context['bankAccount'], $movement['entry'],
+        new AccountPayableDTO(0, '', 'Compra criada pelo extrato', '2026-07-10', 25_000, 'Criada no extrato', supplierId: $supplier->id),
+    );
+    expect($payable->status)->toBe('paid')->and($payable->payment_journal_entry_id)->toBe($movement['entry']->id)
+        ->and($payable->provision_journal_entry_id)->not->toBeNull()
+        ->and(JournalEntry::query()->count())->toBe(2)
+        ->and($movement['entry']->fresh('lines')->lines->contains('chart_of_account_id', $context['wallet']->suspense_account_id))->toBeFalse();
 });
 
 it('links an explicitly selected payable by reusing the OFX draft and preserving its bank line', function () {

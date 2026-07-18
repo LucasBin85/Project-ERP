@@ -20,7 +20,7 @@ class LinkAccountReceivableFromBankStatement
             if ((int) $bankAccount->wallet_id !== (int) $wallet->id || (int) $entry->wallet_id !== (int) $wallet->id) {
                 $this->fail('journal_entry_id', 'A conta bancária e o movimento devem pertencer à wallet ativa.');
             }
-            if (! $bankAccount->is_active || $entry->source !== 'ofx' || $entry->status !== 'draft' || ! $wallet->suspense_account_id) {
+            if (! $bankAccount->is_active || ! in_array($entry->source, ['ofx', 'csv', 'pdf'], true) || $entry->status !== 'draft' || ! $wallet->suspense_account_id) {
                 $this->fail('journal_entry_id', 'Somente movimentos OFX em rascunho da wallet ativa podem ser vinculados.');
             }
             if (AccountReceivable::query()->where('receipt_journal_entry_id', $entry->id)->lockForUpdate()->exists()) {

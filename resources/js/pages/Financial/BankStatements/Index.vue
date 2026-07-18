@@ -28,6 +28,7 @@ const props = defineProps<{
     summary: { opening_balance_cents: number; total_inflows_cents: number; total_outflows_cents: number; closing_balance_cents: number };
     classificationAccounts: BankStatementClassificationAccount[];
     operationTypes: FinancialOperationTypeOption[];
+    settlementParties: { suppliers: Array<{ id: number; name: string }>; customers: Array<{ id: number; name: string }> };
     operational: BankStatementOperational;
     ofxPreview?: OfxImportPreview | null;
     flash?: {
@@ -231,6 +232,7 @@ onBeforeUnmount(() => {
                     :bank-account="selectedBankAccount"
                     :classification-accounts="classificationAccounts"
                     :operation-types="operationTypes"
+                    :settlement-parties="settlementParties"
                 />
 
                 <div ref="loadMoreRef" class="border-t border-gray-700 p-6 text-center text-sm text-gray-400">

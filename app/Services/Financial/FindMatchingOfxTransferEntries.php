@@ -14,7 +14,7 @@ class FindMatchingOfxTransferEntries
     {
         if ($transfer->validation_status !== 'pending_counterpart_ofx'
             || $transfer->journalEntry?->status !== 'draft'
-            || $transfer->journalEntry?->source !== 'ofx'
+            || ! in_array($transfer->journalEntry?->source, ['ofx', 'csv', 'pdf'], true)
             || $transfer->journalEntry?->settledAccountPayable()->exists()
             || $transfer->journalEntry?->settledAccountReceivable()->exists()) {
             return collect();
@@ -39,7 +39,7 @@ class FindMatchingOfxTransferEntries
             })
             ->whereHas('journalEntry', function ($query) use ($transfer) {
                 $query->where('wallet_id', $transfer->wallet_id)
-                    ->where('source', 'ofx')->where('status', 'draft')
+                    ->whereIn('source', ['ofx', 'csv', 'pdf'])->where('status', 'draft')
                     ->whereDate('entry_date', $transfer->transfer_date->toDateString())
                     ->whereDoesntHave('settledAccountPayable')
                     ->whereDoesntHave('settledAccountReceivable');

@@ -26,7 +26,7 @@ class MergeBankTransferOfxEntries
 
             if (! $transfer || (int) $transfer->wallet_id !== (int) $wallet->id
                 || (int) $current->wallet_id !== (int) $wallet->id || $entry->status !== 'draft'
-                || $entry->source !== 'ofx' || $entry->settledAccountPayable()->exists()
+                || ! in_array($entry->source, ['ofx', 'csv', 'pdf'], true) || $entry->settledAccountPayable()->exists()
                 || $entry->settledAccountReceivable()->exists()) {
                 throw new OfxClassificationException('Esta transferência não está disponível para vinculação.');
             }
@@ -40,7 +40,7 @@ class MergeBankTransferOfxEntries
             $redundantLines = $redundant->lines()->lockForUpdate()->get();
             BankStatementImportTransaction::query()->whereIn('journal_entry_id', [$entry->id, $redundant->id])->lockForUpdate()->get();
 
-            if ($redundant->status !== 'draft' || $redundant->source !== 'ofx'
+            if ($redundant->status !== 'draft' || ! in_array($redundant->source, ['ofx', 'csv', 'pdf'], true)
                 || $redundant->settledAccountPayable()->exists() || $redundant->settledAccountReceivable()->exists()) {
                 throw new OfxClassificationException('A outra ponta deixou de ser um OFX em rascunho seguro.');
             }

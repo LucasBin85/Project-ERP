@@ -140,14 +140,14 @@ watch(
     <Dialog :open="open" @update:open="handleOpenChange">
         <DialogTrigger as-child>
             <button type="button" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
-                Importar OFX
+                Importar extrato
             </button>
         </DialogTrigger>
 
         <DialogContent class="max-h-[92vh] overflow-hidden border-gray-700 bg-gray-950 text-white sm:max-w-7xl">
             <div class="flex max-h-[calc(92vh-3rem)] min-h-0 flex-col gap-5">
                 <DialogHeader class="space-y-3">
-                    <DialogTitle>Importar OFX</DialogTitle>
+                    <DialogTitle>Importar extrato</DialogTitle>
                     <DialogDescription class="text-gray-400">
                         Revise as transações de {{ bankAccount.name }} antes de criar ou vincular lançamentos.
                     </DialogDescription>
@@ -162,7 +162,7 @@ watch(
                                 : 'border-gray-700 text-gray-500'
                         "
                     >
-                        1. Arquivo OFX
+                        1. Arquivo
                     </li>
                     <li
                         class="rounded-lg border px-3 py-2"
@@ -217,7 +217,7 @@ watch(
                             id="bank-statement-ofx-file"
                             ref="fileInput"
                             type="file"
-                            accept=".ofx,.OFX"
+                            accept=".ofx,.OFX,.csv,.CSV,.pdf,.PDF"
                             class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-sm text-white file:mr-4 file:rounded file:border-0 file:bg-gray-800 file:px-3 file:py-1 file:text-gray-200"
                             @change="ofxImport.selectFile"
                         />

@@ -18,6 +18,7 @@ const props = defineProps<{
     bankAccount: BankStatementAccount;
     classificationAccounts: BankStatementClassificationAccount[];
     operationTypes: FinancialOperationTypeOption[];
+    settlementParties: { suppliers: Array<{ id: number; name: string }>; customers: Array<{ id: number; name: string }> };
 }>();
 
 function operationTypeLabel(transaction: BankStatementTransaction): string {
@@ -85,7 +86,7 @@ function operationTypeLabel(transaction: BankStatementTransaction): string {
 
             <td class="px-4 py-3 text-sm">
                 <InlineOfxOperationType
-                    v-if="transaction.source === 'ofx' && transaction.accounting_status === 'draft'"
+                    v-if="['ofx', 'csv', 'pdf'].includes(transaction.source ?? '') && transaction.accounting_status === 'draft'"
                     :transaction="transaction"
                     :bank-account="bankAccount"
                     :operation-types="operationTypes"
@@ -98,11 +99,13 @@ function operationTypeLabel(transaction: BankStatementTransaction): string {
                     v-if="transaction.linked_account_payable || transaction.can_link_account_payable"
                     :transaction="transaction"
                     :bank-account="bankAccount"
+                    :suppliers="settlementParties.suppliers"
                 />
                 <InlineReceivableSettlement
                     v-else-if="transaction.linked_account_receivable || transaction.can_link_account_receivable"
                     :transaction="transaction"
                     :bank-account="bankAccount"
+                    :customers="settlementParties.customers"
                 />
                 <InlineOfxMatchResolution v-else-if="transaction.match_status !== 'none'" :transaction="transaction" :bank-account="bankAccount" />
                 <InlineOfxTransferMatch
@@ -116,7 +119,7 @@ function operationTypeLabel(transaction: BankStatementTransaction): string {
                     <p :class="transaction.transfer.status === 'fully_validated' ? 'text-green-300' : 'text-amber-300'">{{ transaction.transfer.status === 'fully_validated' ? 'Validada nas duas contas' : 'Aguardando OFX da contraparte' }}</p>
                 </div>
                 <InlineOfxClassification
-                    v-else-if="transaction.source === 'ofx' && transaction.accounting_status === 'draft'"
+                    v-else-if="['ofx', 'csv', 'pdf'].includes(transaction.source ?? '') && transaction.accounting_status === 'draft'"
                     :transaction="transaction"
                     :bank-account="bankAccount"
                     :classification-accounts="classificationAccounts"

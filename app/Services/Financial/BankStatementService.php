@@ -91,7 +91,7 @@ class BankStatementService
                     : collect();
                 $linkedAccountPayable = $entry?->settledAccountPayable;
                 $linkedAccountReceivable = $entry?->settledAccountReceivable;
-                $canEditOfx = $entry?->source === 'ofx'
+                $canEditOfx = in_array($entry?->source, ['ofx', 'csv', 'pdf'], true)
                     && $entry?->status === 'draft'
                     && ! $transfer
                     && $ofxOriginLineIds->contains((int) $line->id)
@@ -474,7 +474,7 @@ class BankStatementService
 
     private function reconciliationStatus(JournalLine $line, Collection $ofxValidatedLineIds, Collection $reconciledLineIds): string
     {
-        if ($line->journalEntry?->source === 'ofx') {
+        if (in_array($line->journalEntry?->source, ['ofx', 'csv', 'pdf'], true)) {
             return 'reconciled_via_ofx';
         }
 
@@ -530,6 +530,8 @@ class BankStatementService
     {
         return match ($source) {
             'ofx' => 'OFX',
+            'csv' => 'CSV',
+            'pdf' => 'PDF',
             'open_finance' => 'Open Finance',
             'manual' => 'Manual',
             default => $source ? str($source)->headline()->toString() : 'Manual',

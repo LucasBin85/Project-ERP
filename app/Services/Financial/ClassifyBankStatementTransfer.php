@@ -20,7 +20,7 @@ class ClassifyBankStatementTransfer
         if (! $counterpart || (int) $counterpart->id === (int) $current->id) {
             throw new OfxClassificationException('Selecione outra conta bancária ativa da wallet como contraparte.');
         }
-        if ($entry->source !== 'ofx' || $entry->status !== 'draft' || $entry->settledAccountPayable()->exists() || $entry->settledAccountReceivable()->exists()) {
+        if (! in_array($entry->source, ['ofx', 'csv', 'pdf'], true) || $entry->status !== 'draft' || $entry->settledAccountPayable()->exists() || $entry->settledAccountReceivable()->exists()) {
             throw new OfxClassificationException('Este lançamento não pode ser classificado como transferência.');
         }
         if (BankAccountTransfer::query()->where('journal_entry_id', $entry->id)->exists()) {

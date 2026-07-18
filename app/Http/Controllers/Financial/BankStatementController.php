@@ -13,6 +13,8 @@ use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Wallet;
+use App\Models\Supplier;
+use App\Models\Customer;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\BulkPostOfxDraftEntries;
 use App\Services\Financial\ClassifyOfxDraftEntry;
@@ -74,6 +76,10 @@ class BankStatementController extends Controller
                 operationTypes: $operationTypes,
             ),
             'operationTypes' => $operationTypes->metadata(),
+            'settlementParties' => [
+                'suppliers' => Supplier::query()->validForPayables($wallet->id)->orderBy('name')->get(['id', 'name']),
+                'customers' => Customer::query()->validForReceivables($wallet->id)->orderBy('name')->get(['id', 'name']),
+            ],
             'ofxPreview' => $request->session()->get('ofx_preview'),
             'bulkPostResult' => $request->session()->get('ofx_bulk_post_result'),
             'operational' => $this->operationalContext(

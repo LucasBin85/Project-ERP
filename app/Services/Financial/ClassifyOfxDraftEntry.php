@@ -222,7 +222,7 @@ class ClassifyOfxDraftEntry
             );
         }
 
-        if ($entry->source !== 'ofx') {
+        if (! in_array($entry->source, ['ofx', 'csv', 'pdf'], true)) {
             throw new OfxClassificationException(
                 'Somente lançamentos originados de OFX podem ser classificados por esta ação.',
             );

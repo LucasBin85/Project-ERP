@@ -71,7 +71,7 @@ watch(() => [props.transaction.operation_type, props.transaction.classification_
         <p v-if="!transaction.operation_type" class="rounded bg-gray-900 px-2 py-2 text-xs text-gray-400">Selecione primeiro o tipo de operação.</p>
 
         <p v-else-if="eligibleAccounts.length === 0" class="rounded bg-amber-950/40 px-2 py-2 text-xs text-amber-300">
-            Este tipo está preparado para integração futura. O lançamento permanece em “A classificar”.
+            {{ transaction.operation_type === 'transfer' ? 'Cadastre outra conta bancária para registrar transferência.' : 'Este tipo está preparado para integração futura. O lançamento permanece em “A classificar”.' }}
         </p>
 
         <select

@@ -37,7 +37,7 @@ class OfxImportController extends Controller
 
         $imports = BankStatementImport::query()
             ->where('wallet_id', $wallet->id)
-            ->where('source', 'ofx')
+            ->whereIn('source', ['ofx', 'csv', 'pdf'])
             ->when($selectedBankAccountId, fn ($query) => $query->where('bank_account_id', $selectedBankAccountId))
             ->with([
                 'bankAccount:id,name,bank_name',
@@ -73,7 +73,7 @@ class OfxImportController extends Controller
                     ->where('wallet_id', $wallet->id)
                     ->where('is_active', true),
             ],
-            'ofx_file' => ['required', 'file', 'max:2048'],
+            'ofx_file' => ['required', 'file', 'max:10240', 'extensions:ofx,csv,pdf'],
         ]);
 
         $bankAccount = BankAccount::query()

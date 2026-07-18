@@ -7,6 +7,9 @@ use App\Models\BankStatementImportTransaction;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
+use App\Models\Customer;
+use App\DTOs\Financial\AccountReceivableDTO;
+use App\Services\Financial\CreateAndLinkAccountReceivableFromBankStatement;
 use App\Services\Accounting\CreateBankImportEntry;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\OfxOperationTypePolicy;
@@ -80,6 +83,24 @@ it('lists pending receivables of the same amount ordered by statement date proxi
         ->getJson(route('bank-accounts.statement.receivable-candidates', [$context['bankAccount'], $movement['entry']]))
         ->assertOk()->assertJsonCount(2, 'candidates')->assertJsonPath('candidates.0.id', $near->id)
         ->assertJsonPath('candidates.1.id', $far->id)->assertJsonMissingPath('selected_candidate_id');
+});
+
+it('creates a receivable provision and links the current statement entry as its receipt', function () {
+    $context = receivableSettlementContext();
+    $movement = receivableMovement($context);
+    $customer = Customer::query()->create([
+        'wallet_id' => $context['wallet']->id, 'name' => 'Cliente do extrato', 'active' => true,
+        'receivable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->value('id'),
+        'default_revenue_account_id' => $context['revenue']->id,
+    ]);
+    $receivable = app(CreateAndLinkAccountReceivableFromBankStatement::class)->execute(
+        $context['wallet'], $context['bankAccount'], $movement['entry'],
+        new AccountReceivableDTO(0, '', 'Receita criada pelo extrato', '2026-07-10', 25_000, 'Criada no extrato', customerId: $customer->id),
+    );
+    expect($receivable->status)->toBe('received')->and($receivable->receipt_journal_entry_id)->toBe($movement['entry']->id)
+        ->and($receivable->provision_journal_entry_id)->not->toBeNull()
+        ->and(JournalEntry::query()->count())->toBe(2)
+        ->and($movement['entry']->fresh('lines')->lines->contains('chart_of_account_id', $context['wallet']->suspense_account_id))->toBeFalse();
 });
 
 it('links an explicitly selected receivable by reusing the draft and preserving the bank line', function () {

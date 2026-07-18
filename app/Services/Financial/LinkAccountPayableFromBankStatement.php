@@ -166,7 +166,7 @@ class LinkAccountPayableFromBankStatement
             $this->fail('bank_account_id', 'A conta bancária precisa estar ativa para realizar o vínculo.');
         }
 
-        if ($entry->source !== 'ofx' || $entry->status !== 'draft') {
+        if (! in_array($entry->source, ['ofx', 'csv', 'pdf'], true) || $entry->status !== 'draft') {
             $this->fail(
                 'journal_entry_id',
                 'Somente movimentos OFX em rascunho podem ser vinculados a contas a pagar.',
