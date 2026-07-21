@@ -85,7 +85,7 @@ class BankAccountController extends Controller
         $wallet = $this->resolveActiveWallet($request);
 
         $request->validate([
-            'ofx_file' => ['required', 'file', 'max:2048', 'extensions:ofx'],
+            'ofx_file' => ['required', 'file', 'max:10240', 'extensions:ofx,csv,pdf'],
         ]);
 
         $file = $request->file('ofx_file');
@@ -104,7 +104,7 @@ class BankAccountController extends Controller
             report($exception);
 
             throw ValidationException::withMessages([
-                'ofx_file' => 'Não foi possível ler os dados da conta no arquivo OFX. Tente novamente.',
+                'ofx_file' => 'Não foi possível ler os dados da conta no arquivo do extrato. Tente OFX, CSV ou PDF textual/OCR.',
             ]);
         }
 

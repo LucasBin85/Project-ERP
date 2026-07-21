@@ -188,7 +188,7 @@ class PreviewOfxBankStatement
                 candidateCount: 0,
                 suggestion: [
                     'kind' => 'new_entry',
-                    'label' => 'Será criado como novo lançamento OFX em draft',
+                    'label' => 'Será criado como novo lançamento do extrato em rascunho',
                 ],
             );
         }
@@ -217,6 +217,8 @@ class PreviewOfxBankStatement
 
         return [
             'file_name' => $originalFilename,
+            'format' => strtoupper($this->parser->format($originalFilename)),
+            'origin' => $this->parser->format($originalFilename) === 'pdf' && ($parsed['read_source'] ?? null) === 'ocr' ? 'PDF/OCR' : strtoupper($this->parser->format($originalFilename)),
             'file_hash' => $fileHash,
             'bank_account_id' => $bankAccount->id,
             'bank_account_name' => $bankAccount->name,

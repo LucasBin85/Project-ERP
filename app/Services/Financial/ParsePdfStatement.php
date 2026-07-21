@@ -38,12 +38,33 @@ class ParsePdfStatement
                 : 'O PDF foi lido, mas o layout ainda não foi reconhecido.');
         }
 
-        return ['started_at' => null, 'ended_at' => null, 'account' => array_fill_keys(['container','bank_id','branch_id','account_id','account_key','account_type','broker_id','routing_number','bank_name','organization','financial_institution_id','currency'], null), 'transactions' => $transactions, 'errors' => []];
+        return ['started_at' => null, 'ended_at' => null, 'account' => array_fill_keys(['container','bank_id','branch_id','account_id','account_key','account_type','broker_id','routing_number','bank_name','organization','financial_institution_id','currency'], null), 'transactions' => $transactions, 'errors' => [], 'read_source' => $extraction['source']];
     }
 
     public function extractText(string $contents): string
     {
         return $this->extract($contents)['text'];
+    }
+
+    /** @return array{text: string, source: string} */
+    public function extractForMetadata(string $contents): array
+    {
+        if (! str_starts_with($contents, '%PDF-')) {
+            throw new RuntimeException('O arquivo selecionado não possui uma estrutura PDF válida.');
+        }
+
+        $extraction = $this->extract($contents);
+        $text = $extraction['text'];
+        $source = $extraction['source'];
+        if ($text === '' && $this->ocr->enabled()) {
+            $text = $this->mercadoPago->normalize($this->ocr->extract($contents));
+            $source = 'ocr';
+        }
+        if ($text === '') {
+            throw new RuntimeException('Este PDF parece ser baseado em imagem. Para importar este tipo de PDF, habilite OCR local ou use outro formato.');
+        }
+
+        return ['text' => $text, 'source' => (string) ($source ?: 'text')];
     }
 
     public function extract(string $contents): array

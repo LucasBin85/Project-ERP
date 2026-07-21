@@ -14,6 +14,7 @@ const props = defineProps<{
 const open = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const completedMessage = ref<string | null>(null);
+const accountDetailsOpen = ref(false);
 const ofxImport = useOfxImport(props.bankAccount.id);
 let closeTimer: number | null = null;
 
@@ -98,6 +99,7 @@ function resetDialog() {
     }
 
     completedMessage.value = null;
+    accountDetailsOpen.value = false;
     ofxImport.reset();
 
     if (fileInput.value) fileInput.value.value = '';
@@ -144,8 +146,8 @@ watch(
             </button>
         </DialogTrigger>
 
-        <DialogContent class="max-h-[92vh] overflow-hidden border-gray-700 bg-gray-950 text-white sm:max-w-7xl">
-            <div class="flex max-h-[calc(92vh-3rem)] min-h-0 flex-col gap-5">
+        <DialogContent class="h-[94vh] w-[96vw] max-w-[96vw] overflow-hidden border-gray-700 bg-gray-950 text-white sm:max-w-[96vw] xl:max-w-[1500px]">
+            <div class="flex h-[calc(94vh-3rem)] min-h-0 flex-col gap-4">
                 <DialogHeader class="space-y-3">
                     <DialogTitle>Importar extrato</DialogTitle>
                     <DialogDescription class="text-gray-400">
@@ -246,10 +248,11 @@ watch(
                 </form>
 
                 <template v-else>
-                    <div class="flex flex-wrap items-center justify-between gap-3 text-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-800 bg-gray-900/50 px-4 py-3 text-sm">
                         <div>
                             <span class="font-semibold text-white">{{ ofxImport.preview.value.file_name }}</span>
-                            <span class="ml-2 text-gray-400">{{ ofxImport.preview.value.rows.length }} transações encontradas</span>
+                            <span class="ml-2 rounded bg-gray-800 px-2 py-1 text-xs font-semibold text-gray-300">{{ ofxImport.preview.value.origin }}</span>
+                            <span class="ml-2 text-gray-400">{{ ofxImport.preview.value.rows.length }} transações</span>
                         </div>
                         <div class="flex flex-wrap gap-2 text-xs text-gray-300">
                             <span class="rounded-full bg-blue-950/50 px-2.5 py-1">{{ summaryCount('new') }} novas</span>
@@ -258,7 +261,7 @@ watch(
                         </div>
                     </div>
 
-                    <section class="rounded-xl border p-4" :class="accountStatusClasses[ofxImport.preview.value.account_validation.status]">
+                    <section class="rounded-xl border px-4 py-3" :class="accountStatusClasses[ofxImport.preview.value.account_validation.status]">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div>
                                 <p class="text-xs font-bold tracking-wide uppercase opacity-70">Validação bancária</p>
@@ -267,15 +270,15 @@ watch(
                                 </p>
                                 <p class="mt-1 text-sm opacity-90">{{ ofxImport.preview.value.account_validation.message }}</p>
                             </div>
-                            <span
-                                v-if="ofxImport.preview.value.account_validation.blocking"
-                                class="rounded-full border border-red-400/40 px-2.5 py-1 text-xs font-bold"
-                            >
-                                Importação bloqueada
-                            </span>
+                            <div class="flex items-center gap-2">
+                                <span v-if="ofxImport.preview.value.account_validation.blocking" class="rounded-full border border-red-400/40 px-2.5 py-1 text-xs font-bold">Importação bloqueada</span>
+                                <button type="button" class="rounded border border-current/30 px-2.5 py-1 text-xs font-semibold hover:bg-black/10" @click="accountDetailsOpen = !accountDetailsOpen">
+                                    {{ accountDetailsOpen ? 'Ocultar detalhes' : 'Ver detalhes' }}
+                                </button>
+                            </div>
                         </div>
 
-                        <div class="mt-4 grid gap-4 text-xs lg:grid-cols-2">
+                        <div v-if="accountDetailsOpen" class="mt-4 grid gap-4 text-xs lg:grid-cols-2">
                             <div class="rounded-lg bg-black/20 p-3">
                                 <p class="mb-2 font-bold tracking-wide uppercase">Conta atual</p>
                                 <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
@@ -288,7 +291,7 @@ watch(
                                 </dl>
                             </div>
                             <div class="rounded-lg bg-black/20 p-3">
-                                <p class="mb-2 font-bold tracking-wide uppercase">Conta identificada no OFX</p>
+                                <p class="mb-2 font-bold tracking-wide uppercase">Conta identificada no extrato</p>
                                 <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
                                     <template v-for="field in accountFields" :key="`ofx-${field.key}`">
                                         <dt class="opacity-70">{{ field.label }}</dt>
@@ -301,29 +304,29 @@ watch(
                         </div>
 
                         <ul
-                            v-if="ofxImport.preview.value.account_validation.warnings.length"
+                            v-if="accountDetailsOpen && ofxImport.preview.value.account_validation.warnings.length"
                             class="mt-3 list-disc space-y-1 pl-5 text-xs opacity-80"
                         >
                             <li v-for="warning in ofxImport.preview.value.account_validation.warnings" :key="warning">{{ warning }}</li>
                         </ul>
                     </section>
 
-                    <div class="min-h-0 flex-1 overflow-auto rounded-lg border border-gray-700">
-                        <table class="min-w-[760px] divide-y divide-gray-700 text-left text-sm">
+                    <div class="min-h-[18rem] max-h-[52vh] flex-1 overflow-auto rounded-lg border border-gray-700">
+                        <table class="w-full min-w-[1000px] table-fixed divide-y divide-gray-700 text-left text-sm">
                             <thead class="sticky top-0 z-10 bg-gray-900 text-xs tracking-wide text-gray-400 uppercase">
                                 <tr>
-                                    <th class="px-3 py-3">Data</th>
-                                    <th class="px-3 py-3">Descrição</th>
-                                    <th class="px-3 py-3 text-right">Valor</th>
-                                    <th class="px-3 py-3">Direção</th>
-                                    <th class="px-3 py-3">Situação</th>
+                                    <th class="w-32 px-4 py-3">Data</th>
+                                    <th class="w-[42%] min-w-96 px-4 py-3">Descrição</th>
+                                    <th class="w-40 px-4 py-3 text-right">Valor</th>
+                                    <th class="w-28 px-4 py-3">Direção</th>
+                                    <th class="w-72 px-4 py-3">Situação</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-800 bg-gray-950">
                                 <tr v-for="item in displayRows" :key="item.row.row_key" class="align-top">
-                                    <td class="px-3 py-3 whitespace-nowrap text-gray-300">{{ formatDate(item.row.date) }}</td>
-                                    <td class="max-w-64 px-3 py-3">
-                                        <span class="block truncate font-medium text-white" :title="item.row.description">{{
+                                    <td class="px-4 py-3 whitespace-nowrap text-gray-300">{{ formatDate(item.row.date) }}</td>
+                                    <td class="min-w-96 px-4 py-3">
+                                        <span class="block whitespace-normal font-medium text-white" :title="item.row.description">{{
                                             item.row.description
                                         }}</span>
                                         <span v-if="item.row.situation === 'error'" class="mt-1 block text-xs text-red-300">
@@ -331,7 +334,7 @@ watch(
                                         </span>
                                     </td>
                                     <td
-                                        class="px-3 py-3 text-right font-semibold whitespace-nowrap"
+                                        class="px-4 py-3 text-right font-semibold whitespace-nowrap"
                                         :class="
                                             item.row.direction === 'in'
                                                 ? 'text-green-400'
@@ -342,10 +345,10 @@ watch(
                                     >
                                         {{ formatValue(item.row) }}
                                     </td>
-                                    <td class="px-3 py-3 whitespace-nowrap text-gray-300">
+                                    <td class="px-4 py-3 whitespace-nowrap text-gray-300">
                                         {{ item.row.direction === 'in' ? 'Entrada' : item.row.direction === 'out' ? 'Saída' : '—' }}
                                     </td>
-                                    <td class="px-3 py-3">
+                                    <td class="px-4 py-3">
                                         <span
                                             class="inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold"
                                             :class="situationClasses[item.row.situation]"

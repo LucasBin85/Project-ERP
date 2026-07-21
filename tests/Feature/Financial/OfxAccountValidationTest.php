@@ -253,7 +253,7 @@ it('marks another OFX account as mismatched and blocks confirmation atomically',
 
     expect($validation['status'])->toBe(ValidateOfxBankAccount::STATUS_MISMATCHED)
         ->and($validation['blocking'])->toBeTrue()
-        ->and($validation['message'])->toBe('Este OFX parece pertencer a outra conta bancária.')
+        ->and($validation['message'])->toBe('Este arquivo do extrato parece pertencer a outra conta bancária.')
         ->and($validation['divergent_fields'])->toContain('account_number');
 
     $decisions = collect($preview['rows'])
@@ -296,10 +296,10 @@ it('keeps an incomplete account unverified without blocking the preview', functi
 
     expect($validation['status'])->toBe(ValidateOfxBankAccount::STATUS_UNVERIFIED)
         ->and($validation['blocking'])->toBeFalse()
-        ->and($validation['message'])->toBe('Não foi possível validar totalmente a conta do arquivo OFX.')
+        ->and($validation['message'])->toBe('Não foi possível validar totalmente a conta do arquivo do extrato.')
         ->and($validation['matched_fields'])->toBe([])
         ->and($validation['divergent_fields'])->toBe([])
-        ->and($validation['warnings'])->toContain('Não foi possível validar totalmente a conta do arquivo OFX.');
+        ->and($validation['warnings'])->toContain('Não foi possível validar totalmente a conta do arquivo do extrato.');
 });
 
 it('does not treat agency alone as validation of the financial institution', function () {

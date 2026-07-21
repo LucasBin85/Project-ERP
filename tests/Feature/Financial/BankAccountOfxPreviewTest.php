@@ -8,6 +8,7 @@ use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Services\Financial\LocalPdfOcr;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Testing\TestResponse;
@@ -90,6 +91,8 @@ it('previews account data from an OFX without transactions and creates no record
     $response
         ->assertOk()
         ->assertJsonPath('file_name', 'conta.ofx')
+        ->assertJsonPath('format', 'OFX')
+        ->assertJsonPath('source', 'OFX')
         ->assertJsonPath('account.container', 'BANKACCTFROM')
         ->assertJsonPath('account.bank_code', '001')
         ->assertJsonPath('account.ispb', '00000000')
@@ -118,6 +121,74 @@ it('previews account data from an OFX without transactions and creates no record
         ->and(JournalLine::query()->count())->toBe(0)
         ->and(BankStatementImport::query()->count())->toBe(0)
         ->and(BankStatementImportTransaction::query()->count())->toBe(0);
+});
+
+it('accepts CSV and returns a friendly warning when it has no bank metadata', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+    $contents = "data;descrição;valor\n20/07/2026;Recebimento;100,00\n";
+
+    $response = requestBankAccountSetupPreview($this, $user, $wallet, $contents, 'extrato.csv');
+    $response->assertOk()->assertJsonPath('format', 'CSV')->assertJsonPath('source', 'CSV');
+
+    expect(implode(' ', $response->json('warnings')))->toContain('Não foi possível identificar dados bancários neste CSV.')
+        ->and(BankAccount::query()->count())->toBe(0)
+        ->and(JournalEntry::query()->count())->toBe(0)
+        ->and(BankStatementImport::query()->count())->toBe(0)
+        ->and(BankStatementImportTransaction::query()->count())->toBe(0);
+});
+
+it('extracts Mercado Pago bank agency and account metadata from PDF OCR without persisting records', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+    $bank = Bank::query()->create([
+        'code' => '323', 'name' => 'Mercado Pago', 'short_name' => 'Mercado Pago', 'ispb' => '10573521', 'active' => true,
+    ]);
+    $ocrText = "Mercado Pago\nEXTRATO DE CONTA\nAgência: 1 Conta: 12345678-9\nPeríodo: 01-05-2026 a 31-05-2026";
+    $this->mock(LocalPdfOcr::class, function (\Mockery\MockInterface $mock) use ($ocrText) {
+        $mock->shouldReceive('enabled')->once()->andReturnTrue();
+        $mock->shouldReceive('extract')->once()->andReturn($ocrText);
+    });
+
+    $response = requestBankAccountSetupPreview($this, $user, $wallet, "%PDF-1.4\n/Subtype /Image\n%%EOF", 'MercadoPago.pdf');
+    $response->assertOk()
+        ->assertJsonPath('format', 'PDF')->assertJsonPath('source', 'PDF/OCR')
+        ->assertJsonPath('matched_bank.id', $bank->id)
+        ->assertJsonPath('suggested.agency', '1')
+        ->assertJsonPath('suggested.account_number', '123456789')
+        ->assertJsonPath('suggested.account_type', 'checking');
+
+    expect(BankAccount::query()->count())->toBe(0)
+        ->and(JournalEntry::query()->count())->toBe(0)
+        ->and(JournalLine::query()->count())->toBe(0)
+        ->and(BankStatementImport::query()->count())->toBe(0)
+        ->and(BankStatementImportTransaction::query()->count())->toBe(0);
+});
+
+it('returns the shared friendly message for an image PDF when OCR is disabled', function () {
+    config()->set('statements.pdf_ocr.enabled', false);
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+
+    requestBankAccountSetupPreview($this, $user, $wallet, "%PDF-1.4\n/Subtype /Image\n%%EOF", 'imagem.pdf')
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('ofx_file')
+        ->assertJsonPath('errors.ofx_file.0', 'Este PDF parece ser baseado em imagem. Para importar este tipo de PDF, habilite OCR local ou use outro formato.');
+});
+
+it('exposes generic statement file labels and readable preview table structure', function () {
+    $accountForm = file_get_contents(resource_path('js/components/financial/bankAccounts/BankAccountCreateForm.vue'));
+    $previewDialog = file_get_contents(resource_path('js/components/financial/ofxImports/OfxImportDialog.vue'));
+
+    expect($accountForm)->toContain('Preencher com extrato')
+        ->toContain('Arquivo do extrato')
+        ->toContain('.ofx,.OFX,.csv,.CSV,.pdf,.PDF')
+        ->not->toContain('Preencher com OFX')
+        ->and($previewDialog)->toContain('min-h-[18rem]')
+        ->toContain('overflow-auto')
+        ->toContain('sticky top-0')
+        ->toContain('min-w-[1000px]')
+        ->toContain('Conta identificada no extrato');
 });
 
 it('extracts the check digit from ACCTID when ACCTKEY is absent', function () {

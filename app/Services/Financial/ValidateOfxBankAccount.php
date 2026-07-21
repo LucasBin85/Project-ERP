@@ -13,9 +13,9 @@ class ValidateOfxBankAccount
 
     public const STATUS_MISMATCHED = 'mismatched';
 
-    public const MISMATCH_MESSAGE = 'Este OFX parece pertencer a outra conta bancária.';
+    public const MISMATCH_MESSAGE = 'Este arquivo do extrato parece pertencer a outra conta bancária.';
 
-    public const UNVERIFIED_MESSAGE = 'Não foi possível validar totalmente a conta do arquivo OFX.';
+    public const UNVERIFIED_MESSAGE = 'Não foi possível validar totalmente a conta do arquivo do extrato.';
 
     /**
      * @param  array<string, ?string>  $ofxMetadata
@@ -77,7 +77,7 @@ class ValidateOfxBankAccount
 
         if ($ofxAccount['container'] !== null && $ofxAccount['container'] !== 'BANKACCTFROM') {
             $divergentFields[] = 'account_container';
-            $warnings[] = 'O arquivo OFX identifica uma conta que não é uma conta bancária transacional.';
+            $warnings[] = 'O arquivo do extrato identifica uma conta que não é uma conta bancária transacional.';
         }
 
         $this->compareBankIdentifiers(
@@ -142,7 +142,7 @@ class ValidateOfxBankAccount
 
         return $this->result(
             status: self::STATUS_VALIDATED,
-            message: 'A conta do arquivo OFX foi validada.',
+            message: 'A conta do arquivo do extrato foi validada.',
             currentAccount: $currentAccount,
             ofxAccount: $ofxAccount,
             matchedFields: $matchedFields,
@@ -173,7 +173,7 @@ class ValidateOfxBankAccount
         }
 
         if ($ofxValue === null) {
-            $warnings[] = sprintf('O arquivo OFX não informa %s.', $label);
+            $warnings[] = sprintf('O arquivo do extrato não informa %s.', $label);
         }
 
         if ($currentValue === null || $ofxValue === null) {
@@ -220,7 +220,7 @@ class ValidateOfxBankAccount
         }
 
         if ($ofxValue === null) {
-            $warnings[] = 'O arquivo OFX não informa o tipo da conta.';
+            $warnings[] = 'O arquivo do extrato não informa o tipo da conta.';
         }
 
         if ($currentValue === null || $ofxValue === null) {
@@ -375,7 +375,7 @@ class ValidateOfxBankAccount
         }
 
         if ($ofxIdentifiers->isEmpty()) {
-            $warnings[] = 'O arquivo OFX não informa código do banco ou ISPB.';
+            $warnings[] = 'O arquivo do extrato não informa código do banco ou ISPB.';
         }
 
         if ($currentIdentifiers->isEmpty() || $ofxIdentifiers->isEmpty()) {

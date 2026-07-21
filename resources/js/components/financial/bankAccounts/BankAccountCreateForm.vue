@@ -78,7 +78,7 @@ function chooseOfxFile() {
         <section class="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-4">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h3 class="text-sm font-bold text-indigo-100">Preencher dados usando um arquivo OFX</h3>
+                    <h3 class="text-sm font-bold text-indigo-100">Preencher dados usando um arquivo do extrato</h3>
                     <p id="bank-account-ofx-help" class="mt-1 max-w-3xl text-sm leading-6 text-indigo-200/80">
                         O arquivo será usado apenas para preencher os dados da conta. Nenhuma transação ou lançamento contábil será importado, e a
                         conta bancária não será criada automaticamente.
@@ -88,7 +88,7 @@ function chooseOfxFile() {
                 <input
                     ref="ofxFileInput"
                     type="file"
-                    accept=".ofx,.OFX,application/x-ofx"
+                    accept=".ofx,.OFX,.csv,.CSV,.pdf,.PDF"
                     class="sr-only"
                     :disabled="ofxProcessing"
                     aria-describedby="bank-account-ofx-help"
@@ -101,11 +101,12 @@ function chooseOfxFile() {
                     class="shrink-0 rounded-lg border border-indigo-400/50 bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                     @click="chooseOfxFile"
                 >
-                    {{ ofxProcessing ? 'Lendo OFX...' : 'Preencher com OFX' }}
+                    {{ ofxProcessing ? 'Lendo extrato...' : 'Preencher com extrato' }}
                 </button>
             </div>
 
-            <p v-if="ofxSelectedFileName" class="mt-3 text-xs text-indigo-200/70">Arquivo selecionado: {{ ofxSelectedFileName }}</p>
+            <p class="mt-3 text-xs text-indigo-200/70">Arquivo do extrato · Formatos aceitos: OFX, CSV e PDF textual/OCR.</p>
+            <p v-if="ofxSelectedFileName" class="mt-1 text-xs text-indigo-200/70">Arquivo selecionado: {{ ofxSelectedFileName }}</p>
             <InputError class="mt-2" :message="ofxError ?? undefined" />
         </section>
 

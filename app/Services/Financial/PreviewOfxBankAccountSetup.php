@@ -10,7 +10,10 @@ use Illuminate\Support\Str;
 class PreviewOfxBankAccountSetup
 {
     public function __construct(
-        private readonly ParseOfxStatement $parser,
+        private readonly ParseOfxStatement $ofx,
+        private readonly ParseCsvStatement $csv,
+        private readonly ParsePdfStatement $pdf,
+        private readonly ParseStatementFile $files,
     ) {}
 
     /**
@@ -41,7 +44,13 @@ class PreviewOfxBankAccountSetup
      */
     public function execute(Wallet $wallet, string $contents, string $originalFilename): array
     {
-        $metadata = $this->parser->parseAccountMetadata($contents);
+        $format = $this->files->format($originalFilename);
+        $source = strtoupper($format);
+        $metadata = match ($format) {
+            'ofx' => $this->ofx->parseAccountMetadata($contents),
+            'csv' => $this->csvMetadata($contents),
+            'pdf' => $this->pdfMetadata($contents, $source),
+        };
         $warnings = [];
 
         $bankCode = $this->normalizeBankCode($metadata['bank_id']);
@@ -61,22 +70,22 @@ class PreviewOfxBankAccountSetup
         );
         $accountType = $this->normalizeAccountType($metadata['account_type']);
 
-        if ($metadata['container'] !== 'BANKACCTFROM') {
-            $warnings[] = 'O OFX não identifica uma conta bancária transacional. Revise os dados antes de salvar.';
+        if ($format === 'ofx' && $metadata['container'] !== 'BANKACCTFROM') {
+            $warnings[] = 'O extrato não identifica uma conta bancária transacional. Revise os dados antes de salvar.';
         }
 
         if ($bankCode === null && $ispb === null) {
-            $warnings[] = 'O OFX não informa um código de banco ou ISPB. Selecione o banco manualmente.';
+            $warnings[] = 'O arquivo do extrato não informa um código de banco ou ISPB. Selecione o banco manualmente.';
         } elseif ($matchedBank === null && $bankWarning === null) {
-            $warnings[] = 'O banco informado no OFX não foi encontrado no catálogo local. Selecione o banco manualmente.';
+            $warnings[] = 'O banco informado no extrato não foi encontrado no catálogo local. Selecione o banco manualmente.';
         }
 
         if ($agency === null) {
-            $warnings[] = 'O OFX não informa a agência. Preencha esse campo manualmente.';
+            $warnings[] = 'O arquivo do extrato não informa a agência. Preencha esse campo manualmente.';
         }
 
         if ($suggestedAccountNumber === null) {
-            $warnings[] = 'O OFX não informa um número de conta válido. Preencha esse campo manualmente.';
+            $warnings[] = 'O arquivo do extrato não informa um número de conta válido. Preencha esse campo manualmente.';
         }
 
         if ($accountType === null) {
@@ -97,8 +106,17 @@ class PreviewOfxBankAccountSetup
         );
         $warnings = array_values(array_unique($warnings));
 
+        $noIdentifiedMetadata = $matchedBank === null && $agency === null && $suggestedAccountNumber === null;
+        if ($format === 'csv' && $noIdentifiedMetadata) {
+            array_unshift($warnings, 'Não foi possível identificar dados bancários neste CSV.');
+        } elseif ($format === 'pdf' && $noIdentifiedMetadata) {
+            array_unshift($warnings, 'Não foi possível identificar dados bancários neste PDF.');
+        }
+
         return [
             'file_name' => $originalFilename,
+            'format' => strtoupper($format),
+            'source' => $source,
             'account' => [
                 'container' => $metadata['container'],
                 'bank_code' => $bankCode,
@@ -125,10 +143,57 @@ class PreviewOfxBankAccountSetup
                 'account_type' => $accountType,
             ],
             'warnings' => $warnings,
-            'message' => $warnings === []
-                ? 'Dados bancários encontrados no OFX. Revise as informações antes de salvar.'
-                : 'Os dados disponíveis no OFX foram preenchidos. Complete ou revise os campos indicados.',
+            'message' => $noIdentifiedMetadata && in_array($format, ['csv', 'pdf'], true)
+                ? 'Continue preenchendo os dados da conta manualmente.'
+                : ($warnings === []
+                ? 'Dados bancários encontrados no arquivo do extrato. Revise as informações antes de salvar.'
+                : 'Os dados disponíveis no extrato foram preenchidos. Complete ou revise os campos indicados.'),
         ];
+    }
+
+    /** @return array<string, ?string> */
+    private function csvMetadata(string $contents): array
+    {
+        $this->csv->parse($contents);
+        return $this->emptyMetadata();
+    }
+
+    /** @return array<string, ?string> */
+    private function pdfMetadata(string $contents, string &$source): array
+    {
+        $extraction = $this->pdf->extractForMetadata($contents);
+        $text = $extraction['text'];
+        $source = $extraction['source'] === 'ocr' ? 'PDF/OCR' : 'PDF';
+        $metadata = $this->emptyMetadata();
+
+        if (preg_match('/\bMercado\s+Pago\b/ui', $text)) {
+            $bank = Bank::query()->where('active', true)
+                ->where(fn ($query) => $query->where('name', 'like', '%Mercado Pago%')->orWhere('short_name', 'like', '%Mercado Pago%'))
+                ->first(['code', 'ispb', 'name']);
+            $metadata['bank_id'] = $bank?->code;
+            $metadata['routing_number'] = $bank?->ispb;
+            $metadata['bank_name'] = $bank?->name ?? 'Mercado Pago';
+            $metadata['organization'] = 'Mercado Pago';
+        }
+
+        if (preg_match('/\bAg[eêé]ncia\s*:?\s*([\d.\/-]+)/ui', $text, $agency)) {
+            $metadata['branch_id'] = $agency[1];
+        }
+        if (preg_match('/\bConta\s*:?\s*([\d.\/-]+)/ui', $text, $account)) {
+            $metadata['account_id'] = $account[1];
+        }
+        if ($metadata['account_id'] !== null || $metadata['branch_id'] !== null) {
+            $metadata['container'] = 'BANKACCTFROM';
+            $metadata['account_type'] = 'CHECKING';
+        }
+
+        return $metadata;
+    }
+
+    /** @return array<string, ?string> */
+    private function emptyMetadata(): array
+    {
+        return array_fill_keys(['container', 'bank_id', 'branch_id', 'account_id', 'account_key', 'account_type', 'broker_id', 'routing_number', 'bank_name', 'organization', 'financial_institution_id', 'currency'], null);
     }
 
     /** @return array{0: ?Bank, 1: ?string} */
@@ -148,7 +213,7 @@ class PreviewOfxBankAccountSetup
         if ($bankByCode && $bankByIspb && ! $bankByCode->is($bankByIspb)) {
             return [
                 null,
-                'O código do banco e o ISPB do OFX identificam instituições diferentes. Selecione o banco manualmente.',
+                'O código do banco e o ISPB do extrato identificam instituições diferentes. Selecione o banco manualmente.',
             ];
         }
 

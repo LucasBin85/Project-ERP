@@ -101,6 +101,8 @@ export interface BankAccountOfxPreviewSuggestion {
 
 export interface BankAccountOfxPreview {
     file_name: string;
+    format: 'OFX' | 'CSV' | 'PDF';
+    source: 'OFX' | 'CSV' | 'PDF' | 'PDF/OCR';
     account: BankAccountOfxPreviewAccount;
     matched_bank: BankOption | null;
     suggested: BankAccountOfxPreviewSuggestion;

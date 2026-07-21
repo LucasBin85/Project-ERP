@@ -61,6 +61,8 @@ export interface OfxAccountValidation {
 export interface OfxImportPreview {
     token: string;
     file_name: string;
+    format: 'OFX' | 'CSV' | 'PDF';
+    origin: 'OFX' | 'CSV' | 'PDF' | 'PDF/OCR';
     bank_account_id: number;
     account_validation: OfxAccountValidation;
     rows: OfxPreviewRow[];
