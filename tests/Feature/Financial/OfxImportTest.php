@@ -914,6 +914,7 @@ it('previews confirms and deduplicates a CSV statement with signed localized amo
 });
 
 it('previews a conservative textual PDF and rejects scanned PDFs', function () {
+    config()->set('statements.pdf_ocr.enabled', false);
     $wallet = createWalletForOfxImport();
     $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.921', 'Conta PDF');
     $contents = "%PDF-1.4\nBT\n(20/07/2026;Tarifa bancaria;-15,90) Tj\n(21/07/2026;Credito recebido;300,00) Tj\nET\n%%EOF";
@@ -950,6 +951,7 @@ it('parses the sanitized multiline Mercado Pago extracted-text fixture into date
 });
 
 it('returns the useful layout error when a textual PDF has no recognizable transactions', function () {
+    config()->set('statements.pdf_ocr.enabled', false);
     $contents = "%PDF-1.4\nBT (Relatorio Mercado Pago sem movimentos financeiros) Tj ET\n%%EOF";
     expect(fn () => app(\App\Services\Financial\ParsePdfStatement::class)->parse($contents))
         ->toThrow(RuntimeException::class, 'O PDF foi lido, mas o layout ainda não foi reconhecido.');
@@ -963,4 +965,46 @@ it('normalizes simulated Mercado Pago OCR text into conservative signed transact
         ->and($transactions[0]->postedAt)->toBe('2026-07-20')->and($transactions[0]->direction)->toBe('in')->and($transactions[0]->amountCents)->toBe(15_000)
         ->and($transactions[1]->postedAt)->toBe('2026-07-21')->and($transactions[1]->direction)->toBe('out')->and($transactions[1]->amountCents)->toBe(3_590)
         ->and($transactions[2]->direction)->toBe('in')->and($transactions[2]->amountCents)->toBe(125);
+});
+
+it('parses real sanitized Mercado Pago OCR blocks with operation ids and balances', function () {
+    $text = file_get_contents(base_path('tests/Fixtures/mercado_pago_ocr_real.txt'));
+    $transactions = app(ParseMercadoPagoPdfStatement::class)->parse($text);
+
+    expect($transactions)->toHaveCount(6)
+        ->and($transactions[0]->postedAt)->toBe('2026-05-14')
+        ->and($transactions[0]->amountCents)->toBe(485)->and($transactions[0]->direction)->toBe('in')
+        ->and($transactions[1]->amountCents)->toBe(485)->and($transactions[1]->direction)->toBe('out')
+        ->and($transactions[2]->amountCents)->toBe(99_600)->and($transactions[2]->direction)->toBe('in')
+        ->and($transactions[3]->amountCents)->toBe(99_600)->and($transactions[3]->direction)->toBe('out')
+        ->and($transactions[4]->amountCents)->toBe(4_500)->and($transactions[4]->direction)->toBe('in')
+        ->and($transactions[5]->amountCents)->toBe(4_500)->and($transactions[5]->direction)->toBe('out');
+
+    foreach ($transactions as $transaction) {
+        expect($transaction->raw['operation_id'])->not->toBeNull()
+            ->and($transaction->fitId)->toStartWith('PDF-MP-')
+            ->and($transaction->description)->not->toContain($transaction->raw['operation_id'])
+            ->and($transaction->description)->not->toContain('R$');
+    }
+});
+
+it('deduplicates Mercado Pago OCR transactions by operation id', function () {
+    $wallet = createWalletForOfxImport();
+    $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.923', 'Mercado Pago OCR');
+    $ocrText = file_get_contents(base_path('tests/Fixtures/mercado_pago_ocr_real.txt'));
+
+    $this->mock(\App\Services\Financial\LocalPdfOcr::class, function (\Mockery\MockInterface $mock) use ($ocrText) {
+        $mock->shouldReceive('enabled')->andReturnTrue();
+        $mock->shouldReceive('extract')->andReturn($ocrText);
+    });
+
+    $contents = "%PDF-1.4\n/Subtype /Image\n/Encrypt 9 0 R\n%%EOF";
+    $preview = app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'MercadoPago.pdf');
+    expect($preview['rows'])->toHaveCount(6);
+
+    app(ConfirmOfxBankStatement::class)->execute(
+        $wallet, $bankAccount, $contents, 'MercadoPago.pdf', $preview['file_hash'], defaultOfxDecisions($preview), $preview['rows'],
+    );
+    $second = app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, 'MercadoPago.pdf');
+    expect(collect($second['rows'])->every(fn ($row) => $row['situation'] === 'already_imported'))->toBeTrue();
 });

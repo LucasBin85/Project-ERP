@@ -1,0 +1,39 @@
+EXTRATO DE CONTA
+Período 14-05-2026 a 23-05-2026
+Entradas Saídas Saldo inicial Saldo final
+
+Data
+Descrição
+ID da operação
+Valor
+Saldo
+
+14-05-2026
+Pix recebido
+Cliente exemplo
+159234137180
+R$ 4,85 R$ 4,85
+
+14-05-2026 Dinheiro reservado
+Reserva automática
+159234268598 R$ -4,85 R$ 0,00
+
+22-05-2026
+Pix recebido de cliente
+160496616206
+R$ 996,00
+R$ 996,00
+
+22-05-2026 Pix enviado
+Fornecedor exemplo
+159729716969 R$ -996,00 R$ 0,00
+
+23-05-2026
+Dinheiro retirado
+da reserva
+159933500323
+R$ 45,00 R$ 45,00
+
+23-05-2026 Pix enviado
+Contato exemplo
+159932449569 R$ -45,00 R$ 0,00

@@ -19,18 +19,23 @@ class ParsePdfStatement
 
         $extraction = $this->extract($contents);
         $text = $extraction['text'];
-        if ($text === '' && $this->ocr->enabled()) {
+        $transactions = $text === '' ? [] : $this->mercadoPago->parse($text);
+        $ocrReadText = false;
+        if ($transactions === [] && $this->ocr->enabled()) {
             $text = $this->mercadoPago->normalize($this->ocr->extract($contents));
             $extraction['source'] = 'ocr';
+            $ocrReadText = $text !== '';
+            $transactions = $text === '' ? [] : $this->mercadoPago->parse($text);
         }
         if ($text === '') {
             throw new RuntimeException('Este PDF parece ser baseado em imagem. Para importar este tipo de PDF, habilite OCR local ou use outro formato. Use OFX/CSV se disponíveis.');
         }
 
-        $transactions = $this->mercadoPago->parse($text);
         if ($transactions === []) {
-            if (app()->environment('local', 'testing')) Log::debug('PDF textual sem transações reconhecidas', $this->safeDiagnostics($text));
-            throw new RuntimeException('O PDF foi lido, mas o layout ainda não foi reconhecido.');
+            if (app()->environment('local', 'testing')) Log::debug('PDF sem transações reconhecidas', $this->safeDiagnostics($text));
+            throw new RuntimeException($ocrReadText
+                ? 'O OCR leu o PDF, mas o layout ainda não foi reconhecido.'
+                : 'O PDF foi lido, mas o layout ainda não foi reconhecido.');
         }
 
         return ['started_at' => null, 'ended_at' => null, 'account' => array_fill_keys(['container','bank_id','branch_id','account_id','account_key','account_type','broker_id','routing_number','bank_name','organization','financial_institution_id','currency'], null), 'transactions' => $transactions, 'errors' => []];
@@ -65,6 +70,23 @@ class ParsePdfStatement
     public function inspect(string $contents): array
     {
         $extraction = $this->extract($contents);
+        $ocr = ['attempted' => false, 'text' => '', 'images' => [], 'commands' => [], 'errors' => [], 'languages' => [], 'exception' => null];
+        $text = $extraction['text'];
+        $transactions = $text === '' ? [] : $this->mercadoPago->parse($text);
+        if ($this->ocr->enabled() && $transactions === []) {
+            $ocr['attempted'] = true;
+            try {
+                $ocr = [...$ocr, ...$this->ocr->extractWithDiagnostics($contents)];
+                $text = $this->mercadoPago->normalize($ocr['text']);
+                $transactions = $text === '' ? [] : $this->mercadoPago->parse($text);
+                if ($text !== '') {
+                    $extraction['text'] = $text;
+                    $extraction['source'] = 'ocr';
+                }
+            } catch (\Throwable $exception) {
+                $ocr['exception'] = $exception->getMessage();
+            }
+        }
         return $extraction + [
             'bytes' => strlen($contents),
             'objects' => preg_match_all('/\d+\s+\d+\s+obj\b/', $contents),
@@ -73,7 +95,8 @@ class ParsePdfStatement
             'compressed' => preg_match_all('/\/(?:FlateDecode|LZWDecode|DCTDecode|JPXDecode)\b/', $contents),
             'encrypted' => str_contains($contents, '/Encrypt'),
             'pages' => preg_match_all('/\/Type\s*\/Page\b(?!s)/', $contents),
-            'transactions' => $extraction['text'] === '' ? 0 : count($this->mercadoPago->parse($extraction['text'])),
+            'transactions' => count($transactions),
+            'ocr' => $ocr,
         ];
     }
 
