@@ -189,7 +189,7 @@ it('posts only eligible OFX drafts from the selected bank account and period', f
         ->and($otherBank['entry']->fresh()->status)->toBe('draft');
 });
 
-it('skips unclassified reserved invalid unbalanced and unresolved OFX drafts', function () {
+it('skips unclassified reserved invalid unbalanced and unresolved statement drafts', function () {
     $context = bulkOfxPostingContext();
     $missingType = bulkOfxDraft($context, '2026-07-01', 20_001, null);
     $payment = bulkOfxDraft(
@@ -260,7 +260,6 @@ it('skips unclassified reserved invalid unbalanced and unresolved OFX drafts', f
         ->toContain(
             'Selecione o tipo da operação antes da postagem em massa.',
             'Pagamentos e receitas ficam pendentes para a futura vinculação com contas a pagar/receber.',
-            'O tipo selecionado ainda não possui classificação contábil postável.',
             'O lançamento ainda possui valor em "A classificar".',
             'O lançamento não possui uma classificação contábil única e explícita.',
             'O lançamento não está balanceado.',

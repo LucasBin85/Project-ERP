@@ -2,8 +2,9 @@
 import InputError from '@/components/InputError.vue';
 import type { BankStatementAccount, BankStatementClassificationAccount, BankStatementTransaction } from '@/types/financial/bankStatement';
 import { useForm } from '@inertiajs/vue3';
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
+import InvestmentAccountQuickCreateDialog from './InvestmentAccountQuickCreateDialog.vue';
 
 const props = defineProps<{
     transaction: BankStatementTransaction;
@@ -22,15 +23,24 @@ const form = useForm<InlineClassificationForm>({
     chart_of_account_id: props.transaction.classification_account_id ? String(props.transaction.classification_account_id) : '',
     should_post: false,
 });
+const showInvestmentDialog = ref(false);
+const createdAccounts = ref<BankStatementClassificationAccount[]>([]);
 
 const eligibleAccounts = computed(() =>
     props.transaction.operation_type
-        ? props.classificationAccounts.filter((account) => account.allowed_operation_types.includes(props.transaction.operation_type!))
+        ? [...props.classificationAccounts, ...createdAccounts.value].filter((account) => account.allowed_operation_types.includes(props.transaction.operation_type!))
         : [],
 );
 
 const hasValidCurrentAccount = computed(() => eligibleAccounts.value.some((account) => account.id === props.transaction.classification_account_id));
 const transferLabel = computed(() => props.transaction.type === 'outflow' ? 'Conta de destino' : 'Conta de origem');
+const classificationLabel = computed(() => {
+    if (props.transaction.operation_type === 'investment') {
+        return props.transaction.type === 'outflow' ? 'Conta de investimento destino' : 'Conta de investimento origem';
+    }
+    return props.transaction.operation_type === 'transfer' ? transferLabel.value : 'Conta contábil de classificação';
+});
+const selectedAccount = computed(() => eligibleAccounts.value.find((account) => account.id === props.transaction.classification_account_id));
 
 function accountLabel(account: BankStatementClassificationAccount): string {
     if (props.transaction.operation_type !== 'transfer' || !account.bank_account) return `${account.code} - ${account.name}`;
@@ -63,6 +73,12 @@ function saveClassification() {
     submit();
 }
 
+function investmentCreated(account: BankStatementClassificationAccount) {
+    createdAccounts.value.push(account);
+    form.chart_of_account_id = String(account.id);
+    submit();
+}
+
 watch(() => [props.transaction.operation_type, props.transaction.classification_account_id], syncFromTransaction);
 </script>
 
@@ -70,22 +86,37 @@ watch(() => [props.transaction.operation_type, props.transaction.classification_
     <div class="min-w-60 space-y-1.5">
         <p v-if="!transaction.operation_type" class="rounded bg-gray-900 px-2 py-2 text-xs text-gray-400">Selecione primeiro o tipo de operação.</p>
 
-        <p v-else-if="eligibleAccounts.length === 0" class="rounded bg-amber-950/40 px-2 py-2 text-xs text-amber-300">
+        <p v-else-if="eligibleAccounts.length === 0 && transaction.operation_type !== 'investment'" class="rounded bg-amber-950/40 px-2 py-2 text-xs text-amber-300">
             {{ transaction.operation_type === 'transfer' ? 'Cadastre outra conta bancária para registrar transferência.' : 'Este tipo está preparado para integração futura. O lançamento permanece em “A classificar”.' }}
         </p>
 
+        <div v-if="transaction.operation_type === 'investment' && transaction.classification_account_id && selectedAccount" class="rounded-lg border border-indigo-500/30 bg-indigo-950/30 px-3 py-2 text-xs">
+            <span class="inline-flex rounded bg-indigo-900 px-2 py-1 font-semibold text-indigo-200">Investimento</span>
+            <p class="mt-1 font-semibold text-white">{{ accountLabel(selectedAccount) }}</p>
+            <p class="mt-1 text-green-300">Pronto para contabilidade</p>
+        </div>
+
         <select
-            v-else
+            v-if="eligibleAccounts.length > 0"
             :id="`ofx-classification-account-${transaction.id}`"
             v-model="form.chart_of_account_id"
             :disabled="form.processing || !transaction.can_classify"
             class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-60"
-            :aria-label="transaction.operation_type === 'transfer' ? transferLabel : 'Conta contábil de classificação'"
+            :aria-label="classificationLabel"
             @change="saveClassification"
         >
-            <option value="" disabled>{{ transaction.operation_type === 'transfer' ? transferLabel : 'Selecionar conta...' }}</option>
+            <option value="" disabled>{{ classificationLabel }}</option>
             <option v-for="account in eligibleAccounts" :key="account.id" :value="String(account.id)">{{ accountLabel(account) }}</option>
         </select>
+
+        <button
+            v-if="transaction.operation_type === 'investment'"
+            type="button"
+            class="text-xs font-semibold text-indigo-300 hover:text-indigo-200 hover:underline"
+            @click="showInvestmentDialog = true"
+        >
+            Cadastrar investimento
+        </button>
 
         <div class="flex min-h-5 items-center gap-3 text-xs">
             <span v-if="form.processing" class="text-gray-400">Salvando...</span>
@@ -94,5 +125,6 @@ watch(() => [props.transaction.operation_type, props.transaction.classification_
                 Classificado
             </span>
         </div>
+        <InvestmentAccountQuickCreateDialog :show="showInvestmentDialog" @close="showInvestmentDialog = false" @created="investmentCreated" />
     </div>
 </template>

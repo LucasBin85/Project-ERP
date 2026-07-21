@@ -21,6 +21,7 @@ use App\Http\Controllers\Financial\CreditCardController;
 use App\Http\Controllers\Financial\SupplierController;
 use App\Http\Controllers\Financial\CustomerController;
 use App\Http\Controllers\Financial\OfxImportController;
+use App\Http\Controllers\Financial\InvestmentAccountController;
 use App\Http\Controllers\FinancialPositionController;
 use App\Http\Controllers\WalletController;
 use Illuminate\Support\Facades\Route;
@@ -102,6 +103,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/merge-transfer', [BankStatementController::class, 'mergeTransfer'])
             ->name('bank-accounts.statement.merge-transfer');
+
+        Route::post('investment-accounts/quick-store', [InvestmentAccountController::class, 'quickStore'])
+            ->name('investment-accounts.quick-store');
 
         Route::get('bank-accounts/{bankAccount}/statement/{journalEntry}/payable-candidates', [BankStatementSettlementController::class, 'payableCandidates'])
             ->name('bank-accounts.statement.payable-candidates');

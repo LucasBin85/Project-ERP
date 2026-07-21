@@ -154,17 +154,19 @@ it('rejects operation types incompatible with the bank movement direction', func
         ))->toThrow(InvalidArgumentException::class, 'saída bancária');
 });
 
-it('keeps payment and investment classifications reserved for future integrations', function () {
+it('keeps payment reserved and allows investment accounts only below 1.3', function () {
     ['wallet' => $wallet, 'bank_account' => $bankAccount] = createOfxPolicyScenario();
     createOfxPolicyAccount($wallet, '9.2.01', 'Despesa', 'despesa');
     createOfxPolicyAccount($wallet, '9.3.01', 'Receita', 'receita');
 
     $policy = app(OfxOperationTypePolicy::class);
+    $investment = ChartOfAccount::query()->where('wallet_id', $wallet->id)->where('code', '1.3.1')->firstOrFail();
 
     expect($policy->supportsClassification(OfxOperationTypePolicy::PAYMENT))->toBeFalse()
-        ->and($policy->supportsClassification(OfxOperationTypePolicy::INVESTMENT))->toBeFalse()
+        ->and($policy->supportsClassification(OfxOperationTypePolicy::INVESTMENT))->toBeTrue()
         ->and($policy->eligibleAccounts($wallet, $bankAccount, OfxOperationTypePolicy::PAYMENT))->toBeEmpty()
-        ->and($policy->eligibleAccounts($wallet, $bankAccount, OfxOperationTypePolicy::INVESTMENT))->toBeEmpty();
+        ->and($policy->eligibleAccounts($wallet, $bankAccount, OfxOperationTypePolicy::INVESTMENT)->modelKeys())->toContain($investment->id)
+        ->and($policy->isAccountAllowed($wallet, $bankAccount, OfxOperationTypePolicy::INVESTMENT, $investment))->toBeTrue();
 });
 
 it('rejects accounts outside the active wallet and analytical posting rules', function () {

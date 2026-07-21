@@ -139,6 +139,52 @@ function classificationAudit(JournalEntry $entry): BankStatementImportTransactio
         ->firstOrFail();
 }
 
+function classificationInvestmentAccount(Wallet $wallet): ChartOfAccount
+{
+    return ChartOfAccount::query()->where('wallet_id', $wallet->id)->where('code', '1.3.1')->firstOrFail();
+}
+
+it('classifies investment applications and redemptions without changing operational balance when posted', function (string $direction, string $bankLineType, string $investmentLineType) {
+    $wallet = classificationWallet();
+    $bankAccount = classificationBankAccount($wallet);
+    $investment = classificationInvestmentAccount($wallet);
+    $entry = classificationEntry($wallet, $bankAccount, $direction, 75_000);
+    $balanceBefore = app(BankAccountBalanceService::class)->calculate($wallet, $bankAccount)['statement_balance_cents'];
+
+    $classified = classify($wallet, $bankAccount, $entry, $investment, false, OfxOperationTypePolicy::INVESTMENT)->fresh('lines');
+
+    expect($classified->status)->toBe('draft')
+        ->and($classified->lines->firstWhere('chart_of_account_id', $bankAccount->chart_of_account_id)->type)->toBe($bankLineType)
+        ->and($classified->lines->firstWhere('chart_of_account_id', $investment->id)->type)->toBe($investmentLineType)
+        ->and($classified->lines->contains('chart_of_account_id', $wallet->suspense_account_id))->toBeFalse()
+        ->and(classificationAudit($entry)->operation_type)->toBe(OfxOperationTypePolicy::INVESTMENT)
+        ->and(classificationAudit($entry)->classification_account_id)->toBe($investment->id)
+        ->and(app(BuildPendingJournalEntries::class)->handle($wallet))->toHaveCount(1);
+
+    app(PostJournalEntry::class)->handle($classified);
+    $balanceAfter = app(BankAccountBalanceService::class)->calculate($wallet, $bankAccount)['statement_balance_cents'];
+    expect($classified->fresh()->status)->toBe('posted')->and($balanceAfter)->toBe($balanceBefore);
+})->with([
+    'application outflow' => ['out', 'credit', 'debit'],
+    'redemption inflow' => ['in', 'debit', 'credit'],
+]);
+
+it('rejects non-investment and unsafe accounts for investment classification', function () {
+    $wallet = classificationWallet();
+    $bankAccount = classificationBankAccount($wallet);
+    $entry = classificationEntry($wallet, $bankAccount, 'out', 10_000);
+    $expense = AccountingTestHelper::account($wallet, '5.9.80', 'Despesa inválida', 'despesa', 'debit');
+    $revenue = AccountingTestHelper::account($wallet, '4.9.80', 'Receita inválida', 'receita', 'credit');
+    $synthetic = ChartOfAccount::query()->where('wallet_id', $wallet->id)->where('code', '1.3')->firstOrFail();
+    $otherWallet = User::factory()->create()->wallets()->firstOrFail();
+    $foreign = classificationInvestmentAccount($otherWallet);
+
+    foreach ([$expense, $revenue, $bankAccount->chartOfAccount, $synthetic, $foreign] as $invalid) {
+        expect(fn () => classify($wallet, $bankAccount, $entry, $invalid, false, OfxOperationTypePolicy::INVESTMENT))
+            ->toThrow(\RuntimeException::class);
+    }
+});
+
 /** @return array{entry: JournalEntry, bankLine: JournalLine} */
 function classificationManualCandidate(
     Wallet $wallet,

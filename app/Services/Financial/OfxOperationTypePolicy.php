@@ -53,7 +53,7 @@ class OfxOperationTypePolicy
             [
                 'code' => self::INVESTMENT,
                 'label' => 'Investimento',
-                'classification_enabled' => false,
+                'classification_enabled' => true,
             ],
             [
                 'code' => self::EXPENSE,
@@ -133,7 +133,7 @@ class OfxOperationTypePolicy
     {
         $this->assertValidOperationType($operationType);
 
-        return ! in_array($operationType, [self::PAYMENT, self::INVESTMENT], true);
+        return $operationType !== self::PAYMENT;
     }
 
     /**
@@ -165,8 +165,9 @@ class OfxOperationTypePolicy
             }),
             self::EXPENSE, self::FEE => $query->where('type', 'despesa'),
             self::INCOME => $query->where('type', 'receita'),
+            self::INVESTMENT => $query->where('type', 'ativo')->where('financial_group', 'investments'),
             self::OTHER => $query,
-            self::PAYMENT, self::INVESTMENT => $query->whereRaw('1 = 0'),
+            self::PAYMENT => $query->whereRaw('1 = 0'),
         };
     }
 
@@ -180,7 +181,8 @@ class OfxOperationTypePolicy
     ): Collection {
         return $this->eligibleAccountsQuery($wallet, $bankAccount, $operationType)
             ->orderBy('code')
-            ->get();
+            ->get()
+            ->filter(fn (ChartOfAccount $account) => $this->isAccountAllowed($wallet, $bankAccount, $operationType, $account));
     }
 
     /**
@@ -274,9 +276,27 @@ class OfxOperationTypePolicy
             self::TRANSFER => $account->financial_group === 'available',
             self::EXPENSE, self::FEE => $account->type === 'despesa',
             self::INCOME => $account->type === 'receita',
+            self::INVESTMENT => $account->type === 'ativo'
+                && $account->financial_group === 'investments'
+                && $this->isDescendantOfInvestments($account),
             self::OTHER => true,
-            self::PAYMENT, self::INVESTMENT => false,
+            self::PAYMENT => false,
         };
+    }
+
+    private function isDescendantOfInvestments(ChartOfAccount $account): bool
+    {
+        $ancestor = $account->parent;
+        while ($ancestor) {
+            if ($ancestor->code === '1.3'
+                && $ancestor->type === 'ativo'
+                && $ancestor->financial_group === 'investments') {
+                return true;
+            }
+            $ancestor = $ancestor->parent;
+        }
+
+        return false;
     }
 
     private function assertBankAccountBelongsToWallet(Wallet $wallet, BankAccount $bankAccount): void
