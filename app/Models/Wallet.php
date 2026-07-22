@@ -38,6 +38,11 @@ class Wallet extends Model
         return $this->hasMany(Customer::class);
     }
 
+    public function classificationRules()
+    {
+        return $this->hasMany(BankStatementClassificationRule::class);
+    }
+
     public function suspenseAccount()
     {
         return $this->belongsTo(ChartOfAccount::class, 'suspense_account_id');

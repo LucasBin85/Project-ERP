@@ -21,6 +21,7 @@ use App\Services\Financial\ClassifyOfxDraftEntry;
 use App\Services\Financial\MergeBankTransferOfxEntries;
 use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\ResolveOfxDraftMatch;
+use App\Services\Financial\SuggestBankStatementClassification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -82,6 +83,10 @@ class BankStatementController extends Controller
             ],
             'ofxPreview' => $request->session()->get('ofx_preview'),
             'bulkPostResult' => $request->session()->get('ofx_bulk_post_result'),
+            'classificationRules' => $wallet->classificationRules()->with(['chartOfAccount:id,name', 'bankAccount:id,name', 'supplier:id,name', 'customer:id,name', 'investmentAccount:id,name'])->orderByDesc('priority')->get()->map(fn ($rule) => [
+                ...$rule->toArray(),
+                'target_label' => $rule->investmentAccount?->name ?? $rule->bankAccount?->name ?? $rule->chartOfAccount?->name ?? $rule->supplier?->name ?? $rule->customer?->name,
+            ]),
             'operational' => $this->operationalContext(
                 bankAccount: $bankAccount,
                 startDate: $filters->startDate,
@@ -219,6 +224,24 @@ class BankStatementController extends Controller
                 ? 'OFX vinculado ao lançamento manual com sucesso.'
                 : 'Lançamento OFX mantido para classificação.',
         );
+    }
+
+    public function applySuggestion(Request $request, BankAccount $bankAccount, JournalEntry $journalEntry, SuggestBankStatementClassification $suggestions, ClassifyOfxDraftEntry $classifier): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id && (int) $journalEntry->wallet_id === (int) $wallet->id, 404);
+        $bankLine = $journalEntry->lines()->where('chart_of_account_id', $bankAccount->chart_of_account_id)->firstOrFail();
+        $suggestion = $suggestions->execute($wallet, $bankAccount, $bankLine);
+        if (! $suggestion || $suggestion['status'] !== 'suggested' || ! $suggestion['can_apply'] || (int) $suggestion['rule_id'] !== (int) $request->integer('rule_id')) {
+            return back()->withErrors(['suggestion' => 'A sugestão não está mais disponível. Revise a regra e tente novamente.']);
+        }
+        try {
+            $classifier->execute($wallet, $bankAccount, $journalEntry, new OfxClassificationDTO($suggestion['operation_type'], $suggestion['chart_of_account_id'], false));
+        } catch (\Throwable $exception) {
+            report($exception);
+            return back()->withErrors(['suggestion' => 'Não foi possível aplicar a sugestão. A regra pode estar desatualizada.']);
+        }
+        return back()->with('success', 'Sugestão aplicada. O lançamento permanece em rascunho.');
     }
 
     public function mergeTransfer(

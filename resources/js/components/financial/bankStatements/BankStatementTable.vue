@@ -3,6 +3,8 @@ import ReportTable from '@/components/reports/ReportTable.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import type { BankStatementAccount, BankStatementClassificationAccount, BankStatementTransaction } from '@/types/financial/bankStatement';
+import BankStatementSuggestion from './BankStatementSuggestion.vue';
+import ClassificationRuleDialog from './ClassificationRuleDialog.vue';
 import type { FinancialOperationTypeOption } from '@/types/financial/operationType';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
@@ -56,6 +58,7 @@ function operationTypeLabel(transaction: BankStatementTransaction): string {
             </td>
 
             <td class="px-4 py-3 text-sm">
+                <BankStatementSuggestion :transaction="transaction" :bank-account="bankAccount" />
                 <div class="font-semibold text-white">
                     {{ transaction.description || 'Sem descrição' }}
                 </div>
@@ -63,6 +66,7 @@ function operationTypeLabel(transaction: BankStatementTransaction): string {
                 <div class="mt-1 flex items-center gap-2 text-xs text-gray-500">
                     <span>#{{ transaction.id }}</span>
                 </div>
+                <ClassificationRuleDialog v-if="['ofx','csv','pdf'].includes(transaction.source ?? '')" :transaction="transaction" :bank-account="bankAccount" :accounts="classificationAccounts" :suppliers="settlementParties.suppliers" :customers="settlementParties.customers" />
             </td>
 
             <td

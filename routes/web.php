@@ -15,6 +15,7 @@ use App\Http\Controllers\Financial\BankAccountController;
 use App\Http\Controllers\Financial\BankReconciliationController;
 use App\Http\Controllers\Financial\BankStatementController;
 use App\Http\Controllers\Financial\BankStatementSettlementController;
+use App\Http\Controllers\Financial\BankStatementClassificationRuleController;
 use App\Http\Controllers\Financial\BankTransferController;
 use App\Http\Controllers\Financial\CashFlowController;
 use App\Http\Controllers\Financial\CreditCardController;
@@ -97,6 +98,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/classify', [BankStatementController::class, 'classify'])
             ->name('bank-accounts.statement.classify');
+        Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/apply-suggestion', [BankStatementController::class, 'applySuggestion'])
+            ->name('bank-accounts.statement.apply-suggestion');
+
+        Route::post('bank-statement-classification-rules', [BankStatementClassificationRuleController::class, 'store'])->name('bank-statement-classification-rules.store');
+        Route::put('bank-statement-classification-rules/{classificationRule}', [BankStatementClassificationRuleController::class, 'update'])->name('bank-statement-classification-rules.update');
+        Route::delete('bank-statement-classification-rules/{classificationRule}', [BankStatementClassificationRuleController::class, 'destroy'])->name('bank-statement-classification-rules.destroy');
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/resolve-match', [BankStatementController::class, 'resolveMatch'])
             ->name('bank-accounts.statement.resolve-match');

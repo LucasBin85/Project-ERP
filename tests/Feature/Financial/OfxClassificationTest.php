@@ -4,6 +4,7 @@ use App\DTOs\Financial\BankStatementFiltersDTO;
 use App\DTOs\Financial\OfxClassificationDTO;
 use App\Models\BankAccount;
 use App\Models\BankAccountTransfer;
+use App\Models\BankStatementClassificationRule;
 use App\Models\BankStatementImport;
 use App\Models\BankStatementImportTransaction;
 use App\Models\ChartOfAccount;
@@ -21,12 +22,27 @@ use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\ResolveOfxDraftMatch;
 use App\Services\Financial\FindMatchingOfxTransferEntries;
 use App\Services\Financial\MergeBankTransferOfxEntries;
+use App\Services\Financial\SuggestBankStatementClassification;
 use App\Services\Accounting\BuildPendingJournalEntries;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
 
 uses(RefreshDatabase::class);
+
+function statementRule(Wallet $wallet, array $attributes): BankStatementClassificationRule
+{
+    return BankStatementClassificationRule::query()->create(array_merge([
+        'wallet_id' => $wallet->id, 'name' => 'Regra teste', 'match_text' => 'Movimento', 'match_mode' => 'contains',
+        'direction' => 'any', 'operation_type' => OfxOperationTypePolicy::EXPENSE, 'active' => true, 'priority' => 0,
+    ], $attributes));
+}
+
+function suggestionFor(Wallet $wallet, BankAccount $bankAccount, JournalEntry $entry): ?array
+{
+    $line = $entry->lines()->where('chart_of_account_id', $bankAccount->chart_of_account_id)->firstOrFail();
+    return app(SuggestBankStatementClassification::class)->execute($wallet, $bankAccount, $line);
+}
 
 function classificationWallet(): Wallet
 {
@@ -985,4 +1001,68 @@ it('rejects a posted OFX entry through the bank statement endpoint', function ()
 
     expect($entry->fresh()->status)->toBe('posted')
         ->and(classificationLinesSnapshot($entry))->toBe($before);
+});
+
+it('suggests contains rules for expense income investment and transfer classifications', function (string $direction, string $operation, string $accountCode, string $accountName, string $type, string $normal, ?string $group) {
+    $wallet = classificationWallet();
+    $bank = classificationBankAccount($wallet);
+    $entry = classificationEntry($wallet, $bank, $direction, 12_300);
+    $target = AccountingTestHelper::account($wallet, $accountCode, $accountName, $type, $normal, $group);
+    if ($group) $target->update(['financial_group' => $group]);
+    $attributes = ['operation_type' => $operation];
+    if ($operation === OfxOperationTypePolicy::TRANSFER) {
+        $counterpart = FinancialTestHelper::bankAccount($wallet, $accountCode, $accountName);
+        $attributes['bank_account_id'] = $counterpart->id;
+        $target = $counterpart->chartOfAccount;
+    } elseif ($operation === OfxOperationTypePolicy::INVESTMENT) {
+        $attributes['investment_account_id'] = $target->id;
+    } else {
+        $attributes['chart_of_account_id'] = $target->id;
+    }
+    statementRule($wallet, $attributes);
+    $suggestion = suggestionFor($wallet, $bank, $entry);
+    expect($suggestion)->not->toBeNull()->and($suggestion['status'])->toBe('suggested')->and($suggestion['operation_type'])->toBe($operation)->and($suggestion['chart_of_account_id'])->toBe($target->id);
+})->with([
+    'expense' => ['out', 'expense', '5.9.91', 'Material', 'despesa', 'debit', null],
+    'income' => ['in', 'income', '4.9.91', 'Serviços', 'receita', 'credit', null],
+    'investment' => ['out', 'investment', '1.3.91', 'MXRF11', 'ativo', 'debit', 'investments'],
+    'transfer' => ['out', 'transfer', '1.1.2.991', 'Conta contraparte', 'ativo', 'debit', 'available'],
+]);
+
+it('ignores inactive foreign-wallet and direction-incompatible rules', function () {
+    $wallet = classificationWallet(); $bank = classificationBankAccount($wallet); $entry = classificationEntry($wallet, $bank, 'out', 1000);
+    $expense = AccountingTestHelper::account($wallet, '5.9.92', 'Despesa', 'despesa', 'debit');
+    statementRule($wallet, ['chart_of_account_id' => $expense->id, 'active' => false]);
+    statementRule($wallet, ['chart_of_account_id' => $expense->id, 'direction' => 'in']);
+    $foreign = classificationWallet(); $foreignExpense = AccountingTestHelper::account($foreign, '5.9.93', 'Outra', 'despesa', 'debit');
+    statementRule($foreign, ['chart_of_account_id' => $foreignExpense->id]);
+    expect(suggestionFor($wallet, $bank, $entry))->toBeNull();
+});
+
+it('uses the highest priority and marks a top-priority tie as ambiguous', function () {
+    $wallet = classificationWallet(); $bank = classificationBankAccount($wallet); $entry = classificationEntry($wallet, $bank, 'out', 1000);
+    $low = AccountingTestHelper::account($wallet, '5.9.94', 'Baixa', 'despesa', 'debit');
+    $high = AccountingTestHelper::account($wallet, '5.9.95', 'Alta', 'despesa', 'debit');
+    statementRule($wallet, ['chart_of_account_id' => $low->id, 'priority' => 1]);
+    statementRule($wallet, ['chart_of_account_id' => $high->id, 'priority' => 10]);
+    expect(suggestionFor($wallet, $bank, $entry)['chart_of_account_id'])->toBe($high->id);
+    statementRule($wallet, ['name' => 'Empate', 'chart_of_account_id' => $low->id, 'priority' => 10]);
+    expect(suggestionFor($wallet, $bank, $entry)['status'])->toBe('ambiguous');
+});
+
+it('applies a current suggestion through the real classifier without posting', function () {
+    $wallet = classificationWallet(); $bank = classificationBankAccount($wallet); $entry = classificationEntry($wallet, $bank, 'out', 1000);
+    $expense = AccountingTestHelper::account($wallet, '5.9.96', 'Sugerida', 'despesa', 'debit');
+    $rule = statementRule($wallet, ['chart_of_account_id' => $expense->id]);
+    $this->actingAs($wallet->user)->withSession(['active_wallet' => $wallet->id])->post(route('bank-accounts.statement.apply-suggestion', [$bank, $entry]), ['rule_id' => $rule->id])->assertSessionHasNoErrors();
+    expect($entry->fresh()->status)->toBe('draft')->and(classificationAudit($entry)->classification_account_id)->toBe($expense->id);
+});
+
+it('rejects an inconsistent rule and lists valid rules on the statement', function () {
+    $wallet = classificationWallet(); $bank = classificationBankAccount($wallet);
+    $expense = AccountingTestHelper::account($wallet, '5.9.97', 'Regra visível', 'despesa', 'debit');
+    $payload = ['name'=>'Inválida','match_text'=>'PIX','match_mode'=>'contains','direction'=>'in','operation_type'=>'expense','chart_of_account_id'=>$expense->id,'bank_account_id'=>null,'supplier_id'=>null,'customer_id'=>null,'investment_account_id'=>null,'active'=>true,'priority'=>0];
+    $this->actingAs($wallet->user)->withSession(['active_wallet'=>$wallet->id])->post(route('bank-statement-classification-rules.store'), $payload)->assertSessionHasErrors('direction');
+    $rule = statementRule($wallet, ['name' => 'Regra visível', 'chart_of_account_id' => $expense->id]);
+    $this->get(route('bank-accounts.statement', $bank))->assertInertia(fn ($page) => $page->component('Financial/BankStatements/Index')->where('classificationRules.0.id', $rule->id));
 });

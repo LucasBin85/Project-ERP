@@ -2,6 +2,7 @@
 import BankStatementDateRangeFilter from '@/components/financial/bankStatements/BankStatementDateRangeFilter.vue';
 import BankStatementTable from '@/components/financial/bankStatements/BankStatementTable.vue';
 import OfxImportDialog from '@/components/financial/ofxImports/OfxImportDialog.vue';
+import ClassificationRulesPanel from '@/components/financial/bankStatements/ClassificationRulesPanel.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -27,6 +28,7 @@ const props = defineProps<{
     transactions: BankStatementTransaction[];
     summary: { opening_balance_cents: number; total_inflows_cents: number; total_outflows_cents: number; closing_balance_cents: number };
     classificationAccounts: BankStatementClassificationAccount[];
+    classificationRules: Array<Record<string, unknown>>;
     operationTypes: FinancialOperationTypeOption[];
     settlementParties: { suppliers: Array<{ id: number; name: string }>; customers: Array<{ id: number; name: string }> };
     operational: BankStatementOperational;
@@ -248,6 +250,7 @@ onBeforeUnmount(() => {
                     <span v-else>Fim do extrato disponível.</span>
                 </div>
             </ReportSection>
+            <ClassificationRulesPanel :rules="classificationRules" />
         </ReportPage>
     </AppLayout>
 </template>

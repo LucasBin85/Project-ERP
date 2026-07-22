@@ -45,6 +45,15 @@ export interface BankStatementTransaction {
     classification_status: ClassificationStatus;
     classification_label: string;
     classification_account_id: number | null;
+    classification_suggestion: {
+        status: 'suggested' | 'ambiguous';
+        rule_id?: number;
+        rule_name?: string;
+        operation_type?: FinancialOperationType;
+        chart_of_account_id?: number | null;
+        target_label?: string | null;
+        can_apply?: boolean;
+    } | null;
     operation_type: FinancialOperationType | null;
     allowed_operation_types: FinancialOperationType[];
     can_edit_operation_type: boolean;

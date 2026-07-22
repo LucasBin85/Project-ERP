@@ -23,6 +23,7 @@ class BankStatementService
         private readonly FindMatchingOfxTransferEntries $matchingTransfers,
         private readonly OfxOperationTypePolicy $operationTypes,
         private readonly AssessJournalEntryPostingReadiness $postingReadiness,
+        private readonly SuggestBankStatementClassification $classificationSuggestions,
     ) {}
 
     public function build(Wallet $wallet, BankStatementFiltersDTO $filters): BankStatementDTO
@@ -122,6 +123,9 @@ class BankStatementService
                 $operationSupportsClassification = $operationType
                     && in_array($operationType, $this->operationTypes->codes(), true)
                     && $this->operationTypes->supportsClassification($operationType);
+                $suggestion = $classification['status'] === 'unclassified' && $canEditOfx && $match['status'] === 'none'
+                    ? $this->classificationSuggestions->execute($wallet, $bankAccount, $line)
+                    : null;
 
                 return [
                     'id' => $line->id,
@@ -142,6 +146,7 @@ class BankStatementService
                     'classification_status' => $classification['status'],
                     'classification_label' => $classification['label'],
                     'classification_account_id' => $classification['account_id'],
+                    'classification_suggestion' => $suggestion,
                     'operation_type' => $operationType,
                     'allowed_operation_types' => $this->operationTypes
                         ->allowedOperationTypesForDirection($direction),
