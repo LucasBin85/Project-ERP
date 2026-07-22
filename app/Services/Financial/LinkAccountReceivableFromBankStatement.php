@@ -20,8 +20,8 @@ class LinkAccountReceivableFromBankStatement
             if ((int) $bankAccount->wallet_id !== (int) $wallet->id || (int) $entry->wallet_id !== (int) $wallet->id) {
                 $this->fail('journal_entry_id', 'A conta bancária e o movimento devem pertencer à wallet ativa.');
             }
-            if (! $bankAccount->is_active || ! in_array($entry->source, ['ofx', 'csv', 'pdf'], true) || $entry->status !== 'draft' || ! $wallet->suspense_account_id) {
-                $this->fail('journal_entry_id', 'Somente movimentos OFX em rascunho da wallet ativa podem ser vinculados.');
+            if (! $bankAccount->is_active || ! in_array($entry->source, OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES, true) || $entry->status !== 'draft' || ! $wallet->suspense_account_id) {
+                $this->fail('journal_entry_id', 'Somente movimentos importados do extrato e em rascunho da wallet ativa podem ser vinculados.');
             }
             if (AccountReceivable::query()->where('receipt_journal_entry_id', $entry->id)->lockForUpdate()->exists()) {
                 $this->fail('journal_entry_id', 'Este movimento já está vinculado a outra conta a receber.');
@@ -50,7 +50,7 @@ class LinkAccountReceivableFromBankStatement
                 || $audit->operation_type !== OfxOperationTypePolicy::INCOME || $audit->direction !== 'in'
                 || (int) $audit->amount_cents !== (int) $bankLine->amount_cents
                 || $audit->posted_at?->toDateString() !== $entry->entry_date?->toDateString()) {
-                $this->fail('journal_entry_id', 'O movimento não é uma receita OFX de entrada válida.');
+                $this->fail('journal_entry_id', 'O movimento não é uma receita importada de entrada válida.');
             }
 
             $receivable = AccountReceivable::query()->whereKey($receivable->id)->with(['revenueAccount', 'receivableAccount'])->lockForUpdate()->firstOrFail();

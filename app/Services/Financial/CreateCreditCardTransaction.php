@@ -37,6 +37,7 @@ class CreateCreditCardTransaction
                 ->where('wallet_id', $wallet->id)
                 ->where('type', 'despesa')
                 ->where('allows_posting', true)
+                ->whereDoesntHave('children')
                 ->find($dto->expenseAccountId);
 
             if (! $expenseAccount) {

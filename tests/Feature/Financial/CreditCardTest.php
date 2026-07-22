@@ -148,7 +148,7 @@ it('creates a virtual credit card sharing parent invoice settings', function () 
 it('creates a posted journal entry and monthly invoice when registering a credit card purchase', function () {
     $wallet = createTestWalletWithCardGroup();
 
-    $expenseAccount = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
+    $expenseAccount = AccountingTestHelper::account($wallet, '5.9.91', 'Despesa Administrativa', 'despesa', 'debit');
 
     $bankAccount = FinancialTestHelper::bankAccount(
         wallet: $wallet,
@@ -215,7 +215,7 @@ it('creates a posted journal entry and monthly invoice when registering a credit
 it('splits a credit card purchase into installments across monthly invoices', function () {
     $wallet = createTestWalletWithCardGroup();
 
-    $expenseAccount = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
+    $expenseAccount = AccountingTestHelper::account($wallet, '5.9.91', 'Despesa Administrativa', 'despesa', 'debit');
 
     $bankAccount = FinancialTestHelper::bankAccount(
         wallet: $wallet,
@@ -286,7 +286,7 @@ it('splits a credit card purchase into installments across monthly invoices', fu
 it('creates a posted journal entry when paying a specific credit card invoice', function () {
     $wallet = createTestWalletWithCardGroup();
 
-    $expenseAccount = AccountingTestHelper::account($wallet, '5.1', 'Despesa Administrativa', 'despesa', 'debit');
+    $expenseAccount = AccountingTestHelper::account($wallet, '5.9.91', 'Despesa Administrativa', 'despesa', 'debit');
 
     $bankAccount = FinancialTestHelper::bankAccount(
         wallet: $wallet,

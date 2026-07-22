@@ -149,7 +149,7 @@ class CreateBankReconciliation
 
         if ($ofxIds->duplicates()->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'statement_items' => 'Uma mesma transação OFX não pode aparecer mais de uma vez na conciliação.',
+                'statement_items' => 'Uma mesma transação importada não pode aparecer mais de uma vez na conciliação.',
             ]);
         }
 
@@ -193,7 +193,7 @@ class CreateBankReconciliation
 
             if ($signedAmount !== (int) $item['amount_cents']) {
                 throw ValidationException::withMessages([
-                    'statement_items' => 'O valor de uma transação OFX foi alterado e não confere com o extrato importado.',
+                    'statement_items' => 'O valor de uma transação importada foi alterado e não confere com o extrato.',
                 ]);
             }
         }

@@ -21,10 +21,7 @@ class BulkPostOfxDraftEntries
      * Income and payment movements stay in draft until the future AP/AR linking
      * flow can attach them without creating a duplicate journal entry.
      */
-    private const RESERVED_FOR_AP_AR = [
-        OfxOperationTypePolicy::PAYMENT,
-        OfxOperationTypePolicy::INCOME,
-    ];
+    private const RESERVED_FOR_AP_AR = [OfxOperationTypePolicy::PAYMENT];
 
     public function __construct(
         private readonly PostJournalEntry $postJournalEntry,
@@ -42,7 +39,7 @@ class BulkPostOfxDraftEntries
 
         $entryIds = JournalEntry::query()
             ->where('wallet_id', $wallet->id)
-            ->where('source', 'ofx')
+            ->whereIn('source', OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES)
             ->where('status', 'draft')
             ->whereDate('entry_date', '>=', $startDate)
             ->whereDate('entry_date', '<=', $endDate)
@@ -85,7 +82,7 @@ class BulkPostOfxDraftEntries
                     'message' => $exception instanceof RuntimeException
                         || $exception instanceof InvalidArgumentException
                             ? $exception->getMessage()
-                            : 'Não foi possível postar este lançamento OFX.',
+                            : 'Não foi possível postar este lançamento importado.',
                 ];
             }
         }
@@ -111,8 +108,8 @@ class BulkPostOfxDraftEntries
             ->lockForUpdate()
             ->first();
 
-        if (! $entry || $entry->source !== 'ofx' || $entry->status !== 'draft') {
-            return $this->skipped('O lançamento não está mais disponível como rascunho OFX.');
+        if (! $entry || ! in_array($entry->source, OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES, true) || $entry->status !== 'draft') {
+            return $this->skipped('O lançamento não está mais disponível como rascunho importado.');
         }
 
         $lines = $entry->lines()
@@ -130,11 +127,11 @@ class BulkPostOfxDraftEntries
         $auditTransaction = $this->auditTransaction($wallet, $bankAccount, $entry);
 
         if (! $auditTransaction) {
-            return $this->skipped('O lançamento não possui uma transação OFX de auditoria válida.');
+            return $this->skipped('O lançamento não possui uma transação importada de auditoria válida.');
         }
 
         if (! $this->auditMatchesBankLine($auditTransaction, $entry, $bankLine)) {
-            return $this->skipped('A transação OFX não corresponde à linha bancária do lançamento.');
+            return $this->skipped('A transação importada não corresponde à linha bancária do lançamento.');
         }
 
         $operationType = trim((string) $auditTransaction->operation_type);
@@ -144,7 +141,7 @@ class BulkPostOfxDraftEntries
         }
 
         if (! in_array($operationType, $this->operationTypes->codes(), true)) {
-            return $this->skipped('O tipo selecionado para a operação OFX não é válido.');
+            return $this->skipped('O tipo selecionado para a operação importada não é válido.');
         }
 
         if (! in_array($auditTransaction->direction, [
@@ -159,7 +156,7 @@ class BulkPostOfxDraftEntries
 
         if (in_array($operationType, self::RESERVED_FOR_AP_AR, true)) {
             return $this->skipped(
-                'Pagamentos e receitas ficam pendentes para a futura vinculação com contas a pagar/receber.',
+                'Pagamentos ficam pendentes até a vinculação ou criação da conta a pagar.',
             );
         }
 
@@ -193,7 +190,7 @@ class BulkPostOfxDraftEntries
                 operationType: $operationType,
                 account: $counterpartLine->chartOfAccount,
             )) {
-            return $this->skipped('A classificação selecionada não é válida para o tipo da operação OFX.');
+            return $this->skipped('A classificação selecionada não é válida para o tipo da operação importada.');
         }
 
         $invalidLine = $lines->first(function (JournalLine $line) use ($wallet) {
@@ -218,7 +215,7 @@ class BulkPostOfxDraftEntries
         }
 
         if (! in_array($auditTransaction->resolution, [null, 'created', 'kept'], true)) {
-            return $this->skipped('O vínculo desta transação OFX ainda não permite postagem em massa.');
+            return $this->skipped('O vínculo desta transação importada ainda não permite postagem em massa.');
         }
 
         if ($auditTransaction->resolution !== 'kept') {

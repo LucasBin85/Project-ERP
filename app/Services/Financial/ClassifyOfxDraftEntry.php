@@ -101,7 +101,7 @@ class ClassifyOfxDraftEntry
 
             if (! $auditTransaction) {
                 throw new OfxClassificationException(
-                    'A linha bancária informada não é a linha de origem desta importação OFX.',
+                    'A linha bancária informada não é a linha de origem desta importação de extrato.',
                 );
             }
 
@@ -187,7 +187,7 @@ class ClassifyOfxDraftEntry
 
             $classificationLine->update([
                 'chart_of_account_id' => $destinationAccount->id,
-                'memo' => 'Classificação OFX: '.$destinationAccount->name,
+                'memo' => 'Classificação do extrato: '.$destinationAccount->name,
             ]);
 
             $auditTransaction->classification_account_id = $destinationAccount->id;
@@ -222,9 +222,9 @@ class ClassifyOfxDraftEntry
             );
         }
 
-        if (! in_array($entry->source, ['ofx', 'csv', 'pdf'], true)) {
+        if (! in_array($entry->source, OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES, true)) {
             throw new OfxClassificationException(
-                'Somente lançamentos originados de OFX podem ser classificados por esta ação.',
+                'Somente lançamentos originados de arquivo de extrato podem ser classificados por esta ação.',
             );
         }
 

@@ -73,9 +73,9 @@ class FindBankStatementPayableCandidates
             ]);
         }
 
-        if ($entry->source !== 'ofx' || $entry->status !== 'draft') {
+        if (! in_array($entry->source, OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES, true) || $entry->status !== 'draft') {
             throw ValidationException::withMessages([
-                'journal_entry_id' => 'Somente movimentos OFX em rascunho podem ser vinculados a contas a pagar.',
+                'journal_entry_id' => 'Somente movimentos importados do extrato e em rascunho podem ser vinculados a contas a pagar.',
             ]);
         }
 
@@ -136,7 +136,7 @@ class FindBankStatementPayableCandidates
             || (int) $auditTransaction->amount_cents !== (int) $bankLine->amount_cents
             || $auditTransaction->posted_at?->toDateString() !== $entry->entry_date?->toDateString()) {
             throw ValidationException::withMessages([
-                'journal_entry_id' => 'O movimento não é um pagamento OFX de saída válido.',
+                'journal_entry_id' => 'O movimento não é um pagamento importado de saída válido.',
             ]);
         }
 

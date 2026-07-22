@@ -480,7 +480,7 @@ class BankStatementService
     private function reconciliationStatus(JournalLine $line, Collection $ofxValidatedLineIds, Collection $reconciledLineIds): string
     {
         if (in_array($line->journalEntry?->source, ['ofx', 'csv', 'pdf'], true)) {
-            return 'reconciled_via_ofx';
+            return 'reconciled_via_import';
         }
 
         if ($ofxValidatedLineIds->contains((int) $line->id) || $reconciledLineIds->contains((int) $line->id)) {

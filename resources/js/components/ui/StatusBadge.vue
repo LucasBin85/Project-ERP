@@ -11,7 +11,7 @@ const classes: Record<string, string> = {
     completed: 'bg-green-950 text-green-300',
     imported: 'bg-green-950 text-green-300',
     reconciled: 'bg-green-950 text-green-300',
-    reconciled_via_ofx: 'bg-green-950 text-green-300',
+    reconciled_via_import: 'bg-green-950 text-green-300',
     classified: 'bg-green-950 text-green-300',
     paid: 'bg-green-950 text-green-300',
     received: 'bg-green-950 text-green-300',

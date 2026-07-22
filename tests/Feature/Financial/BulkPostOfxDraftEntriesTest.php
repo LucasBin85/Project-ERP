@@ -81,6 +81,7 @@ function bulkOfxDraft(
     ?BankAccount $bankAccount = null,
     ?BankStatementImport $import = null,
     string $resolution = 'created',
+    string $source = 'ofx',
 ): array {
     static $sequence = 0;
     $sequence++;
@@ -97,7 +98,7 @@ function bulkOfxDraft(
         direction: $direction,
         entryDate: $date,
         description: 'OFX em massa '.$sequence,
-        source: 'ofx',
+        source: $source,
         externalId: 'ofx:bulk:'.$wallet->id.':'.$sequence,
         autoPostIfBalanced: false,
     );
@@ -139,6 +140,13 @@ function bulkOfxDraft(
         'counterpart_line' => $counterpartLine,
     ];
 }
+
+it('posts classified CSV and PDF statement drafts in the same accounting flow', function (string $source) {
+    $context = bulkOfxPostingContext();
+    $item = bulkOfxDraft($context, '2026-07-10', 12_000, source: $source);
+    $result = app(BulkPostOfxDraftEntries::class)->execute($context['wallet'], $context['bankAccount'], '2026-07-01', '2026-07-31');
+    expect($result->posted)->toBe(1)->and($item['entry']->fresh()->status)->toBe('posted');
+})->with(['csv', 'pdf']);
 
 it('posts only eligible OFX drafts from the selected bank account and period', function () {
     $context = bulkOfxPostingContext();
@@ -238,15 +246,14 @@ it('skips unclassified reserved invalid unbalanced and unresolved statement draf
 
     $response
         ->assertOk()
-        ->assertJsonPath('posted', 0)
-        ->assertJsonPath('skipped', 8)
+        ->assertJsonPath('posted', 1)
+        ->assertJsonPath('skipped', 7)
         ->assertJsonPath('errors', 0)
-        ->assertJsonCount(8, 'skipped_items');
+        ->assertJsonCount(7, 'skipped_items');
 
     foreach ([
         $missingType,
         $payment,
-        $income,
         $investment,
         $suspense,
         $missingClassification,
@@ -255,11 +262,12 @@ it('skips unclassified reserved invalid unbalanced and unresolved statement draf
     ] as $item) {
         expect($item['entry']->fresh()->status)->toBe('draft');
     }
+    expect($income['entry']->fresh()->status)->toBe('posted');
 
     expect(collect($response->json('skipped_items'))->pluck('reason')->all())
         ->toContain(
             'Selecione o tipo da operação antes da postagem em massa.',
-            'Pagamentos e receitas ficam pendentes para a futura vinculação com contas a pagar/receber.',
+            'Pagamentos ficam pendentes até a vinculação ou criação da conta a pagar.',
             'O lançamento ainda possui valor em "A classificar".',
             'O lançamento não possui uma classificação contábil única e explícita.',
             'O lançamento não está balanceado.',

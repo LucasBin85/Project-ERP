@@ -57,7 +57,7 @@ export function formatStatus(status?: string | null): string {
         paid: 'Pago',
         received: 'Recebido',
         reconciled: 'Conciliado',
-        reconciled_via_ofx: 'Conciliado via OFX',
+        reconciled_via_import: 'Validado pelo arquivo importado',
         classified: 'Classificado',
         unclassified: 'A classificar',
         pending_classification: 'Pendente de classificação',

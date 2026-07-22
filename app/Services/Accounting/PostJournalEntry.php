@@ -8,6 +8,8 @@ use RuntimeException;
 
 class PostJournalEntry
 {
+    public function __construct(private readonly AssessJournalEntryPostingReadiness $readiness) {}
+
     /**
      * Faz o "post" do lançamento:
      * - recalcula balanceamento
@@ -27,6 +29,13 @@ class PostJournalEntry
 
             if (! $wallet) {
                 throw new RuntimeException('Lançamento sem wallet vinculada.');
+            }
+
+            if ($requireFullyClassified) {
+                $readiness = $this->readiness->handle($wallet, $entry);
+                if (! $readiness->ready) {
+                    throw new RuntimeException('Não é possível postar: '.$readiness->reason);
+                }
             }
 
             // Recalcula balanceamento

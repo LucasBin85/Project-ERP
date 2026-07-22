@@ -69,7 +69,7 @@ function resolve(action: 'link' | 'keep') {
                 class="rounded border border-amber-700 px-2.5 py-1.5 font-semibold text-amber-100 hover:bg-amber-900 disabled:opacity-50"
                 @click="resolve('keep')"
             >
-                Manter OFX
+                Manter lançamento importado
             </button>
         </div>
 

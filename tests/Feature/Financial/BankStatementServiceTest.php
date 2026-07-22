@@ -296,7 +296,7 @@ it('builds a bank statement with complete draft and posted entries ordered from 
         ->and($transactions->pluck('accounting_status')->all())->toBe(['draft', 'posted', 'posted'])
         ->and($transactions->pluck('source')->all())->toBe(['ofx', 'manual', 'manual'])
         ->and($transactions->pluck('source_label')->all())->toBe(['OFX', 'Manual', 'Manual'])
-        ->and($transactions->pluck('reconciliation_status')->all())->toBe(['reconciled_via_ofx', 'reconciled', 'pending'])
+        ->and($transactions->pluck('reconciliation_status')->all())->toBe(['reconciled_via_import', 'reconciled', 'pending'])
         ->and($transactions->pluck('classification_status')->all())->toBe(['unclassified', 'classified', 'classified'])
         ->and($transactions->pluck('workflow_status')->all())->toBe(['pending_classification', 'posted', 'posted'])
         ->and($transactions->pluck('classification_label')->all())->toBe(['A classificar', 'Despesa Administrativa', 'Receita de Serviços'])

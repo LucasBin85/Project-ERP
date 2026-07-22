@@ -230,6 +230,7 @@ class CreditCardController extends Controller
                 Rule::exists('chart_of_accounts', 'id')
                     ->where('wallet_id', $wallet->id)
                     ->where('type', 'despesa')
+                    ->whereDoesntHave('children')
                     ->where('allows_posting', true),
             ],
             'purchase_date' => ['required', 'date'],
@@ -376,6 +377,7 @@ class CreditCardController extends Controller
         return ChartOfAccount::query()
             ->where('wallet_id', $walletId)
             ->where('type', 'despesa')
+            ->whereDoesntHave('children')
             ->where('allows_posting', true)
             ->orderBy('code')
             ->get(['id', 'code', 'name'])

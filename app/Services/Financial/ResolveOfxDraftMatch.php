@@ -39,10 +39,10 @@ class ResolveOfxDraftMatch
 
             if ((int) $bankAccount->wallet_id !== (int) $wallet->id
                 || (int) $entry->wallet_id !== (int) $wallet->id
-                || $entry->source !== 'ofx'
+                || ! in_array($entry->source, OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES, true)
                 || $entry->status !== 'draft') {
                 throw new OfxClassificationException(
-                    'Somente um lançamento OFX em rascunho da wallet ativa pode resolver vínculos.',
+                    'Somente um lançamento importado do extrato e em rascunho da wallet ativa pode resolver vínculos.',
                 );
             }
 
@@ -50,7 +50,7 @@ class ResolveOfxDraftMatch
             $bankLines = $lines->where('chart_of_account_id', $bankAccount->chart_of_account_id);
 
             if ($bankLines->count() !== 1) {
-                throw new OfxClassificationException('A linha bancária do lançamento OFX não pôde ser identificada.');
+                throw new OfxClassificationException('A linha bancária do lançamento importado não pôde ser identificada.');
             }
 
             /** @var JournalLine $bankLine */
@@ -85,7 +85,7 @@ class ResolveOfxDraftMatch
                 ->first();
 
             if (! $auditTransaction) {
-                throw new OfxClassificationException('Este lançamento OFX já teve seu vínculo resolvido.');
+                throw new OfxClassificationException('Este lançamento importado já teve seu vínculo resolvido.');
             }
 
             if (! $auditTransaction->journal_line_id) {
@@ -134,7 +134,7 @@ class ResolveOfxDraftMatch
 
             if ($hasReconciliationDependency) {
                 throw new OfxClassificationException(
-                    'O lançamento OFX já possui referência de conciliação e não pode ser substituído automaticamente.',
+                    'O lançamento importado já possui referência de conciliação e não pode ser substituído automaticamente.',
                 );
             }
 

@@ -627,7 +627,7 @@ it('reclassifies an already classified OFX draft without changing the bank line'
         ->and($classificationLineAfter->chart_of_account_id)->toBe($correctExpense->id)
         ->and($classificationLineAfter->type)->toBe('debit')
         ->and($classificationLineAfter->amount_cents)->toBe(31_500)
-        ->and($classificationLineAfter->memo)->toBe('Classificação OFX: '.$correctExpense->name)
+        ->and($classificationLineAfter->memo)->toBe('Classificação do extrato: '.$correctExpense->name)
         ->and($reclassified->lines->contains('chart_of_account_id', $firstExpense->id))->toBeFalse()
         ->and($reclassified->lines->where('type', 'debit')->sum('amount_cents'))->toBe(31_500)
         ->and($reclassified->lines->where('type', 'credit')->sum('amount_cents'))->toBe(31_500)
@@ -1128,4 +1128,15 @@ it('statement exposes the bulk suggestion counter data and endpoint returns a su
     $entry=classificationEntry($wallet,$bank,'out',1000); $rule=statementRule($wallet,['chart_of_account_id'=>$expense->id]);
     $this->actingAs($wallet->user)->withSession(['active_wallet'=>$wallet->id])->get(route('bank-accounts.statement',$bank))->assertInertia(fn($page)=>$page->where('transactions.0.classification_suggestion.rule_id',$rule->id));
     $this->post(route('bank-accounts.statement.bulk-apply-suggestions',$bank),['items'=>[['journal_entry_id'=>$entry->id,'rule_id'=>$rule->id]]])->assertSessionHas('classification_bulk_result.applied',1)->assertSessionHasNoErrors();
+});
+
+it('derives statement workflow statuses from classification readiness and posting state', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet); $expense=AccountingTestHelper::account($wallet,'5.9.106','Despesa status','despesa','debit');
+    $entry=classificationEntry($wallet,$bank,'out',3300);
+    $filters=new BankStatementFiltersDTO(bankAccountId:$bank->id,startDate:'2026-07-01',endDate:'2026-07-31');
+    expect(app(BankStatementService::class)->build($wallet,$filters)->transactions->first()['workflow_status'])->toBe('pending_classification');
+    classify($wallet,$bank,$entry,$expense);
+    expect(app(BankStatementService::class)->build($wallet,$filters)->transactions->first()['workflow_status'])->toBe('ready_for_accounting');
+    app(PostJournalEntry::class)->handle($entry->fresh());
+    expect(app(BankStatementService::class)->build($wallet,$filters)->transactions->first()['workflow_status'])->toBe('posted');
 });

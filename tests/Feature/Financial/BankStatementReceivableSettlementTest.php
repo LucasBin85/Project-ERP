@@ -13,6 +13,10 @@ use App\Services\Financial\CreateAndLinkAccountReceivableFromBankStatement;
 use App\Services\Accounting\CreateBankImportEntry;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\OfxOperationTypePolicy;
+use App\Services\Financial\BankAccountBalanceService;
+use App\Services\Accounting\PostJournalEntry;
+use App\Services\Accounting\IncomeStatementService;
+use App\Services\Accounting\BalanceSheetService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
@@ -33,14 +37,14 @@ function receivableSettlementContext(): array
     return compact('user', 'wallet', 'bankAccount', 'revenue', 'import');
 }
 
-function receivableMovement(array $context, int $amount = 25000, string $direction = 'in', string $type = OfxOperationTypePolicy::INCOME): array
+function receivableMovement(array $context, int $amount = 25000, string $direction = 'in', string $type = OfxOperationTypePolicy::INCOME, string $source = 'ofx'): array
 {
     static $sequence = 0;
     $sequence++;
     $entry = app(CreateBankImportEntry::class)->handle(
         wallet: $context['wallet'], bankAccountId: $context['bankAccount']->chart_of_account_id,
         amountCents: $amount, direction: $direction, entryDate: '2026-07-10', description: 'Receita OFX',
-        source: 'ofx', externalId: 'ofx:receivable:'.$sequence, autoPostIfBalanced: false,
+        source: $source, externalId: 'statement:receivable:'.$sequence, autoPostIfBalanced: false,
     );
     $bankLine = $entry->lines->firstWhere('chart_of_account_id', $context['bankAccount']->chart_of_account_id);
     $counterpart = $entry->lines->firstWhere('chart_of_account_id', $context['wallet']->suspense_account_id);
@@ -54,6 +58,15 @@ function receivableMovement(array $context, int $amount = 25000, string $directi
 
     return compact('entry', 'bankLine', 'counterpart', 'audit');
 }
+
+it('supports receivable candidates from CSV and PDF statement imports', function (string $source) {
+    $context = receivableSettlementContext();
+    $movement = receivableMovement($context, source: $source);
+    $candidate = receivableTitle($context);
+    $this->actingAs($context['user'])->withSession(['active_wallet' => $context['wallet']->id])
+        ->getJson(route('bank-accounts.statement.receivable-candidates', [$context['bankAccount'], $movement['entry']]))
+        ->assertOk()->assertJsonPath('candidates.0.id', $candidate->id);
+})->with(['csv', 'pdf']);
 
 function receivableTitle(array $context, array $attributes = []): AccountReceivable
 {
@@ -88,6 +101,7 @@ it('lists pending receivables of the same amount ordered by statement date proxi
 it('creates a receivable provision and links the current statement entry as its receipt', function () {
     $context = receivableSettlementContext();
     $movement = receivableMovement($context);
+    $operationalBefore = app(BankAccountBalanceService::class)->calculate($context['wallet'], $context['bankAccount'])['statement_balance_cents'];
     $customer = Customer::query()->create([
         'wallet_id' => $context['wallet']->id, 'name' => 'Cliente do extrato', 'active' => true,
         'receivable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->value('id'),
@@ -101,6 +115,13 @@ it('creates a receivable provision and links the current statement entry as its 
         ->and($receivable->provision_journal_entry_id)->not->toBeNull()
         ->and(JournalEntry::query()->count())->toBe(2)
         ->and($movement['entry']->fresh('lines')->lines->contains('chart_of_account_id', $context['wallet']->suspense_account_id))->toBeFalse();
+    app(PostJournalEntry::class)->handle($receivable->provisionJournalEntry);
+    app(PostJournalEntry::class)->handle($movement['entry']);
+    $dre = app(IncomeStatementService::class)->build($context['wallet'], '2026-01-01', '2026-12-31');
+    $balance = app(BalanceSheetService::class)->build($context['wallet'], '2026-12-31');
+    expect($dre->revenueCents())->toBe(25_000)
+        ->and($balance->differenceCents())->toBe(0)
+        ->and(app(BankAccountBalanceService::class)->calculate($context['wallet'], $context['bankAccount'])['statement_balance_cents'])->toBe($operationalBefore);
 });
 
 it('ignores a divergent date when creating a receivable from the statement endpoint', function () {

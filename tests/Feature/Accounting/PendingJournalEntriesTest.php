@@ -133,6 +133,19 @@ it('exposes a reusable readiness assessment based on current journal lines', fun
         ->and($pendingResult->reason)->toContain('A classificar');
 });
 
+it('prevents direct posting from bypassing analytical account readiness', function () {
+    $context = pendingJournalEntriesContext();
+    $synthetic = \App\Models\ChartOfAccount::query()->create([
+        'wallet_id' => $context['wallet']->id, 'code' => '5.99', 'name' => 'Grupo sintético',
+        'type' => 'despesa', 'normal_balance' => 'debit', 'allows_posting' => false,
+    ]);
+    $entry = AccountingTestHelper::createDraftEntry($context['wallet'], '2026-07-15', [
+        [$synthetic, 'debit', 4_000], [$context['bankAccount']->chartOfAccount, 'credit', 4_000],
+    ], 'manual');
+    expect(fn () => app(PostJournalEntry::class)->handle($entry))->toThrow(RuntimeException::class, 'contas analíticas');
+    expect($entry->fresh()->status)->toBe('draft');
+});
+
 it('posts selected ready entries and leaves unselected entries in draft', function () {
     $context = pendingJournalEntriesContext();
     $selected = AccountingTestHelper::createDraftEntry(

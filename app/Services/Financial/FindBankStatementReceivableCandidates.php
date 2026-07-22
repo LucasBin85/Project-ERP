@@ -48,8 +48,8 @@ class FindBankStatementReceivableCandidates
         if (! $bankAccount->is_active) {
             $this->fail('bank_account_id', 'A conta bancária precisa estar ativa para realizar o vínculo.');
         }
-        if ($entry->source !== 'ofx' || $entry->status !== 'draft') {
-            $this->fail('journal_entry_id', 'Somente movimentos OFX em rascunho podem ser vinculados a contas a receber.');
+        if (! in_array($entry->source, OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES, true) || $entry->status !== 'draft') {
+            $this->fail('journal_entry_id', 'Somente movimentos importados do extrato e em rascunho podem ser vinculados a contas a receber.');
         }
 
         $lines = $entry->lines()->get();
@@ -75,7 +75,7 @@ class FindBankStatementReceivableCandidates
             || $audit->operation_type !== OfxOperationTypePolicy::INCOME || $audit->direction !== 'in'
             || (int) $audit->amount_cents !== (int) $bankLine->amount_cents
             || $audit->posted_at?->toDateString() !== $entry->entry_date?->toDateString()) {
-            $this->fail('journal_entry_id', 'O movimento não é uma receita OFX de entrada válida.');
+            $this->fail('journal_entry_id', 'O movimento não é uma receita importada de entrada válida.');
         }
 
         return $bankLine;

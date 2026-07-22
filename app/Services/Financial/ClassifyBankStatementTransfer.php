@@ -20,7 +20,7 @@ class ClassifyBankStatementTransfer
         if (! $counterpart || (int) $counterpart->id === (int) $current->id) {
             throw new OfxClassificationException('Selecione outra conta bancária ativa da wallet como contraparte.');
         }
-        if (! in_array($entry->source, ['ofx', 'csv', 'pdf'], true) || $entry->status !== 'draft' || $entry->settledAccountPayable()->exists() || $entry->settledAccountReceivable()->exists()) {
+        if (! in_array($entry->source, OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES, true) || $entry->status !== 'draft' || $entry->settledAccountPayable()->exists() || $entry->settledAccountReceivable()->exists()) {
             throw new OfxClassificationException('Este lançamento não pode ser classificado como transferência.');
         }
         if (BankAccountTransfer::query()->where('journal_entry_id', $entry->id)->exists()) {
@@ -37,7 +37,7 @@ class ClassifyBankStatementTransfer
         $audit = BankStatementImportTransaction::query()->where('wallet_id', $wallet->id)
             ->where('bank_account_id', $current->id)->where('journal_entry_id', $entry->id)
             ->where('status', 'imported')->lockForUpdate()->first();
-        if (! $audit) throw new OfxClassificationException('A transferência deve ter origem em uma importação OFX válida.');
+        if (! $audit) throw new OfxClassificationException('A transferência deve ter origem em uma importação de extrato válida.');
 
         $classificationLine->update(['chart_of_account_id' => $counterpart->chart_of_account_id, 'memo' => 'Transferência bancária: '.$counterpart->name]);
         $audit->update(['journal_line_id' => $currentLine->id, 'classification_account_id' => $counterpart->chart_of_account_id, 'operation_type' => OfxOperationTypePolicy::TRANSFER]);

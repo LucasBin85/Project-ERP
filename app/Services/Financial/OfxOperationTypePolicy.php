@@ -11,6 +11,7 @@ use InvalidArgumentException;
 
 class OfxOperationTypePolicy
 {
+    public const STATEMENT_IMPORT_SOURCES = ['ofx', 'csv', 'pdf'];
     public const DIRECTION_IN = 'in';
 
     public const DIRECTION_OUT = 'out';

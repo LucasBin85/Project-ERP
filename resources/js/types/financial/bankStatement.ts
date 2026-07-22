@@ -1,7 +1,7 @@
 import type { FinancialOperationType } from '@/types/financial/operationType';
 
 export type JournalEntryStatus = 'draft' | 'posted';
-export type ReconciliationStatus = 'pending' | 'reconciled' | 'reconciled_via_ofx' | 'awaiting_counterpart_ofx';
+export type ReconciliationStatus = 'pending' | 'reconciled' | 'reconciled_via_import' | 'awaiting_counterpart_ofx';
 export type ClassificationStatus = 'classified' | 'unclassified';
 export type BankStatementWorkflowStatus = 'pending_classification' | 'classified' | 'pending_link' | 'ready_for_accounting' | 'posted';
 

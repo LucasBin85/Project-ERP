@@ -18,6 +18,10 @@ use App\Services\Accounting\CreateBankImportEntry;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\ClassifyOfxDraftEntry;
 use App\Services\Financial\OfxOperationTypePolicy;
+use App\Services\Financial\BankAccountBalanceService;
+use App\Services\Accounting\PostJournalEntry;
+use App\Services\Accounting\IncomeStatementService;
+use App\Services\Accounting\BalanceSheetService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
@@ -73,6 +77,7 @@ function payableSettlementMovement(
     string $date = '2026-07-10',
     string $direction = 'out',
     string $operationType = OfxOperationTypePolicy::PAYMENT,
+    string $source = 'ofx',
 ): array {
     static $sequence = 0;
     $sequence++;
@@ -91,7 +96,7 @@ function payableSettlementMovement(
         direction: $direction,
         entryDate: $date,
         description: 'Pagamento OFX '.$sequence,
-        source: 'ofx',
+        source: $source,
         externalId: 'ofx:payable:'.$wallet->id.':'.$sequence,
         autoPostIfBalanced: false,
     );
@@ -122,6 +127,15 @@ function payableSettlementMovement(
         'counterpart_line' => $counterpartLine,
     ];
 }
+
+it('supports payable candidates from CSV and PDF statement imports', function (string $source) {
+    $context = payableSettlementContext();
+    $movement = payableSettlementMovement($context, source: $source);
+    $candidate = payableSettlementPayable($context);
+    $this->actingAs($context['user'])->withSession(['active_wallet' => $context['wallet']->id])
+        ->getJson(route('bank-accounts.statement.payable-candidates', [$context['bankAccount'], $movement['entry']]))
+        ->assertOk()->assertJsonPath('candidates.0.id', $candidate->id);
+})->with(['csv', 'pdf']);
 
 /** @param array<string, mixed> $attributes */
 function payableSettlementPayable(array $context, array $attributes = []): AccountPayable
@@ -213,6 +227,7 @@ it('lists only pending payable candidates with the same wallet and amount ordere
 it('creates a payable provision and links the current statement entry as its payment', function () {
     $context = payableSettlementContext();
     $movement = payableSettlementMovement($context);
+    $operationalBefore = app(BankAccountBalanceService::class)->calculate($context['wallet'], $context['bankAccount'])['statement_balance_cents'];
     $supplier = Supplier::query()->create([
         'wallet_id' => $context['wallet']->id, 'name' => 'Fornecedor do extrato', 'active' => true,
         'payable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_payable')->where('allows_posting', true)->value('id'),
@@ -226,6 +241,13 @@ it('creates a payable provision and links the current statement entry as its pay
         ->and($payable->provision_journal_entry_id)->not->toBeNull()
         ->and(JournalEntry::query()->count())->toBe(2)
         ->and($movement['entry']->fresh('lines')->lines->contains('chart_of_account_id', $context['wallet']->suspense_account_id))->toBeFalse();
+    app(PostJournalEntry::class)->handle($payable->provisionJournalEntry);
+    app(PostJournalEntry::class)->handle($movement['entry']);
+    $dre = app(IncomeStatementService::class)->build($context['wallet'], '2026-01-01', '2026-12-31');
+    $balance = app(BalanceSheetService::class)->build($context['wallet'], '2026-12-31');
+    expect($dre->expenseCents())->toBe(25_000)
+        ->and($balance->differenceCents())->toBe(0)
+        ->and(app(BankAccountBalanceService::class)->calculate($context['wallet'], $context['bankAccount'])['statement_balance_cents'])->toBe($operationalBefore);
 });
 
 it('ignores a divergent date when creating a payable from the statement endpoint', function () {

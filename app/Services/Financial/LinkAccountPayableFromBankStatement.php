@@ -166,10 +166,10 @@ class LinkAccountPayableFromBankStatement
             $this->fail('bank_account_id', 'A conta bancária precisa estar ativa para realizar o vínculo.');
         }
 
-        if (! in_array($entry->source, ['ofx', 'csv', 'pdf'], true) || $entry->status !== 'draft') {
+        if (! in_array($entry->source, OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES, true) || $entry->status !== 'draft') {
             $this->fail(
                 'journal_entry_id',
-                'Somente movimentos OFX em rascunho podem ser vinculados a contas a pagar.',
+                'Somente movimentos importados do extrato e em rascunho podem ser vinculados a contas a pagar.',
             );
         }
 
@@ -190,7 +190,7 @@ class LinkAccountPayableFromBankStatement
             || $auditTransaction->direction !== 'out'
             || (int) $auditTransaction->amount_cents !== (int) $bankLine->amount_cents
             || $auditTransaction->posted_at?->toDateString() !== $entry->entry_date?->toDateString()) {
-            $this->fail('journal_entry_id', 'O movimento não é um pagamento OFX de saída válido.');
+            $this->fail('journal_entry_id', 'O movimento não é um pagamento importado de saída válido.');
         }
     }
 
