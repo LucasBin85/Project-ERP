@@ -192,6 +192,7 @@ class BankStatementController extends Controller
             'items' => ['required', 'array', 'min:1', 'max:500'],
             'items.*.journal_entry_id' => ['required', 'integer', 'distinct'],
             'items.*.rule_id' => ['nullable', 'integer'],
+            'items.*.suggestion_key' => ['nullable', 'string', 'max:100'],
         ]);
         $result = $service->execute($wallet, $bankAccount, $data['items']);
         return back()->with('classification_bulk_result', $result)->with(
@@ -249,7 +250,9 @@ class BankStatementController extends Controller
         abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id && (int) $journalEntry->wallet_id === (int) $wallet->id, 404);
         $bankLine = $journalEntry->lines()->where('chart_of_account_id', $bankAccount->chart_of_account_id)->firstOrFail();
         $suggestion = $suggestions->execute($wallet, $bankAccount, $bankLine);
-        if (! $suggestion || $suggestion['status'] !== 'suggested' || ! $suggestion['can_apply'] || (int) $suggestion['rule_id'] !== (int) $request->integer('rule_id')) {
+        if (! $suggestion || $suggestion['status'] !== 'suggested' || ! $suggestion['can_apply']
+            || ($request->filled('suggestion_key') && $suggestion['suggestion_key'] !== $request->string('suggestion_key')->toString())
+            || ($request->filled('rule_id') && (int) $suggestion['rule_id'] !== (int) $request->integer('rule_id'))) {
             return back()->withErrors(['suggestion' => 'A sugestão não está mais disponível. Revise a regra e tente novamente.']);
         }
         try {

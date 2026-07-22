@@ -15,7 +15,7 @@ class BulkApplyBankStatementClassificationSuggestions
         private readonly ClassifyOfxDraftEntry $classifier,
     ) {}
 
-    /** @param list<array{journal_entry_id:int, rule_id?:int|null}> $items */
+    /** @param list<array{journal_entry_id:int, rule_id?:int|null, suggestion_key?:string|null}> $items */
     public function execute(Wallet $wallet, BankAccount $bankAccount, array $items): array
     {
         abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id, 404);
@@ -37,11 +37,13 @@ class BulkApplyBankStatementClassificationSuggestions
 
                     $suggestion = $this->suggestions->execute($wallet, $bankAccount, $bankLine);
                     $expectedRule = filled($requested['rule_id'] ?? null) ? (int) $requested['rule_id'] : null;
+                    $expectedKey = filled($requested['suggestion_key'] ?? null) ? (string) $requested['suggestion_key'] : null;
                     if (! $suggestion || $suggestion['status'] !== 'suggested') {
                         return $expectedRule ? $this->failed($entryId, 'A sugestão mudou ou a regra não está mais válida.') : $this->ignored($entryId, 'Sem sugestão única e válida.');
                     }
                     if ($expectedRule && (int) $suggestion['rule_id'] !== $expectedRule) return $this->failed($entryId, 'A regra sugerida mudou desde a abertura do Extrato.');
-                    if (! $suggestion['can_apply']) return $this->ignored($entryId, 'A sugestão exige seleção ou criação manual de título.');
+                    if ($expectedKey && $suggestion['suggestion_key'] !== $expectedKey) return $this->failed($entryId, 'A sugestão histórica mudou desde a abertura do Extrato.');
+                    if (! ($suggestion['can_bulk_apply'] ?? false)) return $this->ignored($entryId, 'A sugestão não possui alta confiança para aplicação em lote.');
 
                     $this->classifier->execute($wallet, $bankAccount, $entry, new OfxClassificationDTO(
                         $suggestion['operation_type'], $suggestion['chart_of_account_id'], false,

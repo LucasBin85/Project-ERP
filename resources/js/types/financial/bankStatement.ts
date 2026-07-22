@@ -53,6 +53,11 @@ export interface BankStatementTransaction {
         chart_of_account_id?: number | null;
         target_label?: string | null;
         can_apply?: boolean;
+        can_bulk_apply?: boolean;
+        source?: 'rule' | 'history' | 'supplier' | 'investment';
+        confidence?: 'high' | 'medium' | 'low';
+        suggestion_key?: string;
+        history_count?: number;
     } | null;
     operation_type: FinancialOperationType | null;
     allowed_operation_types: FinancialOperationType[];

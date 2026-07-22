@@ -7,8 +7,8 @@ function remove(id:number) { if(confirm('Excluir esta regra?')) router.delete(ro
 </script>
 <template>
  <details class="rounded-xl border border-gray-700 bg-gray-950 p-4">
-  <summary class="cursor-pointer font-bold text-white">Regras de classificação ({{ rules.length }})</summary>
-  <p v-if="!rules.length" class="mt-3 text-sm text-gray-400">Crie uma regra a partir de um lançamento do Extrato.</p>
+  <summary class="cursor-pointer font-bold text-white">Regras manuais avançadas ({{ rules.length }})</summary>
+  <p v-if="!rules.length" class="mt-3 text-sm text-gray-400">O sistema aprende com o histórico automaticamente. Use regras manuais apenas para exceções e prioridades explícitas.</p>
   <div v-else class="mt-3 divide-y divide-gray-800">
    <div v-for="rule in rules" :key="rule.id" class="flex flex-wrap items-center gap-3 py-3 text-sm">
     <div class="min-w-48 flex-1"><b class="text-white">{{ rule.name }}</b><p class="text-gray-400">{{ rule.match_mode }} “{{ rule.match_text }}” · {{ rule.operation_type }} → {{ rule.target_label }}</p></div>

@@ -1140,3 +1140,58 @@ it('derives statement workflow statuses from classification readiness and postin
     app(PostJournalEntry::class)->handle($entry->fresh());
     expect(app(BankStatementService::class)->build($wallet,$filters)->transactions->first()['workflow_status'])->toBe('posted');
 });
+
+it('learns a medium-confidence historical suggestion after one manual classification and applies it individually', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet); $expense=AccountingTestHelper::account($wallet,'5.9.107','Energia CEEE','despesa','debit');
+    $past=classificationEntry($wallet,$bank,'out',1000); classify($wallet,$bank,$past,$expense);
+    $current=classificationEntry($wallet,$bank,'out',2000); $suggestion=suggestionFor($wallet,$bank,$current);
+    expect($suggestion)->toMatchArray(['status'=>'suggested','source'=>'history','confidence'=>'medium','chart_of_account_id'=>$expense->id,'can_apply'=>true,'can_bulk_apply'=>false]);
+    $this->actingAs($wallet->user)->withSession(['active_wallet'=>$wallet->id])
+        ->get(route('bank-accounts.statement',$bank))->assertInertia(fn($page)=>$page
+            ->where('transactions.0.classification_suggestion.source','history')
+            ->where('transactions.0.classification_suggestion.confidence','medium'));
+    $this->post(route('bank-accounts.statement.apply-suggestion',[$bank,$current]),['suggestion_key'=>$suggestion['suggestion_key']])->assertSessionHasNoErrors();
+    expect(classificationAudit($current)->classification_account_id)->toBe($expense->id);
+});
+
+it('marks divergent history as ambiguous and keeps it out of bulk application', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet);
+    $first=AccountingTestHelper::account($wallet,'5.9.108','Energia','despesa','debit'); $second=AccountingTestHelper::account($wallet,'5.9.109','Manutenção','despesa','debit');
+    classify($wallet,$bank,classificationEntry($wallet,$bank,'out',1000),$first);
+    classify($wallet,$bank,classificationEntry($wallet,$bank,'out',2000),$second);
+    $current=classificationEntry($wallet,$bank,'out',3000); $suggestion=suggestionFor($wallet,$bank,$current);
+    expect($suggestion)->toMatchArray(['status'=>'ambiguous','source'=>'history','can_apply'=>false]);
+    $result=app(BulkApplyBankStatementClassificationSuggestions::class)->execute($wallet,$bank,[['journal_entry_id'=>$current->id]]);
+    expect($result)->toMatchArray(['applied'=>0,'ignored'=>1,'failed'=>0]);
+});
+
+it('bulk applies only repeated high-confidence history in the active wallet and compatible direction', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet); $expense=AccountingTestHelper::account($wallet,'5.9.110','Telefonia Vivo','despesa','debit');
+    classify($wallet,$bank,classificationEntry($wallet,$bank,'out',1000),$expense);
+    classify($wallet,$bank,classificationEntry($wallet,$bank,'out',2000),$expense);
+    $current=classificationEntry($wallet,$bank,'out',3000); $suggestion=suggestionFor($wallet,$bank,$current);
+    expect($suggestion)->toMatchArray(['source'=>'history','confidence'=>'high','can_bulk_apply'=>true]);
+    $result=app(BulkApplyBankStatementClassificationSuggestions::class)->execute($wallet,$bank,[['journal_entry_id'=>$current->id,'suggestion_key'=>$suggestion['suggestion_key']]]);
+    expect($result)->toMatchArray(['applied'=>1,'ignored'=>0,'failed'=>0]);
+    $foreign=classificationWallet(); $foreignBank=classificationBankAccount($foreign); $foreignCurrent=classificationEntry($foreign,$foreignBank,'out',3000);
+    expect(suggestionFor($foreign,$foreignBank,$foreignCurrent))->toBeNull();
+    $incoming=classificationEntry($wallet,$bank,'in',3000);
+    expect(suggestionFor($wallet,$bank,$incoming))->toBeNull();
+});
+
+it('manual rules remain advanced overrides and win over historical suggestions', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet);
+    $historical=AccountingTestHelper::account($wallet,'5.9.111','Histórica','despesa','debit'); $manual=AccountingTestHelper::account($wallet,'5.9.112','Regra manual','despesa','debit');
+    classify($wallet,$bank,classificationEntry($wallet,$bank,'out',1000),$historical);
+    statementRule($wallet,['name'=>'Exceção manual','chart_of_account_id'=>$manual->id]);
+    $suggestion=suggestionFor($wallet,$bank,classificationEntry($wallet,$bank,'out',2000));
+    expect($suggestion)->toMatchArray(['source'=>'rule','confidence'=>'high','chart_of_account_id'=>$manual->id]);
+});
+
+it('ignores historical targets that are synthetic or no longer valid', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet);
+    $past=classificationEntry($wallet,$bank,'out',1000);
+    $synthetic=ChartOfAccount::query()->where('wallet_id',$wallet->id)->where('type','despesa')->where('allows_posting',false)->firstOrFail();
+    classificationAudit($past)->update(['operation_type'=>'expense','classification_account_id'=>$synthetic->id]);
+    expect(suggestionFor($wallet,$bank,classificationEntry($wallet,$bank,'out',2000)))->toBeNull();
+});

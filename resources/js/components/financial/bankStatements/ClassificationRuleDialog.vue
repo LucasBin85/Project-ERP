@@ -20,7 +20,7 @@ function show() { const words=(props.transaction.description??'').trim().split(/
 function submit() { form.post(route('bank-statement-classification-rules.store'), { preserveScroll:true, onSuccess:()=>open.value=false }); }
 </script>
 <template>
-  <button type="button" class="mt-2 text-xs font-semibold text-indigo-300 hover:underline" @click="show">Criar regra para lançamentos parecidos</button>
+  <button type="button" class="mt-2 text-xs text-gray-500 hover:text-indigo-300 hover:underline" @click="show">Opção avançada: criar regra manual</button>
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" @click.self="open=false">
     <form class="w-full max-w-lg space-y-4 rounded-xl border border-gray-700 bg-gray-950 p-6" @submit.prevent="submit">
       <h3 class="text-lg font-bold text-white">Criar regra de classificação</h3>

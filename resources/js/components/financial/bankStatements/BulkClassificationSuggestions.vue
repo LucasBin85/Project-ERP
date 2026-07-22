@@ -8,11 +8,11 @@ import { route } from 'ziggy-js';
 const props = defineProps<{ transactions: BankStatementTransaction[]; bankAccount: BankStatementAccount }>();
 const open = ref(false);
 const processing = ref(false);
-const applicable = computed(() => props.transactions.filter((item) => item.classification_suggestion?.status === 'suggested' && item.classification_suggestion.can_apply && item.accounting_status === 'draft' && item.classification_status === 'unclassified'));
+const applicable = computed(() => props.transactions.filter((item) => item.classification_suggestion?.status === 'suggested' && item.classification_suggestion.can_bulk_apply && item.accounting_status === 'draft' && item.classification_status === 'unclassified'));
 function confirm() {
     processing.value = true;
     router.post(route('bank-accounts.statement.bulk-apply-suggestions', props.bankAccount.id), {
-        items: applicable.value.map((item) => ({ journal_entry_id: item.journal_entry_id, rule_id: item.classification_suggestion?.rule_id })),
+        items: applicable.value.map((item) => ({ journal_entry_id: item.journal_entry_id, rule_id: item.classification_suggestion?.rule_id, suggestion_key: item.classification_suggestion?.suggestion_key })),
     }, { preserveScroll: true, onSuccess: () => open.value = false, onFinish: () => processing.value = false });
 }
 </script>
