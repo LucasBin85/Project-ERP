@@ -161,6 +161,7 @@ onBeforeUnmount(() => {
                 >
                     Resumo da conta
                 </Link>
+                <Link v-if="selectedBankAccount" :href="route('bank-accounts.closing.show',{bankAccount:selectedBankAccount.id,start_date:form.start_date,end_date:form.end_date})" class="rounded-lg border border-indigo-500/60 px-4 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-950/30">Conferir período</Link>
 
                 <button
                     type="button"

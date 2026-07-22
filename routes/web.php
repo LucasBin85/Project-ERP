@@ -16,6 +16,7 @@ use App\Http\Controllers\Financial\BankReconciliationController;
 use App\Http\Controllers\Financial\BankStatementController;
 use App\Http\Controllers\Financial\BankStatementSettlementController;
 use App\Http\Controllers\Financial\BankStatementClassificationRuleController;
+use App\Http\Controllers\Financial\BankStatementClosingController;
 use App\Http\Controllers\Financial\BankTransferController;
 use App\Http\Controllers\Financial\CashFlowController;
 use App\Http\Controllers\Financial\CreditCardController;
@@ -92,6 +93,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('financial')->group(function () {
         Route::get('bank-accounts/{bankAccount}/statement', [BankStatementController::class, 'show'])
             ->name('bank-accounts.statement');
+        Route::get('bank-accounts/{bankAccount}/closing', [BankStatementClosingController::class, 'show'])->name('bank-accounts.closing.show');
+        Route::post('bank-accounts/{bankAccount}/closing/apply-suggestions', [BankStatementClosingController::class, 'applySuggestions'])->name('bank-accounts.closing.apply-suggestions');
+        Route::post('bank-accounts/{bankAccount}/closing/post-ready', [BankStatementClosingController::class, 'postReady'])->name('bank-accounts.closing.post-ready');
 
         Route::post('bank-accounts/{bankAccount}/statement/bulk-post', [BankStatementController::class, 'bulkPost'])
             ->name('bank-accounts.statement.bulk-post');
