@@ -3,6 +3,7 @@ import BankStatementDateRangeFilter from '@/components/financial/bankStatements/
 import BankStatementTable from '@/components/financial/bankStatements/BankStatementTable.vue';
 import OfxImportDialog from '@/components/financial/ofxImports/OfxImportDialog.vue';
 import ClassificationRulesPanel from '@/components/financial/bankStatements/ClassificationRulesPanel.vue';
+import BulkClassificationSuggestions from '@/components/financial/bankStatements/BulkClassificationSuggestions.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -29,6 +30,7 @@ const props = defineProps<{
     summary: { opening_balance_cents: number; total_inflows_cents: number; total_outflows_cents: number; closing_balance_cents: number };
     classificationAccounts: BankStatementClassificationAccount[];
     classificationRules: Array<Record<string, unknown>>;
+    classificationBulkResult?: { applied: number; ignored: number; failed: number; items: Array<{ status: string; journal_entry_id: number; message: string }> } | null;
     operationTypes: FinancialOperationTypeOption[];
     settlementParties: { suppliers: Array<{ id: number; name: string }>; customers: Array<{ id: number; name: string }> };
     operational: BankStatementOperational;
@@ -188,6 +190,11 @@ onBeforeUnmount(() => {
                 {{ flash.success }}
             </div>
 
+            <div v-if="classificationBulkResult" class="rounded-2xl border border-indigo-500/30 bg-indigo-950/30 px-4 py-3 text-sm text-indigo-100">
+                <b>{{ classificationBulkResult.applied }} aplicadas · {{ classificationBulkResult.ignored }} ignoradas · {{ classificationBulkResult.failed }} falhas</b>
+                <details v-if="classificationBulkResult.ignored || classificationBulkResult.failed" class="mt-2"><summary class="cursor-pointer text-xs">Ver detalhes</summary><ul class="mt-2 space-y-1 text-xs text-gray-300"><li v-for="item in classificationBulkResult.items.filter(item => item.status !== 'applied')" :key="`${item.journal_entry_id}-${item.status}`">JE-{{ String(item.journal_entry_id).padStart(6,'0') }}: {{ item.message }}</li></ul></details>
+            </div>
+
             <div
                 v-if="feedbackError"
                 role="alert"
@@ -205,6 +212,7 @@ onBeforeUnmount(() => {
                             prontos para a Contabilidade.
                         </p>
                     </div>
+                    <BulkClassificationSuggestions v-if="selectedBankAccount" :transactions="transactions" :bank-account="selectedBankAccount" />
                 </template>
 
                 <div class="grid grid-cols-2 gap-px border-b border-gray-700 bg-gray-700 md:grid-cols-4">

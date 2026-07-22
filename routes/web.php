@@ -95,6 +95,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/bulk-post', [BankStatementController::class, 'bulkPost'])
             ->name('bank-accounts.statement.bulk-post');
+        Route::post('bank-accounts/{bankAccount}/statement/bulk-apply-suggestions', [BankStatementController::class, 'bulkApplySuggestions'])
+            ->name('bank-accounts.statement.bulk-apply-suggestions');
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/classify', [BankStatementController::class, 'classify'])
             ->name('bank-accounts.statement.classify');

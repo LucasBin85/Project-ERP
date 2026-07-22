@@ -23,6 +23,9 @@ use App\Services\Financial\ResolveOfxDraftMatch;
 use App\Services\Financial\FindMatchingOfxTransferEntries;
 use App\Services\Financial\MergeBankTransferOfxEntries;
 use App\Services\Financial\SuggestBankStatementClassification;
+use App\Services\Financial\BulkApplyBankStatementClassificationSuggestions;
+use App\Models\Supplier;
+use App\Models\Customer;
 use App\Services\Accounting\BuildPendingJournalEntries;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
@@ -1065,4 +1068,64 @@ it('rejects an inconsistent rule and lists valid rules on the statement', functi
     $this->actingAs($wallet->user)->withSession(['active_wallet'=>$wallet->id])->post(route('bank-statement-classification-rules.store'), $payload)->assertSessionHasErrors('direction');
     $rule = statementRule($wallet, ['name' => 'Regra visível', 'chart_of_account_id' => $expense->id]);
     $this->get(route('bank-accounts.statement', $bank))->assertInertia(fn ($page) => $page->component('Financial/BankStatements/Index')->where('classificationRules.0.id', $rule->id));
+});
+
+it('bulk applies safe expense income fee investment and transfer suggestions', function (string $direction, string $operation, string $code, string $type, string $normal, ?string $group) {
+    $wallet = classificationWallet(); $bank = classificationBankAccount($wallet); $entry = classificationEntry($wallet, $bank, $direction, 2500);
+    $attributes = ['operation_type' => $operation];
+    if ($operation === OfxOperationTypePolicy::TRANSFER) {
+        $counterpart = FinancialTestHelper::bankAccount($wallet, $code, 'Contraparte lote');
+        $attributes['bank_account_id'] = $counterpart->id;
+    } else {
+        $target = $operation === OfxOperationTypePolicy::INVESTMENT
+            ? classificationInvestmentAccount($wallet)
+            : AccountingTestHelper::account($wallet, $code, 'Destino lote', $type, $normal);
+        if ($group && $operation !== OfxOperationTypePolicy::INVESTMENT) $target->update(['financial_group' => $group]);
+        $attributes[$operation === OfxOperationTypePolicy::INVESTMENT ? 'investment_account_id' : 'chart_of_account_id'] = $target->id;
+    }
+    $rule = statementRule($wallet, $attributes);
+    $result = app(BulkApplyBankStatementClassificationSuggestions::class)->execute($wallet, $bank, [['journal_entry_id'=>$entry->id,'rule_id'=>$rule->id]]);
+    expect($result)->toMatchArray(['applied'=>1,'ignored'=>0,'failed'=>0])->and($entry->fresh()->status)->toBe('draft')->and($entry->lines()->where('chart_of_account_id',$wallet->suspense_account_id)->exists())->toBeFalse();
+})->with([
+    'expense' => ['out','expense','5.9.101','despesa','debit',null],
+    'income' => ['in','income','4.9.101','receita','credit',null],
+    'fee' => ['out','fee','5.9.102','despesa','debit',null],
+    'investment' => ['out','investment','1.3.101','ativo','debit','investments'],
+    'transfer' => ['out','transfer','1.1.2.9101','ativo','debit','available'],
+]);
+
+it('bulk ignores ambiguous posted and already classified entries', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet); $expense=AccountingTestHelper::account($wallet,'5.9.103','Despesa lote','despesa','debit');
+    $ambiguous=classificationEntry($wallet,$bank,'out',1000); statementRule($wallet,['chart_of_account_id'=>$expense->id,'priority'=>5]); statementRule($wallet,['name'=>'Empate lote','chart_of_account_id'=>$expense->id,'priority'=>5]);
+    $posted=classificationEntry($wallet,$bank,'out',1000); $posted->update(['status'=>'posted','posted_at'=>now()]);
+    $classified=classificationEntry($wallet,$bank,'out',1000); classify($wallet,$bank,$classified,$expense);
+    $result=app(BulkApplyBankStatementClassificationSuggestions::class)->execute($wallet,$bank,array_map(fn($entry)=>['journal_entry_id'=>$entry->id],[$ambiguous,$posted,$classified]));
+    expect($result)->toMatchArray(['applied'=>0,'ignored'=>3,'failed'=>0]);
+});
+
+it('bulk ignores payment and customer receipt suggestions that require a title', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet);
+    $expense=$wallet->chartOfAccounts()->where('type','despesa')->where('allows_posting',true)->firstOrFail();
+    $revenue=$wallet->chartOfAccounts()->where('type','receita')->where('allows_posting',true)->firstOrFail();
+    $supplier=Supplier::query()->create(['wallet_id'=>$wallet->id,'name'=>'Fornecedor lote','active'=>true,'payable_account_id'=>$wallet->chartOfAccounts()->where('financial_group','accounts_payable')->where('allows_posting',true)->value('id'),'default_expense_account_id'=>$expense->id]);
+    $customer=Customer::query()->create(['wallet_id'=>$wallet->id,'name'=>'Cliente lote','active'=>true,'receivable_account_id'=>$wallet->chartOfAccounts()->where('financial_group','accounts_receivable')->where('allows_posting',true)->value('id'),'default_revenue_account_id'=>$revenue->id]);
+    $payment=classificationEntry($wallet,$bank,'out',1000); statementRule($wallet,['name'=>'Pagamento lote','operation_type'=>'payment','supplier_id'=>$supplier->id,'direction'=>'out']);
+    $receipt=classificationEntry($wallet,$bank,'in',1000); statementRule($wallet,['name'=>'Recebimento lote','operation_type'=>'income','customer_id'=>$customer->id,'direction'=>'in','priority'=>10]);
+    $result=app(BulkApplyBankStatementClassificationSuggestions::class)->execute($wallet,$bank,[['journal_entry_id'=>$payment->id],['journal_entry_id'=>$receipt->id]]);
+    expect($result)->toMatchArray(['applied'=>0,'ignored'=>2,'failed'=>0]);
+});
+
+it('bulk reports a stale rule failure without stopping later items', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet); $expense=AccountingTestHelper::account($wallet,'5.9.104','Despesa restante','despesa','debit');
+    $staleEntry=classificationEntry($wallet,$bank,'out',1000); $stale=statementRule($wallet,['chart_of_account_id'=>$expense->id]); $stale->delete();
+    $validEntry=classificationEntry($wallet,$bank,'out',2000); $valid=statementRule($wallet,['name'=>'Válida lote','chart_of_account_id'=>$expense->id]);
+    $result=app(BulkApplyBankStatementClassificationSuggestions::class)->execute($wallet,$bank,[['journal_entry_id'=>$staleEntry->id,'rule_id'=>$stale->id],['journal_entry_id'=>$validEntry->id,'rule_id'=>$valid->id]]);
+    expect($result)->toMatchArray(['applied'=>1,'ignored'=>0,'failed'=>1])->and($result['items'][0]['message'])->toContain('regra');
+});
+
+it('statement exposes the bulk suggestion counter data and endpoint returns a summary', function () {
+    $wallet=classificationWallet(); $bank=classificationBankAccount($wallet); $expense=AccountingTestHelper::account($wallet,'5.9.105','Despesa UI lote','despesa','debit');
+    $entry=classificationEntry($wallet,$bank,'out',1000); $rule=statementRule($wallet,['chart_of_account_id'=>$expense->id]);
+    $this->actingAs($wallet->user)->withSession(['active_wallet'=>$wallet->id])->get(route('bank-accounts.statement',$bank))->assertInertia(fn($page)=>$page->where('transactions.0.classification_suggestion.rule_id',$rule->id));
+    $this->post(route('bank-accounts.statement.bulk-apply-suggestions',$bank),['items'=>[['journal_entry_id'=>$entry->id,'rule_id'=>$rule->id]]])->assertSessionHas('classification_bulk_result.applied',1)->assertSessionHasNoErrors();
 });

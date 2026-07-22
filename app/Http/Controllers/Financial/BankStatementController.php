@@ -17,6 +17,7 @@ use App\Models\Supplier;
 use App\Models\Customer;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\BulkPostOfxDraftEntries;
+use App\Services\Financial\BulkApplyBankStatementClassificationSuggestions;
 use App\Services\Financial\ClassifyOfxDraftEntry;
 use App\Services\Financial\MergeBankTransferOfxEntries;
 use App\Services\Financial\OfxOperationTypePolicy;
@@ -83,6 +84,7 @@ class BankStatementController extends Controller
             ],
             'ofxPreview' => $request->session()->get('ofx_preview'),
             'bulkPostResult' => $request->session()->get('ofx_bulk_post_result'),
+            'classificationBulkResult' => $request->session()->get('classification_bulk_result'),
             'classificationRules' => $wallet->classificationRules()->with(['chartOfAccount:id,name', 'bankAccount:id,name', 'supplier:id,name', 'customer:id,name', 'investmentAccount:id,name'])->orderByDesc('priority')->get()->map(fn ($rule) => [
                 ...$rule->toArray(),
                 'target_label' => $rule->investmentAccount?->name ?? $rule->bankAccount?->name ?? $rule->chartOfAccount?->name ?? $rule->supplier?->name ?? $rule->customer?->name,
@@ -179,6 +181,21 @@ class BankStatementController extends Controller
                 : ($data['chart_of_account_id'] ?? null
                     ? 'Lançamento OFX classificado com sucesso.'
                     : 'Tipo de operação atualizado com sucesso.'),
+        );
+    }
+
+    public function bulkApplySuggestions(Request $request, BankAccount $bankAccount, BulkApplyBankStatementClassificationSuggestions $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id, 404);
+        $data = $request->validate([
+            'items' => ['required', 'array', 'min:1', 'max:500'],
+            'items.*.journal_entry_id' => ['required', 'integer', 'distinct'],
+            'items.*.rule_id' => ['nullable', 'integer'],
+        ]);
+        $result = $service->execute($wallet, $bankAccount, $data['items']);
+        return back()->with('classification_bulk_result', $result)->with(
+            'success', "{$result['applied']} sugestões aplicadas; {$result['ignored']} ignoradas; {$result['failed']} falhas.",
         );
     }
 
