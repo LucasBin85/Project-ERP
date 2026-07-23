@@ -9,7 +9,6 @@ use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPayment;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
-use App\Services\Accounting\PostJournalEntry;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -17,10 +16,8 @@ class PayCreditCardInvoice
 {
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
-        private readonly PostJournalEntry $postJournalEntry,
         private readonly ResolveCreditCardInvoice $resolveCreditCardInvoice,
-    ) {
-    }
+    ) {}
 
     public function execute(Wallet $wallet, CreditCardPaymentDTO $dto): CreditCardPayment
     {
@@ -45,6 +42,12 @@ class PayCreditCardInvoice
             if (in_array($invoice->status, ['paid', 'cancelled'], true)) {
                 throw ValidationException::withMessages([
                     'credit_card_invoice_id' => 'Esta fatura não aceita novos pagamentos.',
+                ]);
+            }
+
+            if ($dto->amountCents > $invoice->balance_cents) {
+                throw ValidationException::withMessages([
+                    'amount_cents' => 'O pagamento não pode ser maior que o saldo em aberto da fatura.',
                 ]);
             }
 
@@ -85,8 +88,6 @@ class PayCreditCardInvoice
                 ],
             ]);
 
-            $journalEntry = $this->postJournalEntry->handle($journalEntry);
-
             $payment = CreditCardPayment::query()->create([
                 'wallet_id' => $wallet->id,
                 'credit_card_id' => $creditCard->id,
@@ -96,7 +97,7 @@ class PayCreditCardInvoice
                 'payment_date' => $dto->paymentDate,
                 'amount_cents' => $dto->amountCents,
                 'description' => $description,
-                'status' => 'posted',
+                'status' => 'draft',
                 'notes' => $dto->notes,
             ]);
 

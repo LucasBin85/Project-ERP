@@ -12,6 +12,7 @@ use InvalidArgumentException;
 class OfxOperationTypePolicy
 {
     public const STATEMENT_IMPORT_SOURCES = ['ofx', 'csv', 'pdf'];
+
     public const DIRECTION_IN = 'in';
 
     public const DIRECTION_OUT = 'out';
@@ -30,6 +31,8 @@ class OfxOperationTypePolicy
 
     public const OTHER = 'other';
 
+    public const CREDIT_CARD_PAYMENT = 'credit_card_payment';
+
     /**
      * @return list<array{code: string, label: string, classification_enabled: bool}>
      */
@@ -44,6 +47,11 @@ class OfxOperationTypePolicy
             [
                 'code' => self::PAYMENT,
                 'label' => 'Pagamento',
+                'classification_enabled' => false,
+            ],
+            [
+                'code' => self::CREDIT_CARD_PAYMENT,
+                'label' => 'Pagamento de fatura de cartão',
                 'classification_enabled' => false,
             ],
             [
@@ -94,6 +102,7 @@ class OfxOperationTypePolicy
             fn (string $operationType) => match ($direction) {
                 self::DIRECTION_IN => ! in_array($operationType, [
                     self::PAYMENT,
+                    self::CREDIT_CARD_PAYMENT,
                     self::EXPENSE,
                     self::FEE,
                 ], true),
@@ -134,7 +143,7 @@ class OfxOperationTypePolicy
     {
         $this->assertValidOperationType($operationType);
 
-        return $operationType !== self::PAYMENT;
+        return ! in_array($operationType, [self::PAYMENT, self::CREDIT_CARD_PAYMENT], true);
     }
 
     /**
@@ -168,7 +177,7 @@ class OfxOperationTypePolicy
             self::INCOME => $query->where('type', 'receita'),
             self::INVESTMENT => $query->where('type', 'ativo')->where('financial_group', 'investments'),
             self::OTHER => $query,
-            self::PAYMENT => $query->whereRaw('1 = 0'),
+            self::PAYMENT, self::CREDIT_CARD_PAYMENT => $query->whereRaw('1 = 0'),
         };
     }
 
@@ -281,7 +290,7 @@ class OfxOperationTypePolicy
                 && $account->financial_group === 'investments'
                 && $this->isDescendantOfInvestments($account),
             self::OTHER => true,
-            self::PAYMENT => false,
+            self::PAYMENT, self::CREDIT_CARD_PAYMENT => false,
         };
     }
 

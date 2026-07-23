@@ -229,7 +229,7 @@ class CreditCardController extends Controller
                 'integer',
                 Rule::exists('chart_of_accounts', 'id')
                     ->where('wallet_id', $wallet->id)
-                    ->where('type', 'despesa')
+                    ->whereIn('type', ['despesa', 'ativo'])
                     ->whereDoesntHave('children')
                     ->where('allows_posting', true),
             ],
@@ -294,13 +294,13 @@ class CreditCardController extends Controller
         $transactions = CreditCardTransaction::query()
             ->where('wallet_id', $walletId)
             ->whereHas('creditCard', fn ($query) => $query->where('liability_account_id', $liabilityAccountId))
-            ->where('status', 'posted')
+            ->whereIn('status', ['draft', 'posted'])
             ->sum('amount_cents');
 
         $payments = CreditCardPayment::query()
             ->where('wallet_id', $walletId)
             ->whereHas('creditCard', fn ($query) => $query->where('liability_account_id', $liabilityAccountId))
-            ->where('status', 'posted')
+            ->whereIn('status', ['draft', 'posted'])
             ->sum('amount_cents');
 
         return (int) $transactions - (int) $payments;
@@ -340,7 +340,7 @@ class CreditCardController extends Controller
                 $amount = CreditCardTransaction::query()
                     ->where('wallet_id', $walletId)
                     ->where('credit_card_id', $card->id)
-                    ->where('status', 'posted')
+                    ->whereIn('status', ['draft', 'posted'])
                     ->sum('amount_cents');
 
                 return [
@@ -376,9 +376,10 @@ class CreditCardController extends Controller
     {
         return ChartOfAccount::query()
             ->where('wallet_id', $walletId)
-            ->where('type', 'despesa')
+            ->whereIn('type', ['despesa', 'ativo'])
             ->whereDoesntHave('children')
             ->where('allows_posting', true)
+            ->whereNotIn('id', fn ($query) => $query->select('chart_of_account_id')->from('bank_accounts'))
             ->orderBy('code')
             ->get(['id', 'code', 'name'])
             ->map(fn (ChartOfAccount $account) => [

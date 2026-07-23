@@ -14,6 +14,7 @@ import InlineOfxOperationType from './InlineOfxOperationType.vue';
 import InlineOfxTransferMatch from './InlineOfxTransferMatch.vue';
 import InlinePayableSettlement from './InlinePayableSettlement.vue';
 import InlineReceivableSettlement from './InlineReceivableSettlement.vue';
+import InlineCreditCardInvoicePayment from './InlineCreditCardInvoicePayment.vue';
 
 const props = defineProps<{
     transactions: BankStatementTransaction[];
@@ -21,6 +22,7 @@ const props = defineProps<{
     classificationAccounts: BankStatementClassificationAccount[];
     operationTypes: FinancialOperationTypeOption[];
     settlementParties: { suppliers: Array<{ id: number; name: string }>; customers: Array<{ id: number; name: string }> };
+    creditCardInvoices: Array<Record<string, any>>;
 }>();
 
 function operationTypeLabel(transaction: BankStatementTransaction): string {
@@ -99,8 +101,14 @@ function operationTypeLabel(transaction: BankStatementTransaction): string {
             </td>
 
             <td class="px-4 py-3 text-sm">
+                <InlineCreditCardInvoicePayment
+                    v-if="transaction.operation_type === 'credit_card_payment' && transaction.accounting_status === 'draft'"
+                    :transaction="transaction"
+                    :bank-account="bankAccount"
+                    :invoices="creditCardInvoices"
+                />
                 <InlinePayableSettlement
-                    v-if="transaction.linked_account_payable || transaction.can_link_account_payable"
+                    v-else-if="transaction.linked_account_payable || transaction.can_link_account_payable"
                     :transaction="transaction"
                     :bank-account="bankAccount"
                     :suppliers="settlementParties.suppliers"

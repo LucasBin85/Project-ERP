@@ -18,6 +18,10 @@ const cards = [
     ['Saídas do mês', 'outflows_cents', 'red'], ['Resultado líquido do mês', 'net_result_cents', 'blue'],
     ['Contas a pagar em aberto', 'payables_open_cents', 'yellow'], ['Contas a receber em aberto', 'receivables_open_cents', 'green'],
     ['Investimentos', 'investments_cents', 'blue'],
+    ['Faturas em aberto', 'credit_card_open_cents', 'yellow'],
+    ['Faturas vencidas', 'credit_card_overdue_cents', 'red'],
+    ['Compras no cartão', 'credit_card_purchases_cents', 'yellow'],
+    ['Pagamentos de fatura', 'credit_card_payments_cents', 'green'],
 ];
 function refresh() { router.get(route('dashboard'), filters, { preserveState: true }); }
 </script>

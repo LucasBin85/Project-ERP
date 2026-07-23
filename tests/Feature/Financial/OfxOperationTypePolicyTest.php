@@ -102,6 +102,7 @@ it('limits operation types according to the bank movement direction', function (
         ->toBe([
             OfxOperationTypePolicy::TRANSFER,
             OfxOperationTypePolicy::PAYMENT,
+            OfxOperationTypePolicy::CREDIT_CARD_PAYMENT,
             OfxOperationTypePolicy::INVESTMENT,
             OfxOperationTypePolicy::EXPENSE,
             OfxOperationTypePolicy::FEE,

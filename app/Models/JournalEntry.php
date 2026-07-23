@@ -49,6 +49,16 @@ class JournalEntry extends Model
         return $this->hasOne(AccountReceivable::class, 'receipt_journal_entry_id');
     }
 
+    public function creditCardTransaction(): HasOne
+    {
+        return $this->hasOne(CreditCardTransaction::class);
+    }
+
+    public function creditCardPayment(): HasOne
+    {
+        return $this->hasOne(CreditCardPayment::class);
+    }
+
     /**
      * Recalcula is_balanced e balance_diff_cents (debit - credit)
      */

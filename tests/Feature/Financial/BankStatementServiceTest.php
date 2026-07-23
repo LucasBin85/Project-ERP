@@ -306,6 +306,7 @@ it('builds a bank statement with complete draft and posted entries ordered from 
             [
                 OfxOperationTypePolicy::TRANSFER,
                 OfxOperationTypePolicy::PAYMENT,
+                OfxOperationTypePolicy::CREDIT_CARD_PAYMENT,
                 OfxOperationTypePolicy::INVESTMENT,
                 OfxOperationTypePolicy::EXPENSE,
                 OfxOperationTypePolicy::FEE,
@@ -314,6 +315,7 @@ it('builds a bank statement with complete draft and posted entries ordered from 
             [
                 OfxOperationTypePolicy::TRANSFER,
                 OfxOperationTypePolicy::PAYMENT,
+                OfxOperationTypePolicy::CREDIT_CARD_PAYMENT,
                 OfxOperationTypePolicy::INVESTMENT,
                 OfxOperationTypePolicy::EXPENSE,
                 OfxOperationTypePolicy::FEE,

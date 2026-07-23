@@ -33,6 +33,7 @@ const props = defineProps<{
     classificationBulkResult?: { applied: number; ignored: number; failed: number; items: Array<{ status: string; journal_entry_id: number; message: string }> } | null;
     operationTypes: FinancialOperationTypeOption[];
     settlementParties: { suppliers: Array<{ id: number; name: string }>; customers: Array<{ id: number; name: string }> };
+    creditCardInvoices: Array<Record<string, any>>;
     operational: BankStatementOperational;
     ofxPreview?: OfxImportPreview | null;
     flash?: {
@@ -244,6 +245,7 @@ onBeforeUnmount(() => {
                     :classification-accounts="classificationAccounts"
                     :operation-types="operationTypes"
                     :settlement-parties="settlementParties"
+                    :credit-card-invoices="creditCardInvoices"
                 />
 
                 <div ref="loadMoreRef" class="border-t border-gray-700 p-6 text-center text-sm text-gray-400">

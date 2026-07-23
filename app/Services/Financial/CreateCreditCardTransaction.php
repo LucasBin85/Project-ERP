@@ -8,7 +8,6 @@ use App\Models\CreditCard;
 use App\Models\CreditCardTransaction;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
-use App\Services\Accounting\PostJournalEntry;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,10 +16,9 @@ class CreateCreditCardTransaction
 {
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
-        private readonly PostJournalEntry $postJournalEntry,
         private readonly ResolveCreditCardInvoice $resolveCreditCardInvoice,
-    ) {
-    }
+        private readonly CreateCreditCardInstallments $installments,
+    ) {}
 
     public function execute(Wallet $wallet, CreditCardTransactionDTO $dto): CreditCardTransaction
     {
@@ -35,9 +33,10 @@ class CreateCreditCardTransaction
 
             $expenseAccount = ChartOfAccount::query()
                 ->where('wallet_id', $wallet->id)
-                ->where('type', 'despesa')
+                ->whereIn('type', ['despesa', 'ativo'])
                 ->where('allows_posting', true)
                 ->whereDoesntHave('children')
+                ->whereNotIn('id', fn ($query) => $query->select('chart_of_account_id')->from('bank_accounts'))
                 ->find($dto->expenseAccountId);
 
             if (! $expenseAccount) {
@@ -47,7 +46,7 @@ class CreateCreditCardTransaction
             }
 
             $installmentsTotal = max(1, $dto->installmentsTotal);
-            $amounts = $this->splitAmount($dto->amountCents, $installmentsTotal);
+            $amounts = $this->installments->split($dto->amountCents, $installmentsTotal);
             $purchaseDate = CarbonImmutable::parse($dto->purchaseDate)->startOfDay();
             $firstTransaction = null;
             $invoices = collect();
@@ -63,7 +62,7 @@ class CreateCreditCardTransaction
                 $journalEntry = $this->createJournalEntry->execute([
                     'wallet_id' => $wallet->id,
                     'entry_date' => $installmentDate,
-                    'description' => 'Compra no cartão: ' . $description,
+                    'description' => 'Compra no cartão: '.$description,
                     'lines' => [
                         [
                             'chart_of_account_id' => $expenseAccount->id,
@@ -78,8 +77,6 @@ class CreateCreditCardTransaction
                     ],
                 ]);
 
-                $journalEntry = $this->postJournalEntry->handle($journalEntry);
-
                 $transaction = CreditCardTransaction::query()->create([
                     'parent_transaction_id' => $firstTransaction?->id,
                     'wallet_id' => $wallet->id,
@@ -93,7 +90,7 @@ class CreateCreditCardTransaction
                     'amount_cents' => $amountCents,
                     'installments_total' => $installmentsTotal,
                     'installment_number' => $installmentNumber,
-                    'status' => 'posted',
+                    'status' => 'draft',
                     'notes' => $dto->notes,
                 ]);
 
@@ -114,18 +111,5 @@ class CreateCreditCardTransaction
                 'childInstallments.creditCardInvoice',
             ]);
         });
-    }
-
-    private function splitAmount(int $totalCents, int $installments): array
-    {
-        $base = intdiv($totalCents, $installments);
-        $remainder = $totalCents % $installments;
-        $amounts = [];
-
-        for ($i = 0; $i < $installments; $i++) {
-            $amounts[] = $base + ($i < $remainder ? 1 : 0);
-        }
-
-        return $amounts;
     }
 }

@@ -3,6 +3,9 @@
 namespace App\Services\Financial;
 
 use App\Models\ChartOfAccount;
+use App\Models\CreditCardInvoice;
+use App\Models\CreditCardPayment;
+use App\Models\CreditCardTransaction;
 use App\Models\JournalLine;
 use App\Models\Wallet;
 
@@ -18,6 +21,12 @@ class BuildManagerialFinancialDashboard
             ->where('financial_group', 'investments')->where('allows_posting', true)->pluck('id');
         $investments = $this->balanceUntil($wallet, $investmentAccountIds->all(), $end);
         $formalClosed = $closing['formal_closing']['status'] === 'closed';
+        $invoices = CreditCardInvoice::query()->where('wallet_id', $wallet->id)
+            ->whereIn('status', ['open', 'closed', 'partial', 'overdue'])->get();
+        $cardPurchases = (int) CreditCardTransaction::query()->where('wallet_id', $wallet->id)
+            ->whereBetween('purchase_date', [$closing['period']['start_date'], $end])->sum('amount_cents');
+        $cardPayments = (int) CreditCardPayment::query()->where('wallet_id', $wallet->id)
+            ->whereBetween('payment_date', [$closing['period']['start_date'], $end])->sum('amount_cents');
 
         return [
             'period' => $closing['period'],
@@ -30,6 +39,10 @@ class BuildManagerialFinancialDashboard
                 'receivables_open_cents' => $closing['receivables']['open']['amount_cents'],
                 'investments_cents' => $investments,
                 'accounting_pending_count' => $closing['summary']['accounting_pending_count'],
+                'credit_card_open_cents' => (int) $invoices->sum('balance_cents'),
+                'credit_card_overdue_cents' => (int) $invoices->where('status', 'overdue')->sum('balance_cents'),
+                'credit_card_purchases_cents' => $cardPurchases,
+                'credit_card_payments_cents' => $cardPayments,
             ],
             'closing' => [
                 'status' => $formalClosed ? 'formally_closed' : $closing['status'],

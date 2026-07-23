@@ -10,15 +10,17 @@ use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
+use App\Models\CreditCardInvoice;
+use App\Models\Customer;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
-use App\Models\Wallet;
 use App\Models\Supplier;
-use App\Models\Customer;
+use App\Models\Wallet;
 use App\Services\Financial\BankStatementService;
-use App\Services\Financial\BulkPostOfxDraftEntries;
 use App\Services\Financial\BulkApplyBankStatementClassificationSuggestions;
+use App\Services\Financial\BulkPostOfxDraftEntries;
 use App\Services\Financial\ClassifyOfxDraftEntry;
+use App\Services\Financial\LinkCreditCardInvoicePaymentFromBankStatement;
 use App\Services\Financial\MergeBankTransferOfxEntries;
 use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\ResolveOfxDraftMatch;
@@ -82,6 +84,20 @@ class BankStatementController extends Controller
                 'suppliers' => Supplier::query()->validForPayables($wallet->id)->orderBy('name')->get(['id', 'name']),
                 'customers' => Customer::query()->validForReceivables($wallet->id)->orderBy('name')->get(['id', 'name']),
             ],
+            'creditCardInvoices' => CreditCardInvoice::query()
+                ->where('wallet_id', $wallet->id)
+                ->whereIn('status', ['open', 'closed', 'partial', 'overdue'])
+                ->where('balance_cents', '>', 0)
+                ->with('creditCard:id,name,issuer_name')
+                ->orderBy('due_at')
+                ->get()
+                ->map(fn (CreditCardInvoice $invoice) => [
+                    'id' => $invoice->id,
+                    'credit_card' => $invoice->creditCard,
+                    'reference' => sprintf('%02d/%d', $invoice->reference_month, $invoice->reference_year),
+                    'balance_cents' => $invoice->balance_cents,
+                    'due_at' => $invoice->due_at?->toDateString(),
+                ]),
             'ofxPreview' => $request->session()->get('ofx_preview'),
             'bulkPostResult' => $request->session()->get('ofx_bulk_post_result'),
             'classificationBulkResult' => $request->session()->get('classification_bulk_result'),
@@ -184,6 +200,29 @@ class BankStatementController extends Controller
         );
     }
 
+    public function linkCreditCardPayment(
+        Request $request,
+        BankAccount $bankAccount,
+        JournalEntry $journalEntry,
+        LinkCreditCardInvoicePaymentFromBankStatement $service,
+    ): RedirectResponse {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id, 404);
+        abort_unless((int) $journalEntry->wallet_id === (int) $wallet->id, 404);
+
+        $data = $request->validate([
+            'credit_card_invoice_id' => [
+                'required',
+                'integer',
+                Rule::exists('credit_card_invoices', 'id')->where('wallet_id', $wallet->id),
+            ],
+        ]);
+
+        $service->execute($wallet, $bankAccount, $journalEntry, (int) $data['credit_card_invoice_id']);
+
+        return back()->with('success', 'Pagamento da fatura vinculado. O lançamento está pronto para contabilidade.');
+    }
+
     public function bulkApplySuggestions(Request $request, BankAccount $bankAccount, BulkApplyBankStatementClassificationSuggestions $service): RedirectResponse
     {
         $wallet = $this->resolveActiveWallet($request);
@@ -195,6 +234,7 @@ class BankStatementController extends Controller
             'items.*.suggestion_key' => ['nullable', 'string', 'max:100'],
         ]);
         $result = $service->execute($wallet, $bankAccount, $data['items']);
+
         return back()->with('classification_bulk_result', $result)->with(
             'success', "{$result['applied']} sugestões aplicadas; {$result['ignored']} ignoradas; {$result['failed']} falhas.",
         );
@@ -259,8 +299,10 @@ class BankStatementController extends Controller
             $classifier->execute($wallet, $bankAccount, $journalEntry, new OfxClassificationDTO($suggestion['operation_type'], $suggestion['chart_of_account_id'], false));
         } catch (\Throwable $exception) {
             report($exception);
+
             return back()->withErrors(['suggestion' => 'Não foi possível aplicar a sugestão. A regra pode estar desatualizada.']);
         }
+
         return back()->with('success', 'Sugestão aplicada. O lançamento permanece em rascunho.');
     }
 
@@ -321,23 +363,24 @@ class BankStatementController extends Controller
             ->map(function (ChartOfAccount $account) use ($wallet, $bankAccount, $operationTypes) {
                 $linkedBank = BankAccount::query()->with('bank:id,short_name')->where('wallet_id', $wallet->id)
                     ->where('chart_of_account_id', $account->id)->where('is_active', true)->first();
+
                 return [
-                'id' => $account->id,
-                'code' => $account->code,
-                'name' => $account->name,
-                'type' => $account->type,
-                'financial_group' => $account->financial_group,
-                'allowed_operation_types' => $operationTypes->allowedOperationTypesForAccount(
-                    $wallet,
-                    $bankAccount,
-                    $account,
-                ),
-                'bank_account' => $linkedBank ? [
-                    'id' => $linkedBank->id, 'name' => $linkedBank->name,
-                    'bank_name' => $linkedBank->bank?->short_name ?? $linkedBank->bank_name,
-                    'agency' => $linkedBank->agency, 'account_number' => $linkedBank->account_number,
-                    'statement_url' => route('bank-accounts.statement', $linkedBank),
-                ] : null,
+                    'id' => $account->id,
+                    'code' => $account->code,
+                    'name' => $account->name,
+                    'type' => $account->type,
+                    'financial_group' => $account->financial_group,
+                    'allowed_operation_types' => $operationTypes->allowedOperationTypesForAccount(
+                        $wallet,
+                        $bankAccount,
+                        $account,
+                    ),
+                    'bank_account' => $linkedBank ? [
+                        'id' => $linkedBank->id, 'name' => $linkedBank->name,
+                        'bank_name' => $linkedBank->bank?->short_name ?? $linkedBank->bank_name,
+                        'agency' => $linkedBank->agency, 'account_number' => $linkedBank->account_number,
+                        'statement_url' => route('bank-accounts.statement', $linkedBank),
+                    ] : null,
                 ];
             })
             ->values()

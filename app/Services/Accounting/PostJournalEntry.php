@@ -68,6 +68,8 @@ class PostJournalEntry
             $entry->status = 'posted';
             $entry->posted_at = now();
             $entry->save();
+            $entry->creditCardTransaction()->update(['status' => 'posted']);
+            $entry->creditCardPayment()->update(['status' => 'posted']);
 
             return $entry->fresh(['lines']);
         });

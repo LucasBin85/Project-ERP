@@ -46,11 +46,11 @@ class ResolveCreditCardInvoice
     public function refreshTotals(CreditCardInvoice $invoice): CreditCardInvoice
     {
         $total = (int) $invoice->transactions()
-            ->where('status', 'posted')
+            ->whereIn('status', ['draft', 'posted'])
             ->sum('amount_cents');
 
         $paid = (int) $invoice->payments()
-            ->where('status', 'posted')
+            ->whereIn('status', ['draft', 'posted'])
             ->sum('amount_cents');
 
         $balance = $total - $paid;

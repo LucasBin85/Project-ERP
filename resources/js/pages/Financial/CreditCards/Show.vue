@@ -192,9 +192,9 @@ function submitPayment() {
                     </div>
 
                     <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de despesa</label>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de classificação</label>
                         <select v-model="transaction.form.expense_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
-                            <option value="">Selecione uma despesa</option>
+                            <option value="">Selecione despesa, ativo ou investimento</option>
                             <option v-for="account in expenseAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
                         </select>
                     </div>
@@ -257,7 +257,7 @@ function submitPayment() {
 
                     <div class="flex items-end justify-end">
                         <button type="submit" :disabled="!payment.canSubmit.value || payment.form.processing" class="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50">
-                            Pagar fatura
+                            Registrar pagamento
                         </button>
                     </div>
                 </form>

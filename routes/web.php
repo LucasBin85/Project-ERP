@@ -109,6 +109,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/classify', [BankStatementController::class, 'classify'])
             ->name('bank-accounts.statement.classify');
+        Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/link-credit-card-payment', [BankStatementController::class, 'linkCreditCardPayment'])
+            ->name('bank-accounts.statement.link-credit-card-payment');
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/apply-suggestion', [BankStatementController::class, 'applySuggestion'])
             ->name('bank-accounts.statement.apply-suggestion');
 

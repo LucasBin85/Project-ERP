@@ -65,7 +65,8 @@ class BuildMonthlyWalletClosingSummary
 
         $formal = \App\Models\MonthlyWalletClosing::query()->where('wallet_id', $wallet->id)->where('year', $year)->where('month', $month)
             ->with(['closedBy:id,name', 'reopenedBy:id,name'])->first();
-        $blockers = ManageMonthlyWalletClosing::blockers(['banks' => $banks->all(), 'accounting' => $accounting]);
+        $cards = $this->cards($wallet, $year, $month);
+        $blockers = ManageMonthlyWalletClosing::blockers(['banks' => $banks->all(), 'accounting' => $accounting, 'cards' => $cards]);
 
         return [
             'period' => ['year' => $year, 'month' => $month, 'start_date' => $start->toDateString(), 'end_date' => $end->toDateString(), 'label' => $start->locale('pt_BR')->translatedFormat('F/Y')],
@@ -88,7 +89,7 @@ class BuildMonthlyWalletClosingSummary
                 'accounting_pending_count' => $accounting['draft_ready'] + $accounting['draft_incomplete'],
             ],
             'banks' => $banks->all(),
-            'cards' => $this->cards($wallet, $year, $month),
+            'cards' => $cards,
             'payables' => $this->payables($wallet, $start, $end),
             'receivables' => $this->receivables($wallet, $start, $end),
             'accounting' => $accounting,

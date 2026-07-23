@@ -11,13 +11,19 @@ use App\Models\JournalLine;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Financial\CreateCreditCard;
+use App\Services\Financial\CreateCreditCardInstallments;
 use App\Services\Financial\CreateCreditCardTransaction;
 use App\Services\Financial\PayCreditCardInvoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
 
 uses(RefreshDatabase::class);
+
+it('distributes installment rounding without losing cents', function () {
+    expect(app(CreateCreditCardInstallments::class)->split(1000, 3))->toBe([334, 333, 333]);
+});
 
 function createCreditCardLiabilityGroup(Wallet $wallet): void
 {
@@ -145,7 +151,7 @@ it('creates a virtual credit card sharing parent invoice settings', function () 
         ->and($virtualCard->credit_limit_cents)->toBe($mainCard->credit_limit_cents);
 });
 
-it('creates a posted journal entry and monthly invoice when registering a credit card purchase', function () {
+it('creates a draft journal entry and monthly invoice when registering a credit card purchase', function () {
     $wallet = createTestWalletWithCardGroup();
 
     $expenseAccount = AccountingTestHelper::account($wallet, '5.9.91', 'Despesa Administrativa', 'despesa', 'debit');
@@ -185,8 +191,8 @@ it('creates a posted journal entry and monthly invoice when registering a credit
 
     $invoice = $transaction->creditCardInvoice;
 
-    expect($transaction->status)->toBe('posted')
-        ->and($transaction->journalEntry->status)->toBe('posted')
+    expect($transaction->status)->toBe('draft')
+        ->and($transaction->journalEntry->status)->toBe('draft')
         ->and($transaction->journalEntry->is_balanced)->toBeTrue()
         ->and($invoice->reference_year)->toBe(2026)
         ->and($invoice->reference_month)->toBe(8)
@@ -283,7 +289,7 @@ it('splits a credit card purchase into installments across monthly invoices', fu
         ->and($invoices->pluck('balance_cents')->all())->toBe([30000, 30000, 30000]);
 });
 
-it('creates a posted journal entry when paying a specific credit card invoice', function () {
+it('creates a draft journal entry when paying a specific credit card invoice', function () {
     $wallet = createTestWalletWithCardGroup();
 
     $expenseAccount = AccountingTestHelper::account($wallet, '5.9.91', 'Despesa Administrativa', 'despesa', 'debit');
@@ -321,6 +327,34 @@ it('creates a posted journal entry when paying a specific credit card invoice', 
         ),
     );
 
+    expect(fn () => app(PayCreditCardInvoice::class)->execute(
+        $wallet,
+        new CreditCardPaymentDTO(
+            creditCardId: $creditCard->id,
+            creditCardInvoiceId: $transaction->credit_card_invoice_id,
+            bankAccountId: $bankAccount->id,
+            paymentDate: '2026-08-15',
+            amountCents: 12591,
+        ),
+    ))->toThrow(ValidationException::class);
+
+    $partialPayment = app(PayCreditCardInvoice::class)->execute(
+        $wallet,
+        new CreditCardPaymentDTO(
+            creditCardId: $creditCard->id,
+            creditCardInvoiceId: $transaction->credit_card_invoice_id,
+            bankAccountId: $bankAccount->id,
+            paymentDate: '2026-08-15',
+            amountCents: 5000,
+            description: 'Pagamento fatura Nubank',
+        ),
+    );
+
+    $invoice = CreditCardInvoice::query()->findOrFail($transaction->credit_card_invoice_id);
+    expect($invoice->paid_cents)->toBe(5000)
+        ->and($invoice->balance_cents)->toBe(7590)
+        ->and($invoice->status)->toBe('partial');
+
     $payment = app(PayCreditCardInvoice::class)->execute(
         $wallet,
         new CreditCardPaymentDTO(
@@ -328,17 +362,17 @@ it('creates a posted journal entry when paying a specific credit card invoice', 
             creditCardInvoiceId: $transaction->credit_card_invoice_id,
             bankAccountId: $bankAccount->id,
             paymentDate: '2026-08-15',
-            amountCents: 12590,
-            description: 'Pagamento fatura Nubank',
+            amountCents: 7590,
+            description: 'Pagamento final fatura Nubank',
         ),
     );
 
-    $invoice = CreditCardInvoice::query()->findOrFail($transaction->credit_card_invoice_id);
+    $invoice->refresh();
 
-    expect(JournalEntry::query()->count())->toBe(2)
-        ->and(JournalLine::query()->count())->toBe(4)
+    expect(JournalEntry::query()->count())->toBe(3)
+        ->and(JournalLine::query()->count())->toBe(6)
         ->and($payment->credit_card_invoice_id)->toBe($invoice->id)
-        ->and($payment->journalEntry->status)->toBe('posted')
+        ->and($payment->journalEntry->status)->toBe('draft')
         ->and($payment->journalEntry->is_balanced)->toBeTrue()
         ->and($invoice->paid_cents)->toBe(12590)
         ->and($invoice->balance_cents)->toBe(0)
@@ -348,13 +382,13 @@ it('creates a posted journal entry when paying a specific credit card invoice', 
         'journal_entry_id' => $payment->journal_entry_id,
         'chart_of_account_id' => $creditCard->liability_account_id,
         'type' => 'debit',
-        'amount_cents' => 12590,
+        'amount_cents' => 7590,
     ]);
 
     $this->assertDatabaseHas('journal_lines', [
         'journal_entry_id' => $payment->journal_entry_id,
         'chart_of_account_id' => $bankAccount->chart_of_account_id,
         'type' => 'credit',
-        'amount_cents' => 12590,
+        'amount_cents' => 7590,
     ]);
 });

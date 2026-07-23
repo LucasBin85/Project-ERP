@@ -79,6 +79,12 @@ class ManageMonthlyWalletClosing
             $reasons[] = 'Existem lançamentos desbalanceados.';
         }
 
+        if (collect($summary['cards'] ?? [])->contains(
+            fn (array $card) => in_array($card['status'], ['open', 'partial', 'divergent'], true)
+        )) {
+            $reasons[] = 'Existem faturas de cartao em aberto, vencidas ou parcialmente pagas.';
+        }
+
         return array_values(array_unique($reasons));
     }
 }
