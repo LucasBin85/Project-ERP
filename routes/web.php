@@ -13,17 +13,18 @@ use App\Http\Controllers\Financial\AccountPayableController;
 use App\Http\Controllers\Financial\AccountReceivableController;
 use App\Http\Controllers\Financial\BankAccountController;
 use App\Http\Controllers\Financial\BankReconciliationController;
-use App\Http\Controllers\Financial\BankStatementController;
-use App\Http\Controllers\Financial\BankStatementSettlementController;
 use App\Http\Controllers\Financial\BankStatementClassificationRuleController;
 use App\Http\Controllers\Financial\BankStatementClosingController;
+use App\Http\Controllers\Financial\BankStatementController;
+use App\Http\Controllers\Financial\BankStatementSettlementController;
 use App\Http\Controllers\Financial\BankTransferController;
 use App\Http\Controllers\Financial\CashFlowController;
 use App\Http\Controllers\Financial\CreditCardController;
-use App\Http\Controllers\Financial\SupplierController;
 use App\Http\Controllers\Financial\CustomerController;
-use App\Http\Controllers\Financial\OfxImportController;
 use App\Http\Controllers\Financial\InvestmentAccountController;
+use App\Http\Controllers\Financial\MonthlyWalletClosingController;
+use App\Http\Controllers\Financial\OfxImportController;
+use App\Http\Controllers\Financial\SupplierController;
 use App\Http\Controllers\FinancialPositionController;
 use App\Http\Controllers\WalletController;
 use Illuminate\Support\Facades\Route;
@@ -91,6 +92,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('balance-sheet.index');
 
     Route::prefix('financial')->group(function () {
+        Route::get('monthly-closing', [MonthlyWalletClosingController::class, 'show'])->name('monthly-closing.show');
+        Route::post('monthly-closing/post-ready', [MonthlyWalletClosingController::class, 'postReady'])->name('monthly-closing.post-ready');
         Route::get('bank-accounts/{bankAccount}/statement', [BankStatementController::class, 'show'])
             ->name('bank-accounts.statement');
         Route::get('bank-accounts/{bankAccount}/closing', [BankStatementClosingController::class, 'show'])->name('bank-accounts.closing.show');

@@ -2,6 +2,7 @@ import type { NavItem } from '@/types';
 import {
     BookOpen,
     Building2,
+    CalendarCheck,
     ChartColumn,
     CircleDollarSign,
     CreditCard,
@@ -26,6 +27,11 @@ export const mainNavItems: NavItem[] = [
         title: 'Contabilidade',
         icon: Scale,
         items: [
+            {
+                title: 'Fechamento Mensal',
+                href: route('monthly-closing.show'),
+                icon: CalendarCheck,
+            },
             {
                 title: 'Plano de Contas',
                 href: route('chart-of-accounts.index'),
