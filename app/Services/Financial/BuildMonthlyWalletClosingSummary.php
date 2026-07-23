@@ -38,6 +38,7 @@ class BuildMonthlyWalletClosingSummary
                     'status' => $summary['status'],
                     'status_label' => $summary['status_label'],
                     'pending_count' => $pending,
+                    'counts' => $summary['counts'],
                     'closing_url' => route('bank-accounts.closing.show', ['bankAccount' => $account->id, 'start_date' => $start->toDateString(), 'end_date' => $end->toDateString()]),
                     'statement_url' => route('bank-accounts.statement', ['bankAccount' => $account->id, 'start_date' => $start->toDateString(), 'end_date' => $end->toDateString()]),
                 ];
@@ -62,10 +63,24 @@ class BuildMonthlyWalletClosingSummary
         $closing = (int) $banks->sum('balances.closing_operational_cents');
         $postedBalance = (int) $banks->sum('balances.posted_accounting_cents');
 
+        $formal = \App\Models\MonthlyWalletClosing::query()->where('wallet_id', $wallet->id)->where('year', $year)->where('month', $month)
+            ->with(['closedBy:id,name', 'reopenedBy:id,name'])->first();
+        $blockers = ManageMonthlyWalletClosing::blockers(['banks' => $banks->all(), 'accounting' => $accounting]);
+
         return [
             'period' => ['year' => $year, 'month' => $month, 'start_date' => $start->toDateString(), 'end_date' => $end->toDateString(), 'label' => $start->locale('pt_BR')->translatedFormat('F/Y')],
             'status' => $status,
             'status_label' => $this->statusLabel($status),
+            'formal_closing' => $formal ? [
+                'id' => $formal->id, 'status' => $formal->status,
+                'status_label' => match ($formal->status) {
+                    'closed' => 'Fechado', 'reopened' => 'Reaberto', default => 'Aberto'
+                },
+                'closed_at' => $formal->closed_at?->toIso8601String(), 'closed_by' => $formal->closedBy?->name, 'close_note' => $formal->close_note,
+                'reopened_at' => $formal->reopened_at?->toIso8601String(), 'reopened_by' => $formal->reopenedBy?->name, 'reopen_reason' => $formal->reopen_reason,
+            ] : ['status' => 'open', 'status_label' => 'Aberto'],
+            'can_close' => $blockers === [],
+            'closing_blockers' => $blockers,
             'summary' => [
                 'inflows_cents' => $inflows, 'outflows_cents' => $outflows, 'net_cash_change_cents' => $inflows - $outflows,
                 'opening_operational_cents' => $opening, 'closing_operational_cents' => $closing,

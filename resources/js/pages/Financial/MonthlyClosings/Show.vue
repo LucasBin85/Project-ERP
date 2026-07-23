@@ -12,6 +12,10 @@ import { route } from 'ziggy-js';
 const props = defineProps<{ wallet: { id: number; name: string }; closing: any }>();
 const page = usePage();
 const processing = ref(false);
+const showClose = ref(false);
+const showReopen = ref(false);
+const closeNote = ref('');
+const reopenReason = ref('');
 const filters = reactive({ year: props.closing.period.year, month: props.closing.period.month });
 const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const years = Array.from({ length: 11 }, (_, index) => new Date().getFullYear() - 5 + index);
@@ -32,6 +36,16 @@ function postReady() {
     processing.value = true;
     router.post(route('monthly-closing.post-ready'), filters, { preserveScroll: true, onFinish: () => processing.value = false });
 }
+
+function closeMonth() {
+    processing.value = true;
+    router.post(route('monthly-closing.close'), { ...filters, close_note: closeNote.value }, { preserveScroll: true, onSuccess: () => showClose.value = false, onFinish: () => processing.value = false });
+}
+
+function reopenMonth() {
+    processing.value = true;
+    router.post(route('monthly-closing.reopen'), { ...filters, reopen_reason: reopenReason.value }, { preserveScroll: true, onSuccess: () => showReopen.value = false, onFinish: () => processing.value = false });
+}
 </script>
 
 <template>
@@ -47,6 +61,11 @@ function postReady() {
             <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-4">
                 <div><p class="text-xs uppercase text-gray-400">Status geral</p><h2 class="text-2xl font-bold text-white">{{ closing.status_label }}</h2><p class="text-sm text-gray-400">Painel de conferência; o período continua editável.</p></div>
                 <StatusBadge :status="closing.status" />
+            </div>
+
+            <div class="rounded-xl border p-4" :class="closing.formal_closing.status === 'closed' ? 'border-red-500/40 bg-red-950/20' : 'border-gray-700 bg-gray-950'">
+                <div class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-xs uppercase text-gray-400">Status formal do mês</p><h2 class="text-xl font-bold text-white">{{ closing.formal_closing.status_label }}</h2><p v-if="closing.formal_closing.closed_at" class="text-sm text-gray-300">Fechado em {{ new Date(closing.formal_closing.closed_at).toLocaleString('pt-BR') }} por {{ closing.formal_closing.closed_by }}.</p><p v-if="closing.formal_closing.close_note" class="text-sm text-gray-400">Observação: {{ closing.formal_closing.close_note }}</p><p v-if="closing.formal_closing.reopened_at" class="text-sm text-amber-300">Reaberto em {{ new Date(closing.formal_closing.reopened_at).toLocaleString('pt-BR') }} por {{ closing.formal_closing.reopened_by }}: {{ closing.formal_closing.reopen_reason }}</p></div><button v-if="closing.formal_closing.status === 'closed'" class="rounded bg-amber-600 px-4 py-2 font-semibold text-white" @click="showReopen = true">Reabrir mês</button><button v-else :disabled="!closing.can_close" class="rounded bg-red-700 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40" @click="showClose = true">Fechar mês</button></div>
+                <div v-if="closing.formal_closing.status !== 'closed' && closing.closing_blockers.length" class="mt-3 rounded border border-amber-500/30 bg-amber-950/20 p-3"><p class="font-semibold text-amber-200">O mês ainda não pode ser fechado:</p><ul class="mt-1 list-disc pl-5 text-sm text-amber-100"><li v-for="reason in closing.closing_blockers" :key="reason">{{ reason }}</li></ul></div>
             </div>
 
             <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -74,6 +93,9 @@ function postReady() {
             <ReportSection><template #header><div class="flex w-full flex-wrap items-center justify-between gap-2"><h2 class="font-bold text-white">Pendências contábeis</h2><div class="flex gap-2"><Link :href="closing.links.pending" class="rounded border border-gray-600 px-3 py-2 text-sm">Abrir Pendências Contábeis</Link><button v-if="closing.accounting.draft_ready" :disabled="processing" class="rounded bg-green-600 px-3 py-2 text-sm font-semibold text-white" @click="postReady">Postar prontos ({{ closing.accounting.draft_ready }})</button></div></div></template><div class="grid gap-2 p-4 sm:grid-cols-3 lg:grid-cols-5"><div v-for="(value, label) in { 'Prontos': closing.accounting.draft_ready, 'Incompletos': closing.accounting.draft_incomplete, 'A classificar': closing.accounting.unclassified, 'Desbalanceados': closing.accounting.unbalanced, 'Postados no mês': closing.accounting.posted }" :key="label" class="rounded border border-gray-700 p-3"><span class="block text-xs text-gray-400">{{ label }}</span><b class="text-2xl text-white">{{ value }}</b></div></div></ReportSection>
 
             <ReportSection><template #header><h2 class="font-bold text-white">Relatórios</h2></template><div class="flex flex-wrap gap-2 p-4"><Link v-for="(url, label) in { 'Livro Diário': closing.links.journal, 'Razão': closing.links.ledger, 'Balancete': closing.links.trial_balance, 'DRE': closing.links.income_statement, 'Balanço Patrimonial': closing.links.balance_sheet, 'Posição Financeira': closing.links.financial_position }" :key="label" :href="url" class="rounded border border-indigo-500/50 px-4 py-2 text-indigo-200">{{ label }}</Link></div></ReportSection>
+
+            <div v-if="showClose" class="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"><div class="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-950 p-6"><h2 class="text-xl font-bold text-white">Fechar {{ closing.period.label }}?</h2><p class="mt-2 text-sm text-gray-300">Status atual: {{ closing.status_label }}. Saldo operacional: {{ formatCurrency(closing.summary.closing_operational_cents) }}. Saldo contábil: {{ formatCurrency(closing.summary.posted_accounting_cents) }}.</p><p class="mt-3 rounded border border-red-500/30 bg-red-950/20 p-3 text-sm text-red-200">Alterações financeiras e contábeis neste período serão bloqueadas até que o mês seja reaberto.</p><label class="mt-4 block text-sm text-gray-300">Observação (opcional)<textarea v-model="closeNote" class="mt-1 w-full rounded border border-gray-700 bg-black p-2" rows="3" /></label><div class="mt-4 flex justify-end gap-2"><button class="rounded border border-gray-600 px-4 py-2" @click="showClose = false">Cancelar</button><button :disabled="processing" class="rounded bg-red-700 px-4 py-2 font-semibold text-white" @click="closeMonth">Confirmar fechamento</button></div></div></div>
+            <div v-if="showReopen" class="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"><div class="w-full max-w-lg rounded-xl border border-gray-700 bg-gray-950 p-6"><h2 class="text-xl font-bold text-white">Reabrir {{ closing.period.label }}?</h2><p class="mt-2 text-sm text-gray-300">Informe por que o período precisa voltar a aceitar alterações.</p><label class="mt-4 block text-sm text-gray-300">Justificativa obrigatória<textarea v-model="reopenReason" class="mt-1 w-full rounded border border-gray-700 bg-black p-2" rows="3" required /></label><div class="mt-4 flex justify-end gap-2"><button class="rounded border border-gray-600 px-4 py-2" @click="showReopen = false">Cancelar</button><button :disabled="processing || reopenReason.trim().length < 3" class="rounded bg-amber-600 px-4 py-2 font-semibold text-white disabled:opacity-40" @click="reopenMonth">Reabrir mês</button></div></div></div>
         </ReportPage>
     </AppLayout>
 </template>

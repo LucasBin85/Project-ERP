@@ -8,7 +8,10 @@ use RuntimeException;
 
 class PostJournalEntry
 {
-    public function __construct(private readonly AssessJournalEntryPostingReadiness $readiness) {}
+    public function __construct(
+        private readonly AssessJournalEntryPostingReadiness $readiness,
+        private readonly EnsureAccountingPeriodIsOpen $periodGuard,
+    ) {}
 
     /**
      * Faz o "post" do lançamento:
@@ -30,6 +33,7 @@ class PostJournalEntry
             if (! $wallet) {
                 throw new RuntimeException('Lançamento sem wallet vinculada.');
             }
+            $this->periodGuard->handle($wallet, $entry->entry_date);
 
             if ($requireFullyClassified) {
                 $readiness = $this->readiness->handle($wallet, $entry);
@@ -43,8 +47,8 @@ class PostJournalEntry
 
             if (! $entry->is_balanced) {
                 throw new RuntimeException(
-                    'Não é possível postar: lançamento não está balanceado. Diferença: ' .
-                    $entry->balance_diff_cents . ' centavos.'
+                    'Não é possível postar: lançamento não está balanceado. Diferença: '.
+                    $entry->balance_diff_cents.' centavos.'
                 );
             }
 

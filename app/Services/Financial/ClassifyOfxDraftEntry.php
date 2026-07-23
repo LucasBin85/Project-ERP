@@ -11,6 +11,7 @@ use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Wallet;
+use App\Services\Accounting\EnsureAccountingPeriodIsOpen;
 use App\Services\Accounting\PostJournalEntry;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -22,6 +23,7 @@ class ClassifyOfxDraftEntry
         private readonly OfxOperationTypePolicy $operationTypes,
         private readonly FindMatchingOfxJournalLine $matchingJournalLines,
         private readonly ClassifyBankStatementTransfer $classifyTransfer,
+        private readonly EnsureAccountingPeriodIsOpen $periodGuard,
     ) {}
 
     public function execute(
@@ -30,6 +32,8 @@ class ClassifyOfxDraftEntry
         JournalEntry $entry,
         OfxClassificationDTO $dto,
     ): JournalEntry {
+        $this->periodGuard->handle($wallet, $entry->entry_date);
+
         return DB::transaction(function () use ($wallet, $bankAccount, $entry, $dto) {
             $entry = JournalEntry::query()
                 ->whereKey($entry->id)

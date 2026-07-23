@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
 use App\Services\Accounting\BulkPostPendingJournalEntries;
 use App\Services\Financial\BuildMonthlyWalletClosingSummary;
+use App\Services\Financial\ManageMonthlyWalletClosing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -36,6 +37,24 @@ class MonthlyWalletClosingController extends Controller
         $result = $posting->selected($wallet, $ids)->toArray();
 
         return back()->with('pending_entries_posting_result', $result)->with('success', $result['message']);
+    }
+
+    public function close(Request $request, ManageMonthlyWalletClosing $service): RedirectResponse
+    {
+        [$wallet, $year, $month] = $this->context($request);
+        $data = $request->validate(['close_note' => ['nullable', 'string', 'max:2000']]);
+        $service->close($wallet, $request->user(), $year, $month, $data['close_note'] ?? null);
+
+        return back()->with('success', 'Mês fechado com sucesso. Alterações neste período estão bloqueadas.');
+    }
+
+    public function reopen(Request $request, ManageMonthlyWalletClosing $service): RedirectResponse
+    {
+        [$wallet, $year, $month] = $this->context($request);
+        $data = $request->validate(['reopen_reason' => ['required', 'string', 'min:3', 'max:2000']]);
+        $service->reopen($wallet, $request->user(), $year, $month, $data['reopen_reason']);
+
+        return back()->with('success', 'Mês reaberto. Alterações no período estão novamente permitidas.');
     }
 
     private function context(Request $request): array

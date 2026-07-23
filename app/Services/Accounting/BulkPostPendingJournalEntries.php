@@ -17,6 +17,7 @@ class BulkPostPendingJournalEntries
         private readonly AssessJournalEntryPostingReadiness $readiness,
         private readonly BuildPendingJournalEntries $pendingEntries,
         private readonly PostJournalEntry $postJournalEntry,
+        private readonly EnsureAccountingPeriodIsOpen $periodGuard,
     ) {}
 
     /**
@@ -55,6 +56,9 @@ class BulkPostPendingJournalEntries
         Wallet $wallet,
         Collection $entryIds,
     ): BulkPostPendingEntriesResultDTO {
+        JournalEntry::query()->where('wallet_id', $wallet->id)->whereIn('id', $entryIds)
+            ->pluck('entry_date')->each(fn ($date) => $this->periodGuard->handle($wallet, $date));
+
         $posted = 0;
         $skippedItems = [];
         $errorItems = [];

@@ -93,6 +93,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::prefix('financial')->group(function () {
         Route::get('monthly-closing', [MonthlyWalletClosingController::class, 'show'])->name('monthly-closing.show');
+        Route::post('monthly-closing/close', [MonthlyWalletClosingController::class, 'close'])->name('monthly-closing.close');
+        Route::post('monthly-closing/reopen', [MonthlyWalletClosingController::class, 'reopen'])->name('monthly-closing.reopen');
         Route::post('monthly-closing/post-ready', [MonthlyWalletClosingController::class, 'postReady'])->name('monthly-closing.post-ready');
         Route::get('bank-accounts/{bankAccount}/statement', [BankStatementController::class, 'show'])
             ->name('bank-accounts.statement');

@@ -4,13 +4,19 @@ namespace App\Services\Accounting;
 
 use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
+use App\Models\Wallet;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class CreateJournalEntry
 {
+    public function __construct(private readonly EnsureAccountingPeriodIsOpen $periodGuard) {}
+
     public function execute(array $data): JournalEntry
     {
+        $wallet = Wallet::query()->findOrFail($data['wallet_id']);
+        $this->periodGuard->handle($wallet, $data['entry_date']);
+
         return DB::transaction(function () use ($data) {
 
             $debitTotal = 0;

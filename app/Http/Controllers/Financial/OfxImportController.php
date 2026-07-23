@@ -7,6 +7,7 @@ use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankStatementImport;
+use App\Services\Accounting\EnsureAccountingPeriodIsOpen;
 use App\Services\Financial\ConfirmOfxBankStatement;
 use App\Services\Financial\PreviewOfxBankStatement;
 use Illuminate\Http\RedirectResponse;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -61,7 +63,7 @@ class OfxImportController extends Controller
         ]);
     }
 
-    public function preview(Request $request, PreviewOfxBankStatement $service): RedirectResponse
+    public function preview(Request $request, PreviewOfxBankStatement $service, EnsureAccountingPeriodIsOpen $periodGuard): RedirectResponse
     {
         $wallet = $this->resolveActiveWallet($request);
 
@@ -91,6 +93,11 @@ class OfxImportController extends Controller
                 contents: $contents,
                 originalFilename: $file->getClientOriginalName(),
             );
+            foreach ($preview['rows'] as $row) {
+                $periodGuard->handle($wallet, $row['date'] ?? $row['posted_at']);
+            }
+        } catch (ValidationException $exception) {
+            throw $exception;
         } catch (RuntimeException $exception) {
             return back()
                 ->withErrors(['ofx_file' => $exception->getMessage()])
