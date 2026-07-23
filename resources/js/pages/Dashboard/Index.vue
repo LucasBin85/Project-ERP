@@ -1,79 +1,36 @@
-<script setup>
-import AppLayout from '@/layouts/AppLayout.vue'
-import DashboardAlerts from '@/components/dashboard/DashboardAlerts.vue'
-import DashboardBankBalances from '@/components/dashboard/DashboardBankBalances.vue'
-import DashboardCards from '@/components/dashboard/DashboardCards.vue'
-import DashboardChart from '@/components/dashboard/DashboardChart.vue'
-import DashboardHero from '@/components/dashboard/DashboardHero.vue'
-import DashboardLatestEntries from '@/components/dashboard/DashboardLatestEntries.vue'
-import DashboardSummary from '@/components/dashboard/DashboardSummary.vue'
-import DashboardUpcoming from '@/components/dashboard/DashboardUpcoming.vue'
-import { useDashboard } from '@/composables/dashboard/useDashboard'
+<script setup lang="ts">
+import ReportPage from '@/components/reports/ReportPage.vue';
+import ReportSection from '@/components/reports/ReportSection.vue';
+import ReportSummaryCard from '@/components/reports/ReportSummaryCard.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { formatCurrency } from '@/lib/formatters';
+import { Link, router } from '@inertiajs/vue3';
+import { reactive } from 'vue';
+import { route } from 'ziggy-js';
 
-const props = defineProps({
-    wallet: Object,
-    filters: Object,
-    kpis: Object,
-    chart: Array,
-    latestEntries: Array,
-    bankBalances: Array,
-    upcoming: Array,
-    alerts: Array,
-})
-
-const dashboard = useDashboard(props)
+const props = defineProps<{ wallet: { id: number; name: string }; dashboard: any }>();
+const filters = reactive({ year: props.dashboard.period.year, month: props.dashboard.period.month });
+const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const years = Array.from({ length: 11 }, (_, index) => new Date().getFullYear() - 5 + index);
+const cards = [
+    ['Saldo operacional em bancos', 'bank_operational_cents', 'neutral'], ['Entradas do mês', 'inflows_cents', 'green'],
+    ['Saídas do mês', 'outflows_cents', 'red'], ['Resultado líquido do mês', 'net_result_cents', 'blue'],
+    ['Contas a pagar em aberto', 'payables_open_cents', 'yellow'], ['Contas a receber em aberto', 'receivables_open_cents', 'green'],
+    ['Investimentos', 'investments_cents', 'blue'],
+];
+function refresh() { router.get(route('dashboard'), filters, { preserveState: true }); }
 </script>
 
 <template>
-    <AppLayout title="Dashboard">
-        <div class="space-y-6 p-6">
-            <DashboardHero
-                :wallet="wallet"
-                v-model:start-date="dashboard.form.start_date"
-                v-model:end-date="dashboard.form.end_date"
-                :period-label="dashboard.periodLabel.value"
-                @clear-filters="dashboard.clearFilters"
-                @open-date-picker="dashboard.openDatePicker"
-            />
-
-            <DashboardAlerts :alerts="alerts" />
-
-            <DashboardCards :cards="dashboard.dashboardCards.value" />
-
-            <section class="grid grid-cols-1 gap-6 xl:grid-cols-[1.4fr_1fr]">
-                <DashboardChart
-                    :chart-width="dashboard.chartWidth"
-                    :chart-height="dashboard.chartHeight"
-                    :padding="dashboard.padding"
-                    :points-revenue="dashboard.pointsRevenue.value"
-                    :points-expense="dashboard.pointsExpense.value"
-                    :revenue-points="dashboard.revenuePoints.value"
-                    :expense-points="dashboard.expensePoints.value"
-                    :chart-ticks="dashboard.chartTicks.value"
-                    @go-to-date="dashboard.goToDate"
-                />
-
-                <DashboardSummary
-                    :result-tone="dashboard.resultTone.value"
-                    :result-margin="dashboard.resultMargin.value"
-                    :latest-entries-count="latestEntries.length"
-                    @open-journal="dashboard.goToGeneralJournal"
-                    @open-cash-flow="dashboard.goToCashFlow"
-                    @open-payables="dashboard.goToAccountsPayable"
-                    @open-receivables="dashboard.goToAccountsReceivable"
-                    @open-credit-cards="dashboard.goToCreditCards"
-                />
-            </section>
-
-            <section class="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1.4fr]">
-                <DashboardBankBalances :bank-balances="bankBalances" />
-                <DashboardUpcoming :upcoming="upcoming" @open-item="dashboard.visit" />
-            </section>
-
-            <DashboardLatestEntries
-                :entries="latestEntries"
-                @go-to-entry="dashboard.goToEntry"
-            />
-        </div>
-    </AppLayout>
+    <AppLayout title="Dashboard Gerencial"><ReportPage title="Dashboard Gerencial" :subtitle="`${dashboard.period.label} · ${wallet.name}`">
+        <div class="flex flex-wrap items-end gap-3 rounded-xl border border-gray-700 bg-gray-950 p-4"><label class="text-sm text-gray-300">Mês<select v-model="filters.month" class="mt-1 block rounded border border-gray-700 bg-black p-2"><option v-for="(name, index) in months" :key="name" :value="index + 1">{{ name }}</option></select></label><label class="text-sm text-gray-300">Ano<select v-model="filters.year" class="mt-1 block rounded border border-gray-700 bg-black p-2"><option v-for="year in years" :key="year" :value="year">{{ year }}</option></select></label><button class="rounded bg-indigo-600 px-4 py-2 font-semibold text-white" @click="refresh">Atualizar mês</button></div>
+        <h2 class="text-lg font-bold text-white">Resumo do mês</h2>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"><ReportSummaryCard v-for="card in cards" :key="card[1]" :label="card[0]" :value="formatCurrency(dashboard.cards[card[1]])" :tone="card[2]" /><ReportSummaryCard label="Pendências contábeis" :value="String(dashboard.cards.accounting_pending_count)" tone="yellow" /><Link :href="dashboard.closing.url"><ReportSummaryCard label="Fechamento do mês" :value="dashboard.closing.status_label" :tone="dashboard.closing.status === 'formally_closed' ? 'green' : 'yellow'" /></Link></div>
+        <ReportSection><template #header><h2 class="font-bold text-white">Bancos</h2></template><div v-if="!dashboard.banks.length" class="p-5 text-gray-400">Nenhuma conta bancária ativa.</div><div v-else class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-950 text-gray-400"><tr><th class="p-3 text-left">Banco / conta</th><th>Saldo operacional</th><th>Saldo contábil</th><th>Diferença</th><th></th></tr></thead><tbody class="divide-y divide-gray-800"><tr v-for="bank in dashboard.banks" :key="bank.id"><td class="p-3"><b class="block text-white">{{ bank.name }}</b><span>{{ bank.bank_name }}</span></td><td class="p-3 text-right">{{ formatCurrency(bank.operational_cents) }}</td><td class="p-3 text-right">{{ formatCurrency(bank.accounting_cents) }}</td><td class="p-3 text-right" :class="bank.difference_cents ? 'text-amber-300' : 'text-green-300'">{{ formatCurrency(bank.difference_cents) }}</td><td class="p-3 whitespace-nowrap"><Link :href="bank.statement_url" class="text-indigo-300">Extrato</Link><span class="mx-2 text-gray-600">·</span><Link :href="bank.closing_url" class="text-indigo-300">Fechamento</Link></td></tr></tbody></table></div></ReportSection>
+        <div class="grid gap-4 lg:grid-cols-2"><ReportSection><template #header><div class="flex justify-between"><h2 class="font-bold text-white">A pagar</h2><Link :href="dashboard.payables.url" class="text-sm text-indigo-300">Abrir contas</Link></div></template><div class="grid grid-cols-3 gap-2 p-4"><div v-for="(item, label) in { 'Vencidas': dashboard.payables.overdue, 'A vencer': dashboard.payables.upcoming, 'Pagas no mês': dashboard.payables.paid }" :key="label" class="rounded border border-gray-700 p-3"><span class="text-xs text-gray-400">{{ label }} ({{ item.count }})</span><b class="block text-white">{{ formatCurrency(item.amount_cents) }}</b></div></div></ReportSection><ReportSection><template #header><div class="flex justify-between"><h2 class="font-bold text-white">A receber</h2><Link :href="dashboard.receivables.url" class="text-sm text-indigo-300">Abrir contas</Link></div></template><div class="grid grid-cols-3 gap-2 p-4"><div v-for="(item, label) in { 'Vencidas': dashboard.receivables.overdue, 'Previstas': dashboard.receivables.expected, 'Recebidas no mês': dashboard.receivables.received }" :key="label" class="rounded border border-gray-700 p-3"><span class="text-xs text-gray-400">{{ label }} ({{ item.count }})</span><b class="block text-white">{{ formatCurrency(item.amount_cents) }}</b></div></div></ReportSection></div>
+        <div class="grid gap-4 lg:grid-cols-2"><ReportSection v-for="(ranking, type) in dashboard.rankings" :key="type"><template #header><h2 class="font-bold text-white">Maiores {{ type === 'expenses' ? 'despesas' : 'receitas' }} do mês</h2></template><div v-if="!ranking.length" class="p-5 text-gray-400">Nenhum lançamento postado.</div><ol v-else class="divide-y divide-gray-800"><li v-for="(item, index) in ranking" :key="item.id" class="flex justify-between p-3"><span class="text-gray-300">{{ index + 1 }}. {{ item.name }}</span><b :class="type === 'expenses' ? 'text-red-300' : 'text-green-300'">{{ formatCurrency(item.amount_cents) }}</b></li></ol></ReportSection></div>
+        <div class="grid gap-4 lg:grid-cols-[1fr_2fr]"><ReportSection><template #header><h2 class="font-bold text-white">Investimentos</h2></template><div class="p-5"><p class="text-sm text-gray-400">Saldo contábil consolidado · {{ dashboard.investments.accounts_count }} contas</p><b class="mt-2 block text-2xl text-white">{{ formatCurrency(dashboard.investments.balance_cents) }}</b><Link :href="dashboard.investments.url" class="mt-3 inline-block text-sm text-indigo-300">Abrir posição financeira</Link></div></ReportSection><ReportSection><template #header><h2 class="font-bold text-white">O que precisa de atenção</h2></template><div class="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3"><Link v-for="item in dashboard.attention" :key="item.label" :href="item.url" class="rounded border p-3" :class="item.count ? 'border-amber-500/40 bg-amber-950/20' : 'border-gray-700'"><span class="block text-xs text-gray-400">{{ item.label }}</span><b class="text-2xl text-white">{{ item.count }}</b></Link></div></ReportSection></div>
+        <ReportSection><template #header><h2 class="font-bold text-white">Fechamento do mês</h2></template><Link :href="dashboard.closing.url" class="flex items-center justify-between p-5"><div><b class="text-white">{{ dashboard.closing.status_label }}</b><p class="text-sm text-gray-400">Confira pendências e o status formal do período.</p></div><StatusBadge :status="dashboard.closing.status" /></Link></ReportSection>
+    </ReportPage></AppLayout>
 </template>
