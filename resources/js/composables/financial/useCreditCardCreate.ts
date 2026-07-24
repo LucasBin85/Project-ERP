@@ -53,7 +53,7 @@ export function useCreditCardCreate(defaultBankAccountId: number | string | null
                 Number(form.closing_day) >= 1 &&
                 Number(form.due_day) >= 1 &&
                 Number(form.best_purchase_day) >= 1 &&
-                (form.card_type === 'main' ? form.bank_account_id : form.parent_card_id),
+                (form.card_type === 'main' || form.parent_card_id),
         );
     });
 

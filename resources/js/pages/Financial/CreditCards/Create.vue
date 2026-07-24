@@ -5,6 +5,7 @@ import { useCreditCardCreate } from '@/composables/financial/useCreditCardCreate
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import { ref } from 'vue';
 
 const props = defineProps<{
     wallet: Record<string, any>;
@@ -14,6 +15,34 @@ const props = defineProps<{
 }>();
 
 const creditCard = useCreditCardCreate(props.selectedBankAccountId ?? null);
+const setupMessage = ref('');
+const setupLoading = ref(false);
+
+async function fillFromStatement(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    setupLoading.value = true;
+    setupMessage.value = '';
+    const body = new FormData();
+    body.append('statement_file', file);
+    const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+    const response = await fetch(route('credit-cards.setup-file.preview'), {
+        method: 'POST',
+        body,
+        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': token },
+    });
+    const data = await response.json();
+    setupLoading.value = false;
+    if (!response.ok) {
+        setupMessage.value = data.message ?? 'Não foi possível identificar dados seguros neste arquivo.';
+        return;
+    }
+    if (data.institution) creditCard.form.issuer_name = data.institution;
+    if (data.last_four) creditCard.form.last_four = data.last_four;
+    if (data.holder_name) creditCard.form.holder_name = data.holder_name;
+    if (data.due_day) creditCard.form.due_day = data.due_day;
+    setupMessage.value = data.warning ?? 'Dados seguros identificados. Revise os campos antes de salvar.';
+}
 
 function submit() {
     if (!creditCard.canSubmit.value) return;
@@ -43,6 +72,14 @@ function submit() {
                     </div>
                 </template>
 
+                <div class="border-b border-gray-700 p-6">
+                    <label class="mb-1 block text-sm font-semibold text-gray-300">Preencher com arquivo da fatura</label>
+                    <input type="file" accept=".ofx,.csv,.pdf" class="text-sm text-gray-300" @change="fillFromStatement">
+                    <p class="mt-1 text-xs text-gray-500">Somente metadados seguros serão preenchidos. Este passo não cria cartão, fatura ou compras.</p>
+                    <p v-if="setupLoading" class="mt-1 text-xs text-indigo-300">Analisando arquivo...</p>
+                    <p v-else-if="setupMessage" class="mt-1 text-xs text-amber-300">{{ setupMessage }}</p>
+                </div>
+
                 <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Nome do cartão</label>
@@ -51,9 +88,10 @@ function submit() {
                     </div>
 
                     <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Operadora/Banco</label>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Instituição emissora</label>
                         <input v-model="creditCard.form.issuer_name" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="Ex: Nubank" />
                         <p class="mt-1 text-sm text-red-400">{{ creditCard.form.errors.issuer_name }}</p>
+                        <p class="mt-1 text-xs text-gray-500">Instituição responsável pelo cartão, como Nubank, Itaú, Inter ou Banco do Brasil.</p>
                     </div>
 
                     <div>
@@ -80,12 +118,12 @@ function submit() {
                     </div>
 
                     <div v-if="creditCard.form.card_type === 'main'" class="md:col-span-2">
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta bancária vinculada</label>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta padrão para pagamento da fatura</label>
                         <select v-model="creditCard.form.bank_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
-                            <option value="">Selecione a conta do banco emissor</option>
+                            <option value="">Sem conta padrão</option>
                             <option v-for="account in bankAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
                         </select>
-                        <p class="mt-1 text-xs text-gray-500">O pagamento da fatura normalmente sai dessa conta, mas ainda é possível pagar por outra conta na baixa.</p>
+                        <p class="mt-1 text-xs text-gray-500">Usada apenas como sugestão ao pagar a fatura. O pagamento ainda pode sair de outra conta.</p>
                         <p class="mt-1 text-sm text-red-400">{{ creditCard.form.errors.bank_account_id }}</p>
                     </div>
 

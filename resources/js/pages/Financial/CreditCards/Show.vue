@@ -10,6 +10,8 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAccount, formatCurrency, formatDate } from '@/lib/formatters';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import CreditCardStatementImport from '@/components/financial/creditCards/CreditCardStatementImport.vue';
+import InlineCreditCardClassification from '@/components/financial/creditCards/InlineCreditCardClassification.vue';
 
 const props = defineProps<{
     wallet: Record<string, any>;
@@ -22,6 +24,7 @@ const props = defineProps<{
     payments: Array<Record<string, any>>;
     expenseAccounts: Array<Record<string, any>>;
     bankAccounts: Array<Record<string, any>>;
+    creditCardStatementPreview?: Record<string, any> | null;
 }>();
 
 const transaction = useCreditCardTransactionForm(props.creditCard.id);
@@ -56,6 +59,8 @@ function submitPayment() {
                 <Link :href="route('credit-cards.index')" class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800">Voltar</Link>
                 <Link :href="route('credit-cards.create')" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Adicionar virtual/adicional</Link>
             </div>
+
+            <CreditCardStatementImport :credit-card-id="creditCard.id" :preview="creditCardStatementPreview" />
 
             <ReportSection>
                 <template #header>
@@ -300,7 +305,10 @@ function submitPayment() {
                         </td>
                         <td class="px-4 py-3 text-sm font-semibold text-white">{{ item.merchant_name }}</td>
                         <td class="px-4 py-3 text-sm text-gray-300">{{ item.description }}</td>
-                        <td class="px-4 py-3 text-sm text-gray-400">{{ formatAccount(item.expense_account?.code, item.expense_account?.name) }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-400">
+                            <InlineCreditCardClassification v-if="item.expense_account_id === wallet.suspense_account_id" :credit-card-id="creditCard.id" :transaction-id="item.id" :accounts="expenseAccounts" />
+                            <span v-else>{{ formatAccount(item.expense_account?.code, item.expense_account?.name) }}</span>
+                        </td>
                         <td class="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-300">{{ item.installment_number }}/{{ item.installments_total }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-red-300">{{ formatCurrency(item.amount_cents) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm">

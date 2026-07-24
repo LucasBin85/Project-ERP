@@ -38,9 +38,9 @@ class CreateCreditCard
                     ->where('is_active', true)
                     ->find($dto->bankAccountId);
 
-                if (! $bankAccount) {
+                if ($dto->bankAccountId && ! $bankAccount) {
                     throw ValidationException::withMessages([
-                        'bank_account_id' => 'Informe a conta bancária vinculada ao cartão principal.',
+                        'bank_account_id' => 'A conta padrão deve estar ativa e pertencer à wallet atual.',
                     ]);
                 }
             }
@@ -94,17 +94,17 @@ class CreateCreditCard
         $lastCode = ChartOfAccount::query()
             ->where('wallet_id', $wallet->id)
             ->where('parent_id', $parent->id)
-            ->where('code', 'like', $parent->code . '.%')
+            ->where('code', 'like', $parent->code.'.%')
             ->orderByRaw('LENGTH(code) DESC')
             ->orderByDesc('code')
             ->value('code');
 
         if (! $lastCode) {
-            return $parent->code . '.001';
+            return $parent->code.'.001';
         }
 
         $lastSegment = (int) str($lastCode)->afterLast('.')->toString();
 
-        return $parent->code . '.' . str_pad((string) ($lastSegment + 1), 3, '0', STR_PAD_LEFT);
+        return $parent->code.'.'.str_pad((string) ($lastSegment + 1), 3, '0', STR_PAD_LEFT);
     }
 }

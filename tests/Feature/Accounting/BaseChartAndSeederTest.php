@@ -10,6 +10,8 @@ it('creates a structural chart without example bank accounts', function () {
     $wallet = User::factory()->create()->wallets()->firstOrFail();
 
     expect($wallet->chartOfAccounts()->where('code', '1.1.2')->where('name', 'Bancos')->exists())->toBeTrue()
+        ->and($wallet->chartOfAccounts()->where('code', '2.1')->where('name', 'Fornecedores e Contas a Pagar')->exists())->toBeTrue()
+        ->and($wallet->chartOfAccounts()->where('code', '2.2')->where('name', 'Cartões de Crédito a Pagar')->exists())->toBeTrue()
         ->and($wallet->chartOfAccounts()->whereIn('name', ['Banco Principal', 'Banco Reserva'])->exists())->toBeFalse()
         ->and($wallet->chartOfAccounts()->where('financial_group', 'accounts_payable')->where('allows_posting', true)->count())->toBe(6)
         ->and($wallet->chartOfAccounts()->where('type', 'despesa')->where('allows_posting', true)->count())->toBe(6)

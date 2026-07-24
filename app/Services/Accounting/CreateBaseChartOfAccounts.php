@@ -19,15 +19,15 @@ class CreateBaseChartOfAccounts
                 : 'credit';
 
             $account = ChartOfAccount::create([
-                'wallet_id'        => $wallet->id,
-                'parent_id'        => $parentId,
-                'code'             => $accountData['code'],
-                'name'             => $accountData['name'],
-                'type'             => $accountData['type'],
-                'normal_balance'   => $normalBalance,
-                'is_system'        => $accountData['is_system'] ?? true,
-                'allows_posting'   => $accountData['allows_posting'] ?? false,
-                'financial_group'  => $accountData['financial_group'] ?? null,
+                'wallet_id' => $wallet->id,
+                'parent_id' => $parentId,
+                'code' => $accountData['code'],
+                'name' => $accountData['name'],
+                'type' => $accountData['type'],
+                'normal_balance' => $normalBalance,
+                'is_system' => $accountData['is_system'] ?? true,
+                'allows_posting' => $accountData['allows_posting'] ?? false,
+                'financial_group' => $accountData['financial_group'] ?? null,
             ]);
 
             foreach ($accountData['children'] ?? [] as $child) {
@@ -158,7 +158,7 @@ class CreateBaseChartOfAccounts
                 'children' => [
                     [
                         'code' => '2.1',
-                        'name' => 'Contas a Pagar',
+                        'name' => 'Fornecedores e Contas a Pagar',
                         'type' => 'passivo',
                         'financial_group' => 'accounts_payable',
                         'children' => [
@@ -178,7 +178,7 @@ class CreateBaseChartOfAccounts
                     ],
                     [
                         'code' => '2.2',
-                        'name' => 'Cartões de Crédito',
+                        'name' => 'Cartões de Crédito a Pagar',
                         'type' => 'passivo',
                         'financial_group' => 'accounts_payable',
                     ],

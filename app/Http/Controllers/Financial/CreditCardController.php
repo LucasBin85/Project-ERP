@@ -13,11 +13,17 @@ use App\Models\CreditCard;
 use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPayment;
 use App\Models\CreditCardTransaction;
+use App\Services\Financial\ConfirmCreditCardStatement;
 use App\Services\Financial\CreateCreditCard;
 use App\Services\Financial\CreateCreditCardTransaction;
+use App\Services\Financial\ParseCreditCardStatementFile;
 use App\Services\Financial\PayCreditCardInvoice;
+use App\Services\Financial\PreviewCreditCardStatement;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -71,6 +77,7 @@ class CreditCardController extends Controller
             'wallet' => [
                 'id' => $wallet->id,
                 'name' => $wallet->name,
+                'suspense_account_id' => $wallet->suspense_account_id,
             ],
             'cards' => $cards,
         ]);
@@ -92,6 +99,7 @@ class CreditCardController extends Controller
             'wallet' => [
                 'id' => $wallet->id,
                 'name' => $wallet->name,
+                'suspense_account_id' => $wallet->suspense_account_id,
             ],
             'parentCards' => $this->parentCards($wallet->id),
             'bankAccounts' => $this->bankAccounts($wallet->id),
@@ -108,7 +116,7 @@ class CreditCardController extends Controller
             'issuer_name' => ['required', 'string', 'max:255'],
             'bank_account_id' => [
                 'nullable',
-                'required_if:card_type,main',
+                'nullable',
                 'integer',
                 Rule::exists('bank_accounts', 'id')
                     ->where('wallet_id', $wallet->id)
@@ -194,6 +202,7 @@ class CreditCardController extends Controller
             'wallet' => [
                 'id' => $wallet->id,
                 'name' => $wallet->name,
+                'suspense_account_id' => $wallet->suspense_account_id,
             ],
             'creditCard' => $creditCard,
             'familyCards' => $this->familyCards($creditCard),
@@ -207,6 +216,88 @@ class CreditCardController extends Controller
             'payments' => $payments,
             'expenseAccounts' => $this->expenseAccounts($wallet->id),
             'bankAccounts' => $this->bankAccounts($wallet->id),
+            'creditCardStatementPreview' => $request->session()->get('credit_card_statement_preview'),
+        ]);
+    }
+
+    public function previewStatement(Request $request, CreditCard $creditCard, PreviewCreditCardStatement $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $creditCard->wallet_id === (int) $wallet->id, 404);
+        $request->validate(['statement_file' => ['required', 'file', 'max:10240', 'extensions:ofx,csv,pdf']]);
+        $file = $request->file('statement_file');
+
+        try {
+            $preview = $service->execute($wallet, $creditCard, (string) $file->get(), $file->getClientOriginalName());
+        } catch (\Throwable $exception) {
+            return back()->withErrors(['statement_file' => $exception->getMessage()]);
+        }
+
+        $token = Str::random(64);
+        $preview['token'] = $token;
+        Cache::put('credit-card-statement:'.$token, [
+            'user_id' => $request->user()->id,
+            'wallet_id' => $wallet->id,
+            'credit_card_id' => $creditCard->id,
+            'contents' => (string) $file->get(),
+            'filename' => $file->getClientOriginalName(),
+            'preview' => $preview,
+        ], now()->addMinutes(30));
+
+        return back()->with('credit_card_statement_preview', $preview);
+    }
+
+    public function confirmStatement(Request $request, CreditCard $creditCard, ConfirmCreditCardStatement $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $creditCard->wallet_id === (int) $wallet->id, 404);
+        $data = $request->validate([
+            'preview_token' => ['required', 'string', 'size:64'],
+            'rows' => ['required', 'array'],
+            'rows.*.row_key' => ['required', 'string', 'size:64'],
+            'rows.*.action' => ['required', Rule::in(['create', 'ignore'])],
+        ]);
+        $key = 'credit-card-statement:'.$data['preview_token'];
+        $context = Cache::get($key);
+        if (! is_array($context) || (int) ($context['user_id'] ?? 0) !== (int) $request->user()->id
+            || (int) ($context['wallet_id'] ?? 0) !== (int) $wallet->id
+            || (int) ($context['credit_card_id'] ?? 0) !== (int) $creditCard->id) {
+            return back()->withErrors(['statement_import' => 'A pré-visualização expirou. Selecione o arquivo novamente.']);
+        }
+
+        try {
+            $result = $service->execute($wallet, $creditCard, $context['preview'], $context['contents'], $context['filename'], $data['rows']);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return back()->withErrors(['statement_import' => $exception->getMessage()])
+                ->with('credit_card_statement_preview', $context['preview']);
+        }
+        Cache::forget($key);
+
+        return back()->with('success', "{$result['created']} compras importadas; {$result['ignored']} linhas ignoradas.");
+    }
+
+    public function previewSetupFile(Request $request, ParseCreditCardStatementFile $parser): JsonResponse
+    {
+        $this->resolveActiveWallet($request);
+        $request->validate(['statement_file' => ['required', 'file', 'max:10240', 'extensions:ofx,csv,pdf']]);
+        $file = $request->file('statement_file');
+
+        try {
+            $parsed = $parser->parse((string) $file->get(), $file->getClientOriginalName());
+        } catch (\Throwable $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json([
+            'institution' => $parsed['institution'] ?? null,
+            'last_four' => $parsed['last_four'] ?? null,
+            'holder_name' => $parsed['holder_name'] ?? null,
+            'due_day' => isset($parsed['due_date']) ? (int) substr($parsed['due_date'], -2) : null,
+            'warning' => empty($parsed['institution']) && empty($parsed['last_four'])
+                ? 'O arquivo não possui metadados suficientes. Continue o preenchimento manual.'
+                : null,
         ]);
     }
 
@@ -247,6 +338,28 @@ class CreditCardController extends Controller
         return redirect()
             ->route('credit-cards.show', $creditCard)
             ->with('success', 'Compra no cartão registrada com sucesso.');
+    }
+
+    public function classifyTransaction(Request $request, CreditCard $creditCard, CreditCardTransaction $transaction): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $creditCard->wallet_id === (int) $wallet->id && (int) $transaction->wallet_id === (int) $wallet->id, 404);
+        $data = $request->validate([
+            'chart_of_account_id' => [
+                'required', 'integer',
+                Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $wallet->id)->whereIn('type', ['despesa', 'ativo'])->where('allows_posting', true),
+            ],
+        ]);
+        $account = ChartOfAccount::query()->where('wallet_id', $wallet->id)->whereKey($data['chart_of_account_id'])
+            ->whereDoesntHave('children')
+            ->whereNotIn('id', fn ($query) => $query->select('chart_of_account_id')->from('bank_accounts'))
+            ->firstOrFail();
+        abort_unless($transaction->journalEntry?->status === 'draft', 422);
+        $transaction->journalEntry->lines()->where('chart_of_account_id', $wallet->suspense_account_id)
+            ->where('type', 'debit')->update(['chart_of_account_id' => $account->id, 'memo' => 'Classificação da compra no cartão']);
+        $transaction->update(['expense_account_id' => $account->id]);
+
+        return back()->with('success', 'Compra classificada e pronta para contabilidade.');
     }
 
     public function payInvoice(Request $request, CreditCard $creditCard, PayCreditCardInvoice $service): RedirectResponse

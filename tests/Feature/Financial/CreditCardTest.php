@@ -102,6 +102,24 @@ it('creates a main credit card with a liability account and linked bank account'
         ->and($creditCard->liabilityAccount->allows_posting)->toBeTrue();
 });
 
+it('creates a main credit card without a default payment bank account', function () {
+    $wallet = createTestWalletWithCardGroup();
+    $creditCard = app(CreateCreditCard::class)->execute($wallet, new CreditCardDTO(
+        name: 'Cartão sem conta padrão',
+        issuerName: 'Nubank',
+        network: 'mastercard',
+        cardType: 'main',
+        closingDay: 5,
+        dueDay: 15,
+        bestPurchaseDay: 6,
+        creditLimitCents: 0,
+    ));
+
+    expect($creditCard->bank_account_id)->toBeNull()
+        ->and(CreditCardTransaction::query()->count())->toBe(0)
+        ->and(CreditCardInvoice::query()->count())->toBe(0);
+});
+
 it('creates a virtual credit card sharing parent invoice settings', function () {
     $wallet = createTestWalletWithCardGroup();
 

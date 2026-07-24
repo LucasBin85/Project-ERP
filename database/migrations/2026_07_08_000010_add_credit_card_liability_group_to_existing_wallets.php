@@ -32,7 +32,7 @@ return new class extends Migration
                 'wallet_id' => $wallet->id,
                 'parent_id' => $parent->id,
                 'code' => '2.2',
-                'name' => 'Cartões de Crédito',
+                'name' => 'Cartões de Crédito a Pagar',
                 'type' => 'passivo',
                 'normal_balance' => 'credit',
                 'is_system' => true,
