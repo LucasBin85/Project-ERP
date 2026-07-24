@@ -22,30 +22,52 @@ const setupLoading = ref(false);
 async function fillFromStatement(event: Event) {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
+
     setupLoading.value = true;
     setupMessage.value = '';
+
     const body = new FormData();
     body.append('statement_file', file);
     if (creditCard.form.bank_id) body.append('bank_id', String(creditCard.form.bank_id));
+
     const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
-    const response = await fetch(route('credit-cards.setup-file.preview'), {
-        method: 'POST',
-        body,
-        headers: { Accept: 'application/json', 'X-CSRF-TOKEN': token },
-    });
-    const data = await response.json();
-    setupLoading.value = false;
-    if (!response.ok) {
-        setupMessage.value = data.message ?? 'Não foi possível identificar dados seguros neste arquivo.';
-        return;
+
+    try {
+        const response = await fetch(route('credit-cards.setup-file.preview'), {
+            method: 'POST',
+            body,
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': token,
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+
+        if (response.status === 419) {
+            setupMessage.value = 'Sua sessão expirou. Recarregue a página e tente novamente.';
+            return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            setupMessage.value = data.message ?? 'Não foi possível identificar dados seguros neste arquivo.';
+            return;
+        }
+
+        const institutionMismatch = data.institution_mismatch === true;
+        if (data.last_four) creditCard.form.last_four = data.last_four;
+        if (data.holder_name) creditCard.form.holder_name = data.holder_name;
+        if (data.due_day) creditCard.form.due_day = data.due_day;
+        setupMessage.value = institutionMismatch
+            ? 'Este arquivo parece pertencer a outra instituição. A instituição herdada não foi alterada.'
+            : (data.warning ?? 'Dados seguros identificados. Revise os campos antes de salvar.');
+    } catch {
+        setupMessage.value = 'Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.';
+    } finally {
+        setupLoading.value = false;
+        (event.target as HTMLInputElement).value = '';
     }
-    const institutionMismatch = data.institution_mismatch === true;
-    if (data.last_four) creditCard.form.last_four = data.last_four;
-    if (data.holder_name) creditCard.form.holder_name = data.holder_name;
-    if (data.due_day) creditCard.form.due_day = data.due_day;
-    setupMessage.value = institutionMismatch
-        ? 'Este arquivo parece pertencer a outra instituição. A instituição herdada não foi alterada.'
-        : (data.warning ?? 'Dados seguros identificados. Revise os campos antes de salvar.');
 }
 
 function submit() {
