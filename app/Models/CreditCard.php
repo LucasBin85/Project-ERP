@@ -10,6 +10,7 @@ class CreditCard extends Model
 {
     protected $fillable = [
         'wallet_id',
+        'issuer_bank_id',
         'liability_account_id',
         'bank_account_id',
         'parent_card_id',
@@ -48,6 +49,11 @@ class CreditCard extends Model
     public function bankAccount(): BelongsTo
     {
         return $this->belongsTo(BankAccount::class);
+    }
+
+    public function issuerBank(): BelongsTo
+    {
+        return $this->belongsTo(Bank::class, 'issuer_bank_id');
     }
 
     public function parentCard(): BelongsTo

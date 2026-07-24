@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\Bank;
 use App\Models\BankStatementImport;
 use App\Models\BankStatementImportTransaction;
+use App\Models\CreditCard;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Financial\BuildBankAccountWorkspace;
@@ -146,4 +148,29 @@ it('builds a bank account workspace with recent transactions and actions', funct
         ->and($data['actions']['statement_url'])->toContain('/bank-accounts/'.$bankAccount->id.'/statement')
         ->and($data['actions'])->not->toHaveKey('ofx_import_url')
         ->and($data['actions'])->not->toHaveKey('reconciliation_url');
+});
+
+it('lists only credit cards from the bank account institution', function () {
+    $wallet = Wallet::query()->create(['user_id' => User::factory()->create()->id, 'name' => 'Carteira']);
+    $nubank = Bank::query()->create(['code' => '999', 'name' => 'Nubank', 'short_name' => 'Nubank', 'ispb' => '99999999', 'active' => true]);
+    $itau = Bank::query()->create(['code' => '341', 'name' => 'Itaú', 'short_name' => 'Itaú', 'ispb' => '60701190', 'active' => true]);
+    $nubankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.101', 'Conta Nubank');
+    $itauAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.102', 'Conta Itaú');
+    $nubankAccount->update(['bank_id' => $nubank->id]);
+    $itauAccount->update(['bank_id' => $itau->id]);
+    $group = $wallet->chartOfAccounts()->where('code', '2.2')->firstOrFail();
+    $liability = AccountingTestHelper::account($wallet, '2.2.901', 'Cartão teste', 'passivo', 'credit');
+    $liability->update(['parent_id' => $group->id]);
+    foreach ([[$nubank, 'Cartão Nubank'], [$itau, 'Cartão Itaú']] as [$bank, $name]) {
+        CreditCard::query()->create([
+            'wallet_id' => $wallet->id, 'issuer_bank_id' => $bank->id, 'liability_account_id' => $liability->id,
+            'name' => $name, 'issuer_name' => $bank->short_name, 'network' => 'mastercard', 'card_type' => 'main',
+            'closing_day' => 5, 'due_day' => 15, 'best_purchase_day' => 6, 'credit_limit_cents' => 100000, 'is_active' => true,
+        ]);
+    }
+
+    expect(collect(app(BuildBankAccountWorkspace::class)->show($wallet, $nubankAccount)['credit_cards'])->pluck('name')->all())
+        ->toBe(['Cartão Nubank'])
+        ->and(collect(app(BuildBankAccountWorkspace::class)->show($wallet, $itauAccount)['credit_cards'])->pluck('name')->all())
+        ->toBe(['Cartão Itaú']);
 });

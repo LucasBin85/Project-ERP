@@ -6,11 +6,19 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCurrency } from '@/lib/formatters';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import { computed } from 'vue';
 
-defineProps<{
+const props = defineProps<{
     wallet: Record<string, any>;
     cards: Array<Record<string, any>>;
 }>();
+const cardGroups = computed(() => Object.entries(
+    props.cards.reduce((groups: Record<string, Array<Record<string, any>>>, card) => {
+        const institution = card.issuer_bank?.short_name ?? card.issuer_name ?? 'Instituição não identificada';
+        (groups[institution] ??= []).push(card);
+        return groups;
+    }, {}),
+));
 
 const cardTypes: Record<string, string> = {
     main: 'Principal',
@@ -41,11 +49,14 @@ const cardTypes: Record<string, string> = {
                     </div>
                 </template>
 
-                <ReportTable :empty="cards.length === 0" empty-message="Nenhum cartão cadastrado." :empty-colspan="9">
+                <div v-if="cards.length === 0" class="p-6 text-sm text-gray-400">Nenhum cartão cadastrado.</div>
+                <div v-for="[institution, institutionCards] in cardGroups" v-else :key="institution" class="border-b border-gray-800 last:border-b-0">
+                    <h3 class="bg-gray-900/60 px-4 py-3 text-sm font-bold text-indigo-200">{{ institution }}</h3>
+                <ReportTable :empty="false" empty-message="" :empty-colspan="9">
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Fatura</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Conta vinculada</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Instituição emissora</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Cartões</th>
                             <th class="px-4 py-3 text-center text-xs font-bold uppercase text-gray-400">Fechamento</th>
                             <th class="px-4 py-3 text-center text-xs font-bold uppercase text-gray-400">Vencimento</th>
@@ -56,7 +67,7 @@ const cardTypes: Record<string, string> = {
                         </tr>
                     </template>
 
-                    <tr v-for="card in cards" :key="card.id" class="hover:bg-gray-800/50">
+                    <tr v-for="card in institutionCards" :key="card.id" class="hover:bg-gray-800/50">
                         <td class="px-4 py-3 text-sm">
                             <div class="font-semibold text-white">{{ card.name }}</div>
                             <div class="text-xs text-gray-500">
@@ -65,7 +76,7 @@ const cardTypes: Record<string, string> = {
                         </td>
 
                         <td class="px-4 py-3 text-sm text-gray-300">
-                            {{ card.bank_account?.name ?? '-' }}
+                            {{ card.issuer_bank?.short_name ?? card.issuer_name }}
                         </td>
 
                         <td class="px-4 py-3 text-sm text-gray-300">
@@ -90,6 +101,7 @@ const cardTypes: Record<string, string> = {
                         </td>
                     </tr>
                 </ReportTable>
+                </div>
             </ReportSection>
         </ReportPage>
     </AppLayout>

@@ -13,13 +13,13 @@ final readonly class CreditCardDTO
         public int $dueDay,
         public int $bestPurchaseDay,
         public int $creditLimitCents,
+        public ?int $bankId = null,
         public ?int $bankAccountId = null,
         public ?int $parentCardId = null,
         public ?string $holderName = null,
         public ?string $lastFour = null,
         public ?string $notes = null,
-    ) {
-    }
+    ) {}
 
     public static function fromArray(array $data): self
     {
@@ -32,6 +32,7 @@ final readonly class CreditCardDTO
             dueDay: (int) $data['due_day'],
             bestPurchaseDay: (int) ($data['best_purchase_day'] ?? self::suggestBestPurchaseDay((int) $data['closing_day'])),
             creditLimitCents: (int) ($data['credit_limit_cents'] ?? 0),
+            bankId: isset($data['bank_id']) && $data['bank_id'] !== '' ? (int) $data['bank_id'] : null,
             bankAccountId: isset($data['bank_account_id']) && $data['bank_account_id'] !== '' ? (int) $data['bank_account_id'] : null,
             parentCardId: isset($data['parent_card_id']) && $data['parent_card_id'] !== '' ? (int) $data['parent_card_id'] : null,
             holderName: isset($data['holder_name']) ? trim((string) $data['holder_name']) : null,

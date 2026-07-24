@@ -4,7 +4,6 @@ import ReportSection from '@/components/reports/ReportSection.vue';
 import ReportSummaryCard from '@/components/reports/ReportSummaryCard.vue';
 import ReportTable from '@/components/reports/ReportTable.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
-import { useCreditCardPaymentForm } from '@/composables/financial/useCreditCardPaymentForm';
 import { useCreditCardTransactionForm } from '@/composables/financial/useCreditCardTransactionForm';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAccount, formatCurrency, formatDate } from '@/lib/formatters';
@@ -23,12 +22,10 @@ const props = defineProps<{
     transactions: Array<Record<string, any>>;
     payments: Array<Record<string, any>>;
     expenseAccounts: Array<Record<string, any>>;
-    bankAccounts: Array<Record<string, any>>;
     creditCardStatementPreview?: Record<string, any> | null;
 }>();
 
 const transaction = useCreditCardTransactionForm(props.creditCard.id);
-const payment = useCreditCardPaymentForm(props.invoices?.[0]?.id ?? null);
 
 const cardTypes: Record<string, string> = {
     main: 'Principal',
@@ -46,10 +43,6 @@ function submitTransaction() {
     transaction.form.post(route('credit-cards.transactions.store', [props.creditCard.id]));
 }
 
-function submitPayment() {
-    if (!payment.canSubmit.value) return;
-    payment.form.post(route('credit-cards.payments.store', [props.creditCard.id]));
-}
 </script>
 
 <template>
@@ -91,8 +84,8 @@ function submitPayment() {
                         <p class="mt-1 text-sm font-semibold text-green-300">Dia {{ creditCard.best_purchase_day }}</p>
                     </div>
                     <div>
-                        <p class="text-xs uppercase text-gray-500">Conta bancária vinculada</p>
-                        <p class="mt-1 text-sm text-gray-200">{{ creditCard.bank_account?.name ?? '-' }}</p>
+                        <p class="text-xs uppercase text-gray-500">Instituição</p>
+                        <p class="mt-1 text-sm text-gray-200">{{ creditCard.issuer_bank?.short_name ?? creditCard.issuer_name }}</p>
                     </div>
                     <div>
                         <p class="text-xs uppercase text-gray-500">Conta contábil da fatura</p>
@@ -218,51 +211,6 @@ function submitPayment() {
                     <div class="md:col-span-2 xl:col-span-3 flex justify-end">
                         <button type="submit" :disabled="!transaction.canSubmit.value || transaction.form.processing" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
                             Registrar compra
-                        </button>
-                    </div>
-                </form>
-            </ReportSection>
-
-            <ReportSection>
-                <template #header>
-                    <div>
-                        <h2 class="text-lg font-bold text-white">Pagar fatura</h2>
-                        <p class="text-sm text-gray-400">Selecione a fatura mensal que será baixada contra a conta bancária.</p>
-                    </div>
-                </template>
-
-                <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-5" @submit.prevent="submitPayment">
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Fatura</label>
-                        <select v-model="payment.form.credit_card_invoice_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
-                            <option value="">Selecione uma fatura</option>
-                            <option v-for="invoice in invoices" :key="invoice.id" :value="invoice.id">
-                                {{ invoiceLabel(invoice) }} · saldo {{ formatCurrency(invoice.balance_cents) }}
-                            </option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Conta bancária</label>
-                        <select v-model="payment.form.bank_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
-                            <option value="">Selecione uma conta</option>
-                            <option v-for="account in bankAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Data do pagamento</label>
-                        <input v-model="payment.form.payment_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" />
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Valor pago</label>
-                        <input :value="payment.form.amount" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="R$ 0,00" inputmode="numeric" @input="payment.updateAmount" />
-                    </div>
-
-                    <div class="flex items-end justify-end">
-                        <button type="submit" :disabled="!payment.canSubmit.value || payment.form.processing" class="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50">
-                            Registrar pagamento
                         </button>
                     </div>
                 </form>

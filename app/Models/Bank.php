@@ -23,4 +23,9 @@ class Bank extends Model
     {
         return $this->hasMany(BankAccount::class);
     }
+
+    public function creditCards(): HasMany
+    {
+        return $this->hasMany(CreditCard::class, 'issuer_bank_id');
+    }
 }

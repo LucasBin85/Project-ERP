@@ -82,8 +82,8 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                     <template #header>
                         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                             <div>
-                                <h2 class="text-lg font-bold text-white">Cartão de Crédito</h2>
-                                <p class="text-sm text-gray-400">Fatura atual dos cartões ligados a esta conta.</p>
+                                <h2 class="text-lg font-bold text-white">Cartões desta instituição</h2>
+                                <p class="text-sm text-gray-400">Cartões emitidos pela mesma instituição desta conta, independentemente da conta usada no pagamento.</p>
                             </div>
 
                             <Link :href="actions.credit_card_create_url" class="text-sm font-semibold text-indigo-300 hover:text-indigo-200">
@@ -93,7 +93,7 @@ function invoiceLabel(invoice: Record<string, any> | null | undefined): string {
                     </template>
 
                     <div class="min-h-[220px]">
-                        <div v-if="credit_cards.length === 0" class="p-6 text-sm text-gray-400">Nenhum cartão vinculado a esta conta.</div>
+                        <div v-if="credit_cards.length === 0" class="p-6 text-sm text-gray-400">Nenhum cartão desta instituição.</div>
 
                         <div v-else class="grid grid-cols-1 gap-4 p-6">
                             <Link

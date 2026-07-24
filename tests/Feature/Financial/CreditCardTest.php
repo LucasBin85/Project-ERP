@@ -3,6 +3,7 @@
 use App\DTOs\Financial\CreditCardDTO;
 use App\DTOs\Financial\CreditCardPaymentDTO;
 use App\DTOs\Financial\CreditCardTransactionDTO;
+use App\Models\Bank;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCardInvoice;
 use App\Models\CreditCardTransaction;
@@ -10,9 +11,11 @@ use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Services\Accounting\CreateJournalEntry;
 use App\Services\Financial\CreateCreditCard;
 use App\Services\Financial\CreateCreditCardInstallments;
 use App\Services\Financial\CreateCreditCardTransaction;
+use App\Services\Financial\LinkCreditCardInvoicePaymentFromBankStatement;
 use App\Services\Financial\PayCreditCardInvoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
@@ -65,6 +68,12 @@ function createTestWalletWithCardGroup(): Wallet
     ]);
 
     createCreditCardLiabilityGroup($wallet);
+    Bank::query()->firstOrCreate(['code' => '999'], [
+        'name' => 'Nubank',
+        'short_name' => 'Nubank',
+        'ispb' => '99999999',
+        'active' => true,
+    ]);
 
     return $wallet;
 }
@@ -96,7 +105,8 @@ it('creates a main credit card with a liability account and linked bank account'
     );
 
     expect($creditCard->card_type)->toBe('main')
-        ->and($creditCard->bank_account_id)->toBe($bankAccount->id)
+        ->and($creditCard->bank_account_id)->toBeNull()
+        ->and($creditCard->issuerBank->short_name)->toBe('Nubank')
         ->and($creditCard->liabilityAccount->code)->toBe('2.2.001')
         ->and($creditCard->liabilityAccount->type)->toBe('passivo')
         ->and($creditCard->liabilityAccount->allows_posting)->toBeTrue();
@@ -118,6 +128,41 @@ it('creates a main credit card without a default payment bank account', function
     expect($creditCard->bank_account_id)->toBeNull()
         ->and(CreditCardTransaction::query()->count())->toBe(0)
         ->and(CreditCardInvoice::query()->count())->toBe(0);
+});
+
+it('inherits the issuing institution from the bank account creation context', function () {
+    $wallet = createTestWalletWithCardGroup();
+    $user = $wallet->user;
+    $nubank = Bank::query()->where('short_name', 'Nubank')->firstOrFail();
+    $itau = Bank::query()->create([
+        'code' => '341', 'name' => 'Itaú Unibanco', 'short_name' => 'Itaú', 'ispb' => '60701190', 'active' => true,
+    ]);
+    $account = FinancialTestHelper::bankAccount($wallet, '1.1.2.010', 'Conta Nubank');
+    $account->update(['bank_id' => $nubank->id]);
+
+    $payload = [
+        'name' => 'Cartão Nubank', 'bank_id' => $nubank->id, 'bank_account_context_id' => $account->id,
+        'network' => 'mastercard', 'card_type' => 'main', 'closing_day' => 5, 'due_day' => 15,
+        'best_purchase_day' => 6, 'credit_limit_cents' => 100000,
+    ];
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
+        ->post(route('credit-cards.store'), $payload)->assertSessionHasNoErrors();
+    $card = \App\Models\CreditCard::query()->where('name', 'Cartão Nubank')->firstOrFail();
+    expect($card->issuer_bank_id)->toBe($nubank->id)->and($card->bank_account_id)->toBeNull();
+
+    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
+        ->post(route('credit-cards.store'), [...$payload, 'name' => 'Cartão inválido', 'bank_id' => $itau->id])
+        ->assertSessionHasErrors('bank_id');
+});
+
+it('does not expose a default payment account in the credit card UI', function () {
+    expect(file_get_contents(resource_path('js/pages/Financial/CreditCards/Create.vue')))
+        ->not->toContain('Conta padrão para pagamento da fatura')
+        ->not->toContain('form.issuer_name')
+        ->and(file_get_contents(resource_path('js/pages/Financial/CreditCards/Show.vue')))
+        ->not->toContain('Pagar fatura')
+        ->not->toContain('submitPayment');
 });
 
 it('creates a virtual credit card sharing parent invoice settings', function () {
@@ -408,5 +453,41 @@ it('creates a draft journal entry when paying a specific credit card invoice', f
         'chart_of_account_id' => $bankAccount->chart_of_account_id,
         'type' => 'credit',
         'amount_cents' => 7590,
+    ]);
+});
+
+it('pays an invoice from the bank account where the statement outflow occurred', function () {
+    $wallet = createTestWalletWithCardGroup();
+    $expense = AccountingTestHelper::account($wallet, '5.9.95', 'Despesa cartão', 'despesa', 'debit');
+    $temporary = AccountingTestHelper::account($wallet, '1.9.95', 'Classificação temporária', 'ativo', 'debit');
+    $issuerAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.095', 'Conta da emissora');
+    $payingAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.096', 'Conta de outro banco');
+    $card = app(CreateCreditCard::class)->execute($wallet, new CreditCardDTO(
+        name: 'Nubank', issuerName: 'Nubank', network: 'mastercard', cardType: 'main',
+        closingDay: 5, dueDay: 15, bestPurchaseDay: 6, creditLimitCents: 100000,
+        bankAccountId: $issuerAccount->id,
+    ));
+    $purchase = app(CreateCreditCardTransaction::class)->execute($wallet, new CreditCardTransactionDTO(
+        creditCardId: $card->id, expenseAccountId: $expense->id, purchaseDate: '2026-07-10',
+        merchantName: 'Compra', description: 'Compra', amountCents: 10000,
+    ));
+    $entry = app(CreateJournalEntry::class)->execute([
+        'wallet_id' => $wallet->id, 'entry_date' => '2026-08-15', 'description' => 'Saída no extrato',
+        'lines' => [
+            ['chart_of_account_id' => $temporary->id, 'type' => 'debit', 'amount_cents' => 10000],
+            ['chart_of_account_id' => $payingAccount->chart_of_account_id, 'type' => 'credit', 'amount_cents' => 10000],
+        ],
+    ]);
+    $entry->update(['source' => 'ofx']);
+
+    $payment = app(LinkCreditCardInvoicePaymentFromBankStatement::class)->execute(
+        $wallet, $payingAccount, $entry, $purchase->credit_card_invoice_id,
+    );
+
+    expect($payment->bank_account_id)->toBe($payingAccount->id)
+        ->and($card->bank_account_id)->toBeNull();
+    $this->assertDatabaseHas('journal_lines', [
+        'journal_entry_id' => $entry->id, 'chart_of_account_id' => $card->liability_account_id,
+        'type' => 'debit', 'amount_cents' => 10000,
     ]);
 });

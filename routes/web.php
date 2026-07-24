@@ -191,8 +191,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('credit-cards/{creditCard}/transactions/{transaction}/classify', [CreditCardController::class, 'classifyTransaction'])
             ->name('credit-cards.transactions.classify');
 
-        Route::post('credit-cards/{creditCard}/payments', [CreditCardController::class, 'payInvoice'])
-            ->name('credit-cards.payments.store');
         Route::post('credit-cards/{creditCard}/statement-preview', [CreditCardController::class, 'previewStatement'])
             ->name('credit-cards.statement.preview');
         Route::post('credit-cards/{creditCard}/statement-confirm', [CreditCardController::class, 'confirmStatement'])

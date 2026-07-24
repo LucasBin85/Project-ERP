@@ -5,6 +5,7 @@ use App\DTOs\Financial\AccountReceivableDTO;
 use App\DTOs\Financial\CreditCardDTO;
 use App\DTOs\Financial\CreditCardTransactionDTO;
 use App\DTOs\Financial\DashboardFiltersDTO;
+use App\Models\Bank;
 use App\Models\ChartOfAccount;
 use App\Models\User;
 use App\Models\Wallet;
@@ -64,6 +65,14 @@ it('builds the financial dashboard with realized and projected data', function (
         code: '1.1.2.001',
         name: 'Banco Principal',
     );
+    $issuerBank = Bank::query()->create([
+        'code' => '260',
+        'name' => 'Nu Pagamentos S.A.',
+        'short_name' => 'Nubank',
+        'ispb' => '18236120',
+        'active' => true,
+    ]);
+    $bankAccount->update(['bank_id' => $issuerBank->id]);
 
     $expenseAccount = AccountingTestHelper::account($wallet, '5.8.1', 'Despesa Administrativa', 'despesa', 'debit');
     $revenueAccount = AccountingTestHelper::account($wallet, '4.8.1', 'Receita de Serviços', 'receita', 'credit');
@@ -112,7 +121,7 @@ it('builds the financial dashboard with realized and projected data', function (
             dueDay: 30,
             bestPurchaseDay: 26,
             creditLimitCents: 500000,
-            bankAccountId: $bankAccount->id,
+            bankId: $issuerBank->id,
         ),
     );
 

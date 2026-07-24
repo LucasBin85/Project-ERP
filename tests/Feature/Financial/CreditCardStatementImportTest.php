@@ -1,6 +1,7 @@
 <?php
 
 use App\DTOs\Financial\CreditCardDTO;
+use App\Models\Bank;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCardTransaction;
 use App\Models\JournalEntry;
@@ -25,6 +26,9 @@ function creditCardImportContext(): array
         'type' => 'ativo', 'normal_balance' => 'debit', 'allows_posting' => true,
     ]);
     $wallet->update(['suspense_account_id' => $suspense->id]);
+    Bank::query()->firstOrCreate(['code' => '999'], [
+        'name' => 'Nubank', 'short_name' => 'Nubank', 'ispb' => '99999999', 'active' => true,
+    ]);
     $card = app(CreateCreditCard::class)->execute($wallet, new CreditCardDTO(
         name: 'Nubank', issuerName: 'Nubank', network: 'mastercard', cardType: 'main',
         closingDay: 1, dueDay: 8, bestPurchaseDay: 2, creditLimitCents: 100000,

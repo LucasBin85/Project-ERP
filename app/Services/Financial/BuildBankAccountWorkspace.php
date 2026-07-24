@@ -47,7 +47,7 @@ class BuildBankAccountWorkspace
     {
         abort_unless($bankAccount->wallet_id === $wallet->id, 404);
 
-        $bankAccount->load('chartOfAccount:id,code,name');
+        $bankAccount->load(['chartOfAccount:id,code,name', 'bank:id,name,short_name']);
 
         $currentMonthStart = now()->startOfMonth()->toDateString();
         $today = now()->toDateString();
@@ -198,9 +198,13 @@ class BuildBankAccountWorkspace
 
     private function linkedCreditCards(Wallet $wallet, BankAccount $bankAccount): array
     {
+        if (! $bankAccount->bank_id) {
+            return [];
+        }
+
         return CreditCard::query()
             ->where('wallet_id', $wallet->id)
-            ->where('bank_account_id', $bankAccount->id)
+            ->where('issuer_bank_id', $bankAccount->bank_id)
             ->whereNull('parent_card_id')
             ->with('childCards:id,parent_card_id,name,card_type,last_four,is_active')
             ->orderBy('name')

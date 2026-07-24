@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Financial;
 
 use App\DTOs\Financial\CreditCardDTO;
-use App\DTOs\Financial\CreditCardPaymentDTO;
 use App\DTOs\Financial\CreditCardTransactionDTO;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
+use App\Models\Bank;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCard;
@@ -17,7 +17,6 @@ use App\Services\Financial\ConfirmCreditCardStatement;
 use App\Services\Financial\CreateCreditCard;
 use App\Services\Financial\CreateCreditCardTransaction;
 use App\Services\Financial\ParseCreditCardStatementFile;
-use App\Services\Financial\PayCreditCardInvoice;
 use App\Services\Financial\PreviewCreditCardStatement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -42,7 +41,7 @@ class CreditCardController extends Controller
             ->whereNull('parent_card_id')
             ->with([
                 'liabilityAccount:id,code,name',
-                'bankAccount:id,name,bank_name,bank_code,agency,account_number',
+                'issuerBank:id,code,name,short_name',
                 'childCards:id,parent_card_id,name,card_type,last_four,is_active',
             ])
             ->orderBy('issuer_name')
@@ -67,7 +66,7 @@ class CreditCardController extends Controller
                     'available_limit_cents' => $card->credit_limit_cents - $currentBalance,
                     'is_active' => $card->is_active,
                     'liability_account' => $card->liabilityAccount,
-                    'bank_account' => $card->bankAccount,
+                    'issuer_bank' => $card->issuerBank,
                     'child_cards' => $card->childCards,
                 ];
             })
@@ -87,12 +86,15 @@ class CreditCardController extends Controller
     {
         $wallet = $this->resolveActiveWallet($request);
         $selectedBankAccountId = $request->query('bank_account_id');
+        $contextAccount = null;
 
         if ($selectedBankAccountId) {
-            BankAccount::query()
+            $contextAccount = BankAccount::query()
                 ->where('wallet_id', $wallet->id)
                 ->where('is_active', true)
+                ->with('bank:id,name,short_name')
                 ->findOrFail($selectedBankAccountId);
+            abort_unless($contextAccount->bank_id && $contextAccount->bank, 422, 'A conta precisa estar vinculada a uma instituição do catálogo.');
         }
 
         return Inertia::render('Financial/CreditCards/Create', [
@@ -101,9 +103,14 @@ class CreditCardController extends Controller
                 'name' => $wallet->name,
                 'suspense_account_id' => $wallet->suspense_account_id,
             ],
-            'parentCards' => $this->parentCards($wallet->id),
-            'bankAccounts' => $this->bankAccounts($wallet->id),
+            'parentCards' => $this->parentCards($wallet->id, $contextAccount?->bank_id),
             'selectedBankAccountId' => $selectedBankAccountId ? (int) $selectedBankAccountId : null,
+            'issuerBanks' => Bank::query()->where('active', true)->orderBy('short_name')->get(['id', 'name', 'short_name']),
+            'issuerContext' => $contextAccount ? [
+                'bank_account_id' => $contextAccount->id,
+                'bank_id' => $contextAccount->bank_id,
+                'name' => $contextAccount->bank->short_name,
+            ] : null,
         ]);
     }
 
@@ -113,15 +120,8 @@ class CreditCardController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'issuer_name' => ['required', 'string', 'max:255'],
-            'bank_account_id' => [
-                'nullable',
-                'nullable',
-                'integer',
-                Rule::exists('bank_accounts', 'id')
-                    ->where('wallet_id', $wallet->id)
-                    ->where('is_active', true),
-            ],
+            'bank_id' => ['required_if:card_type,main', 'nullable', 'integer', Rule::exists('banks', 'id')->where('active', true)],
+            'bank_account_context_id' => ['nullable', 'integer', Rule::exists('bank_accounts', 'id')->where('wallet_id', $wallet->id)->where('is_active', true)],
             'network' => ['required', Rule::in(['visa', 'mastercard', 'elo', 'amex', 'hipercard', 'other'])],
             'card_type' => ['required', Rule::in(['main', 'additional', 'virtual'])],
             'parent_card_id' => ['nullable', 'required_unless:card_type,main', 'integer', Rule::exists('credit_cards', 'id')->where('wallet_id', $wallet->id)->where('card_type', 'main')],
@@ -133,6 +133,25 @@ class CreditCardController extends Controller
             'credit_limit_cents' => ['required', 'integer', 'min:0'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
+        if (! empty($data['bank_account_context_id'])) {
+            $contextBankId = BankAccount::query()->where('wallet_id', $wallet->id)
+                ->whereKey($data['bank_account_context_id'])->value('bank_id');
+            if (! $contextBankId || (int) $data['bank_id'] !== (int) $contextBankId) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'bank_id' => 'O cartão deve pertencer à mesma instituição do contexto de criação.',
+                ]);
+            }
+            if (($data['card_type'] ?? 'main') !== 'main') {
+                $parentBankId = CreditCard::query()->where('wallet_id', $wallet->id)
+                    ->whereKey($data['parent_card_id'] ?? null)->value('issuer_bank_id');
+                if ((int) $parentBankId !== (int) $contextBankId) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'parent_card_id' => 'O cartão principal deve pertencer à mesma instituição do contexto.',
+                    ]);
+                }
+            }
+        }
+        $data['issuer_name'] = Bank::query()->whereKey($data['bank_id'] ?? null)->value('short_name') ?? '';
 
         $creditCard = $service->execute($wallet, CreditCardDTO::fromArray($data));
         $showCard = $creditCard->parentCard ?: $creditCard;
@@ -154,7 +173,7 @@ class CreditCardController extends Controller
 
         $creditCard->load([
             'liabilityAccount',
-            'bankAccount',
+            'issuerBank',
             'childCards' => fn ($query) => $query->orderBy('card_type')->orderBy('name'),
         ]);
 
@@ -215,7 +234,6 @@ class CreditCardController extends Controller
             'transactions' => $transactions,
             'payments' => $payments,
             'expenseAccounts' => $this->expenseAccounts($wallet->id),
-            'bankAccounts' => $this->bankAccounts($wallet->id),
             'creditCardStatementPreview' => $request->session()->get('credit_card_statement_preview'),
         ]);
     }
@@ -281,7 +299,10 @@ class CreditCardController extends Controller
     public function previewSetupFile(Request $request, ParseCreditCardStatementFile $parser): JsonResponse
     {
         $this->resolveActiveWallet($request);
-        $request->validate(['statement_file' => ['required', 'file', 'max:10240', 'extensions:ofx,csv,pdf']]);
+        $request->validate([
+            'statement_file' => ['required', 'file', 'max:10240', 'extensions:ofx,csv,pdf'],
+            'bank_id' => ['nullable', 'integer', Rule::exists('banks', 'id')->where('active', true)],
+        ]);
         $file = $request->file('statement_file');
 
         try {
@@ -290,8 +311,15 @@ class CreditCardController extends Controller
             return response()->json(['message' => $exception->getMessage()], 422);
         }
 
+        $contextBank = $request->filled('bank_id') ? Bank::query()->find($request->integer('bank_id')) : null;
+        $detectedInstitution = $parsed['institution'] ?? null;
+        $institutionMismatch = $contextBank && $detectedInstitution
+            && ! str_contains(mb_strtolower($detectedInstitution), mb_strtolower($contextBank->short_name))
+            && ! str_contains(mb_strtolower($contextBank->short_name), mb_strtolower($detectedInstitution));
+
         return response()->json([
             'institution' => $parsed['institution'] ?? null,
+            'institution_mismatch' => (bool) $institutionMismatch,
             'last_four' => $parsed['last_four'] ?? null,
             'holder_name' => $parsed['holder_name'] ?? null,
             'due_day' => isset($parsed['due_date']) ? (int) substr($parsed['due_date'], -2) : null,
@@ -362,46 +390,6 @@ class CreditCardController extends Controller
         return back()->with('success', 'Compra classificada e pronta para contabilidade.');
     }
 
-    public function payInvoice(Request $request, CreditCard $creditCard, PayCreditCardInvoice $service): RedirectResponse
-    {
-        $wallet = $this->resolveActiveWallet($request);
-
-        abort_unless($creditCard->wallet_id === $wallet->id, 404);
-
-        if ($creditCard->parent_card_id) {
-            return redirect()->route('credit-cards.show', $creditCard->parent_card_id);
-        }
-
-        $data = $request->validate([
-            'credit_card_invoice_id' => [
-                'required',
-                'integer',
-                Rule::exists('credit_card_invoices', 'id')
-                    ->where('wallet_id', $wallet->id)
-                    ->where('credit_card_id', $creditCard->id),
-            ],
-            'bank_account_id' => [
-                'required',
-                'integer',
-                Rule::exists('bank_accounts', 'id')
-                    ->where('wallet_id', $wallet->id)
-                    ->where('is_active', true),
-            ],
-            'payment_date' => ['required', 'date'],
-            'amount_cents' => ['required', 'integer', 'min:1'],
-            'description' => ['nullable', 'string', 'max:255'],
-            'notes' => ['nullable', 'string', 'max:2000'],
-        ]);
-
-        $data['credit_card_id'] = $creditCard->id;
-
-        $service->execute($wallet, CreditCardPaymentDTO::fromArray($data));
-
-        return redirect()
-            ->route('credit-cards.show', $creditCard)
-            ->with('success', 'Pagamento da fatura registrado com sucesso.');
-    }
-
     private function currentBalanceCents(int $walletId, int $liabilityAccountId): int
     {
         $transactions = CreditCardTransaction::query()
@@ -468,12 +456,13 @@ class CreditCardController extends Controller
             ->all();
     }
 
-    private function parentCards(int $walletId): array
+    private function parentCards(int $walletId, ?int $issuerBankId = null): array
     {
         return CreditCard::query()
             ->where('wallet_id', $walletId)
             ->where('card_type', 'main')
             ->whereNull('parent_card_id')
+            ->when($issuerBankId, fn ($query) => $query->where('issuer_bank_id', $issuerBankId))
             ->where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'name', 'issuer_name'])
@@ -501,33 +490,5 @@ class CreditCardController extends Controller
             ])
             ->values()
             ->all();
-    }
-
-    private function bankAccounts(int $walletId): array
-    {
-        return BankAccount::query()
-            ->where('wallet_id', $walletId)
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'bank_name', 'bank_code', 'agency', 'account_number'])
-            ->map(fn (BankAccount $account) => [
-                'id' => $account->id,
-                'label' => $this->formatBankAccountLabel($account),
-            ])
-            ->values()
-            ->all();
-    }
-
-    private function formatBankAccountLabel(BankAccount $account): string
-    {
-        $details = collect([
-            $account->bank_code,
-            $account->agency,
-            $account->account_number,
-        ])->filter()->join(' / ');
-
-        return $details !== ''
-            ? "{$account->name} ({$details})"
-            : $account->name;
     }
 }

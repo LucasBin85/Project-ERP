@@ -3,6 +3,7 @@
 namespace App\Services\Financial;
 
 use App\DTOs\Financial\CreditCardDTO;
+use App\Models\Bank;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCard;
@@ -16,13 +17,13 @@ class CreateCreditCard
     {
         return DB::transaction(function () use ($wallet, $dto) {
             $parentCard = null;
-            $bankAccount = null;
+            $issuerBank = null;
 
             if ($dto->cardType !== 'main') {
                 $parentCard = CreditCard::query()
                     ->where('wallet_id', $wallet->id)
                     ->where('card_type', 'main')
-                    ->with(['liabilityAccount', 'bankAccount'])
+                    ->with(['liabilityAccount', 'issuerBank'])
                     ->find($dto->parentCardId);
 
                 if (! $parentCard) {
@@ -33,14 +34,24 @@ class CreateCreditCard
             }
 
             if ($dto->cardType === 'main') {
-                $bankAccount = BankAccount::query()
-                    ->where('wallet_id', $wallet->id)
-                    ->where('is_active', true)
-                    ->find($dto->bankAccountId);
-
-                if ($dto->bankAccountId && ! $bankAccount) {
+                $issuerBankId = $dto->bankId;
+                if (! $issuerBankId && $dto->bankAccountId) {
+                    $issuerBankId = BankAccount::query()
+                        ->where('wallet_id', $wallet->id)
+                        ->where('is_active', true)
+                        ->whereKey($dto->bankAccountId)
+                        ->value('bank_id');
+                }
+                if (! $issuerBankId && $dto->issuerName !== '') {
+                    $issuerBankId = Bank::query()
+                        ->where('active', true)
+                        ->where(fn ($query) => $query->where('short_name', $dto->issuerName)->orWhere('name', $dto->issuerName))
+                        ->value('id');
+                }
+                $issuerBank = Bank::query()->where('active', true)->find($issuerBankId);
+                if (! $issuerBank) {
                     throw ValidationException::withMessages([
-                        'bank_account_id' => 'A conta padrão deve estar ativa e pertencer à wallet atual.',
+                        'bank_id' => 'Selecione uma instituição emissora válida.',
                     ]);
                 }
             }
@@ -49,11 +60,12 @@ class CreateCreditCard
 
             return CreditCard::query()->create([
                 'wallet_id' => $wallet->id,
+                'issuer_bank_id' => $parentCard?->issuer_bank_id ?? $issuerBank?->id,
                 'liability_account_id' => $liabilityAccount->id,
-                'bank_account_id' => $parentCard?->bank_account_id ?? $bankAccount?->id,
+                'bank_account_id' => null,
                 'parent_card_id' => $parentCard?->id,
                 'name' => $dto->name,
-                'issuer_name' => $parentCard?->issuer_name ?? $dto->issuerName,
+                'issuer_name' => $parentCard?->issuer_name ?? $issuerBank?->short_name,
                 'network' => $parentCard?->network ?? $dto->network,
                 'card_type' => $dto->cardType,
                 'holder_name' => $dto->holderName,
@@ -64,7 +76,7 @@ class CreateCreditCard
                 'credit_limit_cents' => $parentCard?->credit_limit_cents ?? $dto->creditLimitCents,
                 'is_active' => true,
                 'notes' => $dto->notes,
-            ])->fresh(['liabilityAccount', 'bankAccount', 'parentCard']);
+            ])->fresh(['liabilityAccount', 'issuerBank', 'parentCard']);
         });
     }
 
