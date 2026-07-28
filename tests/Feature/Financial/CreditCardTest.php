@@ -17,6 +17,7 @@ use App\Services\Financial\CreateCreditCardInstallments;
 use App\Services\Financial\CreateCreditCardTransaction;
 use App\Services\Financial\LinkCreditCardInvoicePaymentFromBankStatement;
 use App\Services\Financial\PayCreditCardInvoice;
+use App\Services\Financial\ResolveCreditCardCycleDates;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\Helpers\AccountingTestHelper;
@@ -242,6 +243,29 @@ it('allows only one main invoice per issuing bank and wallet', function () {
     )))->toThrow(ValidationException::class);
 });
 
+it('resolves last-day cycles without gaps and adjusts weekend due dates', function () {
+    $wallet = createTestWalletWithCardGroup();
+    $card = app(CreateCreditCard::class)->execute($wallet, new CreditCardDTO(
+        name: 'Nubank — Fatura', issuerName: 'Nubank', network: 'mastercard', cardType: 'main',
+        closingDay: 31, dueDay: 8, bestPurchaseDay: 1, creditLimitCents: 100000,
+    ));
+    $cycles = app(ResolveCreditCardCycleDates::class);
+    $february = $cycles->forReference($card, 2028, 2);
+    $april = $cycles->forReference($card, 2026, 4);
+    $may = $cycles->forReference($card, 2026, 5);
+    $saturday = $cycles->forReference($card, 2026, 8, '2026-08-08');
+    $sunday = $cycles->forReference($card, 2027, 8, '2027-08-08');
+    $weekday = $cycles->forReference($card, 2026, 7, '2026-07-08');
+
+    expect($february['closes_at']->toDateString())->toBe('2028-02-29')
+        ->and($april['closes_at']->toDateString())->toBe('2026-04-30')
+        ->and($may['closes_at']->toDateString())->toBe('2026-05-31')
+        ->and($april['closes_at']->addDay()->toDateString())->toBe($may['starts_at']->toDateString())
+        ->and($saturday['due_at']->toDateString())->toBe('2026-08-10')
+        ->and($sunday['due_at']->toDateString())->toBe('2027-08-09')
+        ->and($weekday['due_at']->toDateString())->toBe('2026-07-08');
+});
+
 it('creates a draft journal entry and monthly invoice when registering a credit card purchase', function () {
     $wallet = createTestWalletWithCardGroup();
 
@@ -289,7 +313,8 @@ it('creates a draft journal entry and monthly invoice when registering a credit 
         ->and($invoice->reference_month)->toBe(8)
         ->and($invoice->starts_at->toDateString())->toBe('2026-07-06')
         ->and($invoice->closes_at->toDateString())->toBe('2026-08-05')
-        ->and($invoice->due_at->toDateString())->toBe('2026-08-15')
+        ->and($invoice->nominal_due_at->toDateString())->toBe('2026-08-15')
+        ->and($invoice->due_at->toDateString())->toBe('2026-08-17')
         ->and($invoice->total_cents)->toBe(12590)
         ->and($invoice->balance_cents)->toBe(12590)
         ->and($invoice->status)->toBe('open');

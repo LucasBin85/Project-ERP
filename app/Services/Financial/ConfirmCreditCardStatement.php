@@ -17,13 +17,29 @@ class ConfirmCreditCardStatement
         private readonly CreateJournalEntry $journalEntries,
     ) {}
 
-    public function execute(Wallet $wallet, CreditCard $card, array $preview, string $contents, string $filename, array $decisions): array
-    {
+    public function execute(
+        Wallet $wallet,
+        CreditCard $card,
+        array $preview,
+        string $contents,
+        string $filename,
+        array $decisions,
+        ?int $targetYear = null,
+        ?int $targetMonth = null,
+    ): array {
         if ((int) $card->wallet_id !== (int) $wallet->id || ! $wallet->suspense_account_id) {
             throw ValidationException::withMessages(['statement_import' => 'Cartão ou conta A classificar inválidos para esta importação.']);
         }
 
-        return DB::transaction(function () use ($wallet, $card, $preview, $contents, $filename, $decisions) {
+        $targetYear ??= isset($preview['target_invoice']['reference_year']) ? (int) $preview['target_invoice']['reference_year'] : null;
+        $targetMonth ??= isset($preview['target_invoice']['reference_month']) ? (int) $preview['target_invoice']['reference_month'] : null;
+        if (! $targetYear || ! $targetMonth) {
+            throw ValidationException::withMessages([
+                'target_invoice' => 'Selecione o mês e o ano da fatura alvo antes de confirmar.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($wallet, $card, $preview, $contents, $filename, $decisions, $targetYear, $targetMonth) {
             $mainCard = $this->invoices->mainCard($card);
             $familyCardIds = CreditCard::query()
                 ->where('wallet_id', $wallet->id)
@@ -32,10 +48,15 @@ class ConfirmCreditCardStatement
                 ->map(fn ($id) => (int) $id)
                 ->all();
             $parsed = $this->parser->parse($contents, $filename);
+            $detectedTarget = $preview['target_invoice'] ?? null;
+            $nominalDueDate = (int) ($detectedTarget['reference_year'] ?? 0) === $targetYear
+                && (int) ($detectedTarget['reference_month'] ?? 0) === $targetMonth
+                ? ($detectedTarget['nominal_due_at'] ?? null)
+                : null;
+            $invoice = $this->invoices->forReference($wallet, $mainCard, $targetYear, $targetMonth, $nominalDueDate);
             $decisionMap = collect($decisions)->keyBy('row_key');
             $created = 0;
             $ignored = 0;
-            $invoiceIds = [];
 
             foreach ($preview['rows'] as $row) {
                 $decision = $decisionMap->get($row['row_key']);
@@ -55,7 +76,6 @@ class ConfirmCreditCardStatement
                 }
 
                 $transaction = $parsed['transactions'][$row['index']];
-                $invoice = $this->invoices->forPurchaseDate($wallet, $mainCard, $transaction->postedAt);
                 $entry = $this->journalEntries->execute([
                     'wallet_id' => $wallet->id,
                     'entry_date' => $transaction->postedAt,
@@ -74,6 +94,7 @@ class ConfirmCreditCardStatement
                     'source' => strtolower($this->parser->format($filename)),
                     'external_id' => $row['external_id'],
                     'import_hash' => $row['import_hash'],
+                    'statement_file_hash' => $preview['file_hash'] ?? null,
                     'purchase_date' => $transaction->postedAt,
                     'merchant_name' => $transaction->description,
                     'description' => $transaction->description,
@@ -82,13 +103,10 @@ class ConfirmCreditCardStatement
                     'installment_number' => $row['installment_number'],
                     'status' => 'draft',
                 ]);
-                $invoiceIds[] = $invoice->id;
                 $created++;
             }
 
-            collect($invoiceIds)->unique()->each(fn ($id) => $this->invoices->refreshTotals(
-                \App\Models\CreditCardInvoice::query()->findOrFail($id)
-            ));
+            $this->invoices->refreshTotals($invoice);
 
             return ['created' => $created, 'ignored' => $ignored];
         });

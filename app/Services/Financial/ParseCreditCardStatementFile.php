@@ -72,6 +72,8 @@ class ParseCreditCardStatementFile
             'last_four' => $this->metadata($extraction['text'], '/(?:final|cart[aã]o)\D{0,20}(\d{4})/ui'),
             'holder_name' => null,
             'due_date' => $this->dueDate($extraction['text']),
+            'period_start' => $this->period($extraction['text'])[0],
+            'period_end' => $this->period($extraction['text'])[1],
             'read_source' => $extraction['source'],
             'ignored_items' => $ignoredItems,
             'warning' => $ignoredItems !== []
@@ -124,5 +126,24 @@ class ParseCreditCardStatementFile
         $month = $months[mb_strtoupper($match[2])] ?? null;
 
         return $month ? sprintf('%04d-%02d-%02d', $match[3], $month, $match[1]) : null;
+    }
+
+    private function period(string $text): array
+    {
+        if (! preg_match('/(?:Período vigente:|TRANSAÇÕES DE)\s*(\d{2})\s+([A-Z]{3})\s+(?:a|A)\s+(\d{2})\s+([A-Z]{3})/ui', $text, $match)) {
+            return [null, null];
+        }
+        $months = ['JAN' => 1, 'FEV' => 2, 'MAR' => 3, 'ABR' => 4, 'MAI' => 5, 'JUN' => 6, 'JUL' => 7, 'AGO' => 8, 'SET' => 9, 'OUT' => 10, 'NOV' => 11, 'DEZ' => 12];
+        $year = (int) ($this->dueDate($text) ? substr($this->dueDate($text), 0, 4) : now()->year);
+        $startMonth = $months[mb_strtoupper($match[2])] ?? null;
+        $endMonth = $months[mb_strtoupper($match[4])] ?? null;
+        if (! $startMonth || ! $endMonth) {
+            return [null, null];
+        }
+
+        return [
+            sprintf('%04d-%02d-%02d', $startMonth > $endMonth ? $year - 1 : $year, $startMonth, $match[1]),
+            sprintf('%04d-%02d-%02d', $year, $endMonth, $match[3]),
+        ];
     }
 }

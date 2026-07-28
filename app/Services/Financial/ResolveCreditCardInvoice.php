@@ -9,38 +9,52 @@ use Carbon\CarbonImmutable;
 
 class ResolveCreditCardInvoice
 {
+    public function __construct(private readonly ResolveCreditCardCycleDates $cycles) {}
+
     public function forPurchaseDate(Wallet $wallet, CreditCard $card, string $purchaseDate): CreditCardInvoice
     {
         $mainCard = $this->mainCard($card);
-        $purchase = CarbonImmutable::parse($purchaseDate)->startOfDay();
-        $closingDay = (int) $mainCard->closing_day;
+        $dates = $this->cycles->forPurchaseDate($mainCard, $purchaseDate);
 
-        $reference = $purchase->day <= $closingDay
-            ? $purchase
-            : $purchase->addMonthNoOverflow();
+        return $this->forDates($wallet, $mainCard, $dates);
+    }
 
-        $closesAt = $this->dateForDay($reference, $closingDay);
-        $previousClose = $this->dateForDay($reference->subMonthNoOverflow(), $closingDay);
-        $startsAt = $previousClose->addDay();
-        $dueAt = $this->dueDate($closesAt, (int) $mainCard->due_day);
+    public function forReference(Wallet $wallet, CreditCard $card, int $year, int $month, ?string $nominalDueDate = null): CreditCardInvoice
+    {
+        $mainCard = $this->mainCard($card);
 
-        return CreditCardInvoice::query()->firstOrCreate(
+        return $this->forDates($wallet, $mainCard, $this->cycles->forReference($mainCard, $year, $month, $nominalDueDate));
+    }
+
+    private function forDates(Wallet $wallet, CreditCard $mainCard, array $dates): CreditCardInvoice
+    {
+        $invoice = CreditCardInvoice::query()->firstOrCreate(
             [
                 'credit_card_id' => $mainCard->id,
-                'reference_year' => (int) $closesAt->year,
-                'reference_month' => (int) $closesAt->month,
+                'reference_year' => $dates['reference_year'],
+                'reference_month' => $dates['reference_month'],
             ],
             [
                 'wallet_id' => $wallet->id,
-                'starts_at' => $startsAt->toDateString(),
-                'closes_at' => $closesAt->toDateString(),
-                'due_at' => $dueAt->toDateString(),
+                'starts_at' => $dates['starts_at']->toDateString(),
+                'closes_at' => $dates['closes_at']->toDateString(),
+                'nominal_due_at' => $dates['nominal_due_at']->toDateString(),
+                'due_at' => $dates['due_at']->toDateString(),
                 'total_cents' => 0,
                 'paid_cents' => 0,
                 'balance_cents' => 0,
                 'status' => 'open',
             ],
         );
+
+        if (! $invoice->nominal_due_at) {
+            $invoice->update([
+                'nominal_due_at' => $dates['nominal_due_at']->toDateString(),
+                'due_at' => $dates['due_at']->toDateString(),
+            ]);
+        }
+
+        return $invoice;
     }
 
     public function refreshTotals(CreditCardInvoice $invoice): CreditCardInvoice
@@ -79,22 +93,6 @@ class ResolveCreditCardInvoice
         }
 
         return $card;
-    }
-
-    private function dateForDay(CarbonImmutable $date, int $day): CarbonImmutable
-    {
-        $day = min($day, $date->daysInMonth);
-
-        return $date->setDay($day)->startOfDay();
-    }
-
-    private function dueDate(CarbonImmutable $closesAt, int $dueDay): CarbonImmutable
-    {
-        $dueMonth = $dueDay > $closesAt->day
-            ? $closesAt
-            : $closesAt->addMonthNoOverflow();
-
-        return $this->dateForDay($dueMonth, $dueDay);
     }
 
     private function statusFor(CreditCardInvoice $invoice, int $total, int $paid, int $balance): string

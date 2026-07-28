@@ -18,6 +18,7 @@ class CreditCardTransaction extends Model
         'source',
         'external_id',
         'import_hash',
+        'statement_file_hash',
         'purchase_date',
         'merchant_name',
         'description',

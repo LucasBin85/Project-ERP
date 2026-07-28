@@ -273,6 +273,8 @@ class CreditCardController extends Controller
             'rows' => ['required', 'array'],
             'rows.*.row_key' => ['required', 'string', 'size:64'],
             'rows.*.action' => ['required', Rule::in(['create', 'ignore'])],
+            'target_year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'target_month' => ['required', 'integer', 'min:1', 'max:12'],
         ]);
         $key = 'credit-card-statement:'.$data['preview_token'];
         $context = Cache::get($key);
@@ -283,7 +285,16 @@ class CreditCardController extends Controller
         }
 
         try {
-            $result = $service->execute($wallet, $creditCard, $context['preview'], $context['contents'], $context['filename'], $data['rows']);
+            $result = $service->execute(
+                $wallet,
+                $creditCard,
+                $context['preview'],
+                $context['contents'],
+                $context['filename'],
+                $data['rows'],
+                $data['target_year'],
+                $data['target_month'],
+            );
         } catch (\Throwable $exception) {
             report($exception);
 

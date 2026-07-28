@@ -5,7 +5,6 @@ namespace App\Services\Financial;
 use App\Models\CreditCard;
 use App\Models\CreditCardTransaction;
 use App\Models\Wallet;
-use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
 
 class PreviewCreditCardStatement
@@ -13,6 +12,8 @@ class PreviewCreditCardStatement
     public function __construct(
         private readonly ParseCreditCardStatementFile $parser,
         private readonly NormalizeBankStatementDescription $descriptions,
+        private readonly ResolveCreditCardStatementTarget $targets,
+        private readonly ResolveCreditCardCycleDates $cycles,
     ) {}
 
     public function execute(Wallet $wallet, CreditCard $card, string $contents, string $filename): array
@@ -22,6 +23,17 @@ class PreviewCreditCardStatement
         }
         $mainCard = $card->parentCard ?: $card;
         $parsed = $this->parser->parse($contents, $filename);
+        $target = $this->targets->execute($mainCard, $parsed, $filename);
+        if ($target) {
+            $cycle = $this->cycles->forReference(
+                $mainCard,
+                $target['reference_year'],
+                $target['reference_month'],
+                $target['nominal_due_at'],
+            );
+            $target['nominal_due_at'] = $cycle['nominal_due_at']->toDateString();
+            $target['due_at'] = $cycle['due_at']->toDateString();
+        }
         $targetCard = $mainCard;
         if (! empty($parsed['last_four'])) {
             $targetCard = CreditCard::query()
@@ -64,13 +76,19 @@ class PreviewCreditCardStatement
                 'import_hash' => $hash,
                 'installment_number' => $installmentNumber,
                 'installments_total' => $installmentsTotal,
-                'invoice_reference' => $this->invoiceReference($mainCard, $transaction->postedAt),
+                'invoice_reference' => $target['reference'] ?? null,
                 'credit_card_id' => $targetCard->id,
                 'credit_card_name' => $targetCard->name,
                 'situation' => $situation,
                 'default_action' => $situation === 'new' ? 'create' : 'ignore',
             ];
         }
+
+        $outsidePeriod = $this->hasDatesOutsidePeriod($rows, $parsed['period_start'] ?? null, $parsed['period_end'] ?? null);
+        $warnings = array_values(array_filter([
+            $parsed['warning'] ?? null,
+            $outsidePeriod ? 'Existem compras com datas fora do período estimado da fatura. Elas serão importadas na fatura alvo do arquivo.' : null,
+        ]));
 
         return [
             'token' => null,
@@ -86,6 +104,10 @@ class PreviewCreditCardStatement
             'due_date' => $parsed['due_date'] ?? null,
             'ignored_items' => $parsed['ignored_items'] ?? [],
             'warning' => $parsed['warning'] ?? null,
+            'warnings' => $warnings,
+            'target_invoice' => $target,
+            'period_start' => $parsed['period_start'] ?? $parsed['started_at'] ?? null,
+            'period_end' => $parsed['period_end'] ?? $parsed['ended_at'] ?? null,
             'rows' => $rows,
             'summary' => [
                 'total_cents' => (int) collect($rows)->where('situation', '!=', 'credit')->sum('amount_cents'),
@@ -93,6 +115,7 @@ class PreviewCreditCardStatement
                 'already_imported' => collect($rows)->where('situation', 'already_imported')->count(),
                 'possible_duplicate' => collect($rows)->where('situation', 'possible_duplicate')->count(),
                 'credits' => collect($rows)->where('situation', 'credit')->count(),
+                'ignored' => collect($rows)->where('situation', '!=', 'new')->count(),
             ],
         ];
     }
@@ -106,11 +129,14 @@ class PreviewCreditCardStatement
         return [1, 1];
     }
 
-    private function invoiceReference(CreditCard $card, string $date): string
+    private function hasDatesOutsidePeriod(array $rows, ?string $start, ?string $end): bool
     {
-        $purchase = CarbonImmutable::parse($date);
-        $reference = $purchase->day <= $card->closing_day ? $purchase : $purchase->addMonthNoOverflow();
+        if (! $start || ! $end) {
+            return false;
+        }
 
-        return $reference->format('m/Y');
+        return collect($rows)->where('situation', 'new')->contains(
+            fn (array $row) => $row['date'] < $start || $row['date'] > $end
+        );
     }
 }

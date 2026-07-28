@@ -122,6 +122,7 @@ function submit() {
                         <div>
                             <label class="mb-1 block text-sm font-semibold text-gray-300">Data de fechamento</label>
                             <input v-model="creditCard.form.closing_day" type="number" min="1" max="31" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
+                            <p class="mt-1 text-xs text-gray-500">Use 31 para fechar no último dia de cada mês, inclusive fevereiro e meses com 30 dias.</p>
                             <p class="mt-1 text-sm text-red-400">{{ creditCard.form.errors.closing_day }}</p>
                         </div>
 

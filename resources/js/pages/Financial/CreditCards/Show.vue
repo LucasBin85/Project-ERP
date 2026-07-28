@@ -74,7 +74,7 @@ function submitTransaction() {
                     <ReportSummaryCard label="Limite compartilhado" :value="formatCurrency(creditCard.credit_limit_cents)" tone="neutral" />
                     <ReportSummaryCard label="Saldo em aberto" :value="formatCurrency(summary.current_balance_cents)" tone="yellow" />
                     <ReportSummaryCard label="Limite disponível" :value="formatCurrency(summary.available_limit_cents)" :tone="summary.available_limit_cents >= 0 ? 'green' : 'red'" />
-                    <ReportSummaryCard label="Fechamento" :value="`Dia ${creditCard.closing_day}`" tone="blue" />
+                    <ReportSummaryCard label="Fechamento" :value="creditCard.closing_day === 31 ? 'Último dia do mês' : `Dia ${creditCard.closing_day}`" tone="blue" />
                     <ReportSummaryCard label="Vencimento" :value="`Dia ${creditCard.due_day}`" tone="blue" />
                 </div>
 
@@ -123,7 +123,12 @@ function submitTransaction() {
                     <tr v-for="invoice in invoices" :key="invoice.id" class="hover:bg-gray-800/50">
                         <td class="whitespace-nowrap px-4 py-3 text-sm font-semibold text-white">{{ invoiceLabel(invoice) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(invoice.starts_at) }} até {{ formatDate(invoice.closes_at) }}</td>
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(invoice.due_at) }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                            {{ formatDate(invoice.due_at) }}
+                            <span v-if="invoice.nominal_due_at && invoice.nominal_due_at !== invoice.due_at" class="block text-xs text-amber-300">
+                                Nominal: {{ formatDate(invoice.nominal_due_at) }} · Vencimento ajustado para o próximo dia útil.
+                            </span>
+                        </td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">{{ formatCurrency(invoice.total_cents) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-green-300">{{ formatCurrency(invoice.paid_cents) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-yellow-300">{{ formatCurrency(invoice.balance_cents) }}</td>
