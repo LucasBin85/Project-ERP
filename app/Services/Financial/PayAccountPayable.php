@@ -7,6 +7,7 @@ use App\Models\AccountPayable;
 use App\Models\BankAccount;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
+use App\Services\Accounting\EnsureAccountingPeriodIsOpen;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -14,6 +15,7 @@ class PayAccountPayable
 {
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
+        private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
     ) {}
 
     public function execute(Wallet $wallet, AccountPayable $accountPayable, PayAccountPayableDTO $dto): AccountPayable
@@ -33,6 +35,7 @@ class PayAccountPayable
                     'status' => 'Apenas contas pendentes podem ser pagas.',
                 ]);
             }
+            $this->ensurePeriodIsOpen->handle($wallet, $dto->paidAt);
 
             $bankAccount = BankAccount::query()
                 ->where('wallet_id', $wallet->id)
@@ -78,6 +81,10 @@ class PayAccountPayable
                 'paid_at' => $dto->paidAt,
                 'status' => 'paid',
             ]);
+            if ($accountPayable->series_id) {
+                $pending = AccountPayable::query()->where('series_id', $accountPayable->series_id)->where('status', 'pending')->count();
+                $accountPayable->series()->update(['status' => $pending === 0 ? 'settled' : 'partially_settled']);
+            }
 
             return $accountPayable->fresh([
                 'expenseAccount',

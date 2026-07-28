@@ -48,6 +48,7 @@ class AccountReceivableController extends Controller
                 'provisionJournalEntry:id,status',
                 'bankAccount:id,name,bank_name,bank_code,agency,account_number',
                 'receiptJournalEntry:id,status',
+                'series:id,description,total_amount_cents,installment_count,status',
             ])
             ->when($validated['status'] !== '', fn ($query) => $query->where('status', $validated['status']))
             ->whereDate('due_date', '>=', $validated['start_date'])
@@ -102,6 +103,10 @@ class AccountReceivableController extends Controller
             'description' => ['required', 'string', 'max:255'],
             'due_date' => ['required', 'date'],
             'amount_cents' => ['required', 'integer', 'min:1'],
+            'mode' => ['nullable', Rule::in(['single', 'installment'])],
+            'installment_count' => ['required_if:mode,installment', 'integer', 'min:2', 'max:360'],
+            'interval_months' => ['required_if:mode,installment', 'integer', 'min:1', 'max:120'],
+            'competence_date' => ['required_if:mode,installment', 'nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
@@ -124,6 +129,8 @@ class AccountReceivableController extends Controller
             'provisionJournalEntry.lines.chartOfAccount',
             'bankAccount',
             'receiptJournalEntry.lines.chartOfAccount',
+            'series.provisionJournalEntry.lines.chartOfAccount',
+            'series.receivables',
         ]);
 
         $bankAccounts = BankAccount::query()

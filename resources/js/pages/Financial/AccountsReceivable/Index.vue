@@ -90,7 +90,7 @@ function formatPaginationLabel(label: string): string {
                     <tr v-for="item in accountsReceivable.data" :key="item.id" class="hover:bg-gray-800/50">
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(item.due_date) }}</td>
                         <td class="px-4 py-3 text-sm font-semibold text-white">{{ item.customer_name }}</td>
-                        <td class="px-4 py-3 text-sm text-gray-300">{{ item.description }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300">{{ item.description }} <span v-if="item.series_id" class="text-indigo-300">· Parcela {{ item.installment_number }}/{{ item.installment_count }} · Série #{{ item.series_id }}</span></td>
                         <td class="px-4 py-3 text-sm text-gray-400">{{ formatAccount(item.revenue_account?.code, item.revenue_account?.name) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">{{ formatCurrency(item.amount_cents) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-sm"><StatusBadge :status="item.status" /></td>

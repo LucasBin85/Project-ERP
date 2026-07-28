@@ -13,6 +13,10 @@ final readonly class AccountReceivableDTO
         public ?string $notes = null,
         public ?int $receivableAccountId = null,
         public ?int $customerId = null,
+        public string $mode = 'single',
+        public int $installmentCount = 1,
+        public int $intervalMonths = 1,
+        public ?string $competenceDate = null,
     ) {}
 
     public static function fromArray(array $data): self
@@ -26,6 +30,10 @@ final readonly class AccountReceivableDTO
             notes: isset($data['notes']) ? trim((string) $data['notes']) : null,
             receivableAccountId: isset($data['receivable_account_id']) ? (int) $data['receivable_account_id'] : null,
             customerId: isset($data['customer_id']) ? (int) $data['customer_id'] : null,
+            mode: (string) ($data['mode'] ?? 'single'),
+            installmentCount: (int) ($data['installment_count'] ?? 1),
+            intervalMonths: (int) ($data['interval_months'] ?? 1),
+            competenceDate: $data['competence_date'] ?? null,
         );
     }
 }

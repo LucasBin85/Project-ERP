@@ -137,7 +137,7 @@ function formatPaginationLabel(label: string): string {
                         </td>
 
                         <td class="px-4 py-3 text-sm text-gray-300">
-                            {{ item.description }}
+                            {{ item.description }} <span v-if="item.series_id" class="text-indigo-300">· Parcela {{ item.installment_number }}/{{ item.installment_count }} · Série #{{ item.series_id }}</span>
                         </td>
 
                         <td class="px-4 py-3 text-sm text-gray-400">

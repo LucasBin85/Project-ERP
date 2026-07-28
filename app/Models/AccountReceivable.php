@@ -11,6 +11,9 @@ class AccountReceivable extends Model
 
     protected $fillable = [
         'wallet_id',
+        'series_id',
+        'installment_number',
+        'installment_count',
         'customer_id',
         'receivable_account_id',
         'revenue_account_id',
@@ -30,11 +33,18 @@ class AccountReceivable extends Model
         'due_date' => 'date',
         'received_at' => 'date',
         'amount_cents' => 'integer',
+        'installment_number' => 'integer',
+        'installment_count' => 'integer',
     ];
 
     public function wallet(): BelongsTo
     {
         return $this->belongsTo(Wallet::class);
+    }
+
+    public function series(): BelongsTo
+    {
+        return $this->belongsTo(FinancialTitleSeries::class, 'series_id');
     }
 
     public function customer(): BelongsTo

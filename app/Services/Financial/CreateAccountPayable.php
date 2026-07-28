@@ -5,15 +5,21 @@ namespace App\Services\Financial;
 use App\DTOs\Financial\AccountPayableDTO;
 use App\Models\AccountPayable;
 use App\Models\ChartOfAccount;
+use App\Models\FinancialTitleSeries;
 use App\Models\Supplier;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
+use App\Services\Accounting\EnsureAccountingPeriodIsOpen;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class CreateAccountPayable
 {
-    public function __construct(private readonly CreateJournalEntry $createJournalEntry) {}
+    public function __construct(
+        private readonly CreateJournalEntry $createJournalEntry,
+        private readonly InstallmentSchedule $installmentSchedule,
+        private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
+    ) {}
 
     public function execute(Wallet $wallet, AccountPayableDTO $dto): AccountPayable
     {
@@ -46,7 +52,14 @@ class CreateAccountPayable
             throw ValidationException::withMessages(['payable_account_id' => 'Conta de controle do fornecedor inválida.']);
         }
 
+        if ($dto->mode === 'installment') {
+            $this->ensurePeriodIsOpen->handle($wallet, $dto->competenceDate ?? $dto->dueDate);
+        }
+
         return DB::transaction(function () use ($wallet, $dto, $expenseAccount, $payableAccount, $supplier) {
+            if ($dto->mode === 'installment') {
+                return $this->createInstallments($wallet, $dto, $expenseAccount, $payableAccount, $supplier);
+            }
             $title = AccountPayable::query()->create([
                 'wallet_id' => $wallet->id, 'payable_account_id' => $payableAccount->id,
                 'supplier_id' => $supplier?->id,
@@ -66,5 +79,35 @@ class CreateAccountPayable
 
             return $title->fresh(['expenseAccount', 'payableAccount', 'provisionJournalEntry.lines.chartOfAccount']);
         });
+    }
+
+    private function createInstallments(Wallet $wallet, AccountPayableDTO $dto, ChartOfAccount $expenseAccount, ChartOfAccount $payableAccount, ?Supplier $supplier): AccountPayable
+    {
+        $competenceDate = $dto->competenceDate ?? $dto->dueDate;
+        $provision = $this->createJournalEntry->execute([
+            'wallet_id' => $wallet->id, 'entry_date' => $competenceDate,
+            'description' => 'Provisão total: '.$dto->description,
+            'lines' => [
+                ['chart_of_account_id' => $expenseAccount->id, 'type' => 'debit', 'amount_cents' => $dto->amountCents],
+                ['chart_of_account_id' => $payableAccount->id, 'type' => 'credit', 'amount_cents' => $dto->amountCents],
+            ],
+        ]);
+        $series = FinancialTitleSeries::query()->create([
+            'wallet_id' => $wallet->id, 'type' => 'payable', 'mode' => 'installment',
+            'description' => $dto->description, 'counterparty' => $supplier?->name ?? $dto->payeeName,
+            'total_amount_cents' => $dto->amountCents, 'installment_count' => $dto->installmentCount,
+            'competence_date' => $competenceDate, 'provision_journal_entry_id' => $provision->id,
+        ]);
+        $titles = collect($this->installmentSchedule->build($dto->amountCents, $dto->installmentCount, $dto->dueDate, $dto->intervalMonths))
+            ->map(fn (array $item) => AccountPayable::query()->create([
+                'wallet_id' => $wallet->id, 'series_id' => $series->id,
+                'installment_number' => $item['number'], 'installment_count' => $dto->installmentCount,
+                'payable_account_id' => $payableAccount->id, 'supplier_id' => $supplier?->id,
+                'expense_account_id' => $expenseAccount->id, 'payee_name' => $series->counterparty,
+                'description' => $dto->description, 'due_date' => $item['due_date'],
+                'amount_cents' => $item['amount_cents'], 'status' => 'pending', 'notes' => $dto->notes,
+            ]));
+
+        return $titles->first()->fresh(['series.payables', 'series.provisionJournalEntry.lines.chartOfAccount']);
     }
 }

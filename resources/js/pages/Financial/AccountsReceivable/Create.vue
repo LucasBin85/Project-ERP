@@ -22,6 +22,15 @@ const customers = ref([...props.customers]);
 const customerNames = ref([...props.customerNames]);
 const showCustomerDialog = ref(false);
 const selectedCustomer = computed(() => customers.value.find((customer) => customer.id === Number(accountReceivable.form.customer_id)));
+const preview = computed(() => {
+    const count = Number(accountReceivable.form.installment_count);
+    const base = Math.floor(accountReceivable.form.amount_cents / count);
+    const remainder = accountReceivable.form.amount_cents % count;
+    return Array.from({ length: count }, (_, index) => {
+        const date = new Date(`${accountReceivable.form.due_date}T12:00:00`); date.setMonth(date.getMonth() + index * Number(accountReceivable.form.interval_months));
+        return { number: index + 1, date: date.toLocaleDateString('pt-BR'), amount: ((base + (index < remainder ? 1 : 0)) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) };
+    });
+});
 
 function customerCreated(customer: Record<string, any>) {
     customers.value.push(customer);
@@ -49,6 +58,7 @@ function submit() {
                 </template>
 
                 <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
+                    <div class="md:col-span-2"><label class="mb-1 block text-sm font-semibold text-gray-300">Forma</label><select v-model="accountReceivable.form.mode" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="single">Único</option><option value="installment">Parcelado</option></select></div>
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Cliente</label>
                         <div class="flex gap-2"><select v-model="accountReceivable.form.customer_id" class="min-w-0 flex-1 rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o cliente</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select><button type="button" class="rounded-lg border border-indigo-500 px-3 py-2 text-sm text-indigo-300" @click="showCustomerDialog = true">Cadastrar cliente</button></div>
@@ -58,6 +68,12 @@ function submit() {
                         </div>
                         <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.customer_id }}</p>
                     </div>
+                    <template v-if="accountReceivable.form.mode === 'installment'">
+                        <div><label class="mb-1 block text-sm font-semibold text-gray-300">Quantidade de parcelas</label><input v-model.number="accountReceivable.form.installment_count" type="number" min="2" max="360" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
+                        <div><label class="mb-1 block text-sm font-semibold text-gray-300">Intervalo mensal</label><input v-model.number="accountReceivable.form.interval_months" type="number" min="1" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
+                        <div><label class="mb-1 block text-sm font-semibold text-gray-300">Competência</label><input v-model="accountReceivable.form.competence_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" /></div>
+                        <div class="md:col-span-2 rounded-lg border border-gray-700 p-4"><h3 class="mb-2 font-semibold text-white">Prévia das parcelas</h3><div v-for="item in preview" :key="item.number" class="flex justify-between border-t border-gray-800 py-2 text-sm text-gray-300"><span>Parcela {{ item.number }}/{{ accountReceivable.form.installment_count }} · {{ item.date }}</span><span>{{ item.amount }}</span></div></div>
+                    </template>
 
                     <div class="md:col-span-2">
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Descrição</label>

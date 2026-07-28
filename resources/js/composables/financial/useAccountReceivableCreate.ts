@@ -15,6 +15,10 @@ export function useAccountReceivableCreate() {
         amount: '',
         amount_cents: 0,
         notes: '',
+        mode: 'single',
+        installment_count: 2,
+        interval_months: 1,
+        competence_date: todayLocal(),
     });
 
     const canSubmit = computed(() => {
@@ -22,7 +26,8 @@ export function useAccountReceivableCreate() {
             form.customer_id &&
                 form.description.trim() &&
                 form.due_date &&
-                form.amount_cents > 0,
+                form.amount_cents > 0 &&
+                (form.mode === 'single' || (form.installment_count >= 2 && Boolean(form.competence_date))),
         );
     });
 

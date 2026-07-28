@@ -7,6 +7,7 @@ use App\Models\AccountReceivable;
 use App\Models\BankAccount;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateJournalEntry;
+use App\Services\Accounting\EnsureAccountingPeriodIsOpen;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -14,6 +15,7 @@ class ReceiveAccountReceivable
 {
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
+        private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
     ) {}
 
     public function execute(Wallet $wallet, AccountReceivable $accountReceivable, ReceiveAccountReceivableDTO $dto): AccountReceivable
@@ -28,6 +30,7 @@ class ReceiveAccountReceivable
                     'status' => 'Apenas contas pendentes podem ser recebidas.',
                 ]);
             }
+            $this->ensurePeriodIsOpen->handle($wallet, $dto->receivedAt);
 
             $bankAccount = BankAccount::query()
                 ->where('wallet_id', $wallet->id)
@@ -73,6 +76,10 @@ class ReceiveAccountReceivable
                 'received_at' => $dto->receivedAt,
                 'status' => 'received',
             ]);
+            if ($accountReceivable->series_id) {
+                $pending = AccountReceivable::query()->where('series_id', $accountReceivable->series_id)->where('status', 'pending')->count();
+                $accountReceivable->series()->update(['status' => $pending === 0 ? 'settled' : 'partially_settled']);
+            }
 
             return $accountReceivable->fresh([
                 'revenueAccount',
