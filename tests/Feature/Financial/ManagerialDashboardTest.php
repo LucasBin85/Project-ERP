@@ -112,7 +112,7 @@ it('renders the active wallet dashboard and changes month and year', function ()
         ->get(route('dashboard', ['year' => 2026, 'month' => 7]))->assertOk()
         ->assertInertia(fn (Assert $page) => $page->component('Dashboard/Index')
             ->where('wallet.id', $context['wallet']->id)->where('dashboard.period.year', 2026)
-            ->where('dashboard.period.month', 7)->has('dashboard.attention', 5)->has('dashboard.banks', 1));
+            ->where('dashboard.period.month', 7)->has('dashboard.attention', 6)->has('dashboard.banks', 1));
     expect(file_get_contents(resource_path('js/pages/Dashboard/Index.vue')))
         ->toContain('Resumo do mês')->toContain('O que precisa de atenção')->toContain('Fechamento do mês');
 });

@@ -7,6 +7,7 @@ use App\Models\AccountReceivable;
 use App\Models\BankAccount;
 use App\Models\CreditCard;
 use App\Models\CreditCardInvoice;
+use App\Models\CreditCardTransaction;
 use App\Models\JournalEntry;
 use App\Models\Wallet;
 use App\Services\Accounting\AssessJournalEntryPostingReadiness;
@@ -126,10 +127,20 @@ class BuildMonthlyWalletClosingSummary
                 $status = match ($invoice?->status) {
                     null => 'unavailable', 'paid' => 'paid', 'partial' => 'partial', 'open', 'closed', 'overdue' => 'open', default => 'divergent',
                 };
+                $unclassified = $invoice
+                    ? CreditCardTransaction::query()
+                        ->where('wallet_id', $wallet->id)
+                        ->where('credit_card_invoice_id', $invoice->id)
+                        ->where('expense_account_id', $wallet->suspense_account_id)
+                        ->whereHas('journalEntry', fn ($query) => $query->where('status', 'draft'))
+                        ->get(['amount_cents'])
+                    : collect();
 
                 return ['id' => $card->id, 'name' => $card->name, 'issuer_name' => $card->issuer_name,
                     'invoice_id' => $invoice?->id, 'total_cents' => $invoice?->total_cents, 'paid_cents' => $invoice?->paid_cents,
                     'balance_cents' => $invoice?->balance_cents, 'status' => $status,
+                    'unclassified_count' => $unclassified->count(),
+                    'unclassified_cents' => (int) $unclassified->sum('amount_cents'),
                     'status_label' => match ($status) {
                         'paid' => 'Paga', 'partial' => 'Parcialmente paga', 'open' => 'Em aberto', 'divergent' => 'Com divergência', default => 'Sem fatura'
                     },

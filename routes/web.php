@@ -190,6 +190,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('credit-cards.transactions.store');
         Route::post('credit-cards/{creditCard}/transactions/{transaction}/classify', [CreditCardController::class, 'classifyTransaction'])
             ->name('credit-cards.transactions.classify');
+        Route::post('credit-cards/{creditCard}/transactions/{transaction}/apply-classification-suggestion', [CreditCardController::class, 'applyClassificationSuggestion'])
+            ->name('credit-cards.transactions.apply-classification-suggestion');
+        Route::post('credit-cards/{creditCard}/classification-suggestions/apply', [CreditCardController::class, 'bulkApplyClassificationSuggestions'])
+            ->name('credit-cards.classification-suggestions.apply');
 
         Route::post('credit-cards/{creditCard}/statement-preview', [CreditCardController::class, 'previewStatement'])
             ->name('credit-cards.statement.preview');

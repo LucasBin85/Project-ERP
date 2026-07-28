@@ -84,6 +84,9 @@ class ManageMonthlyWalletClosing
         )) {
             $reasons[] = 'Existem faturas de cartao em aberto, vencidas ou parcialmente pagas.';
         }
+        if (collect($summary['cards'] ?? [])->sum('unclassified_count') > 0) {
+            $reasons[] = 'Existem compras de cartão pendentes de classificação.';
+        }
 
         return array_values(array_unique($reasons));
     }

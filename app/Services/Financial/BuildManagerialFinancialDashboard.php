@@ -27,6 +27,11 @@ class BuildManagerialFinancialDashboard
             ->whereBetween('purchase_date', [$closing['period']['start_date'], $end])->sum('amount_cents');
         $cardPayments = (int) CreditCardPayment::query()->where('wallet_id', $wallet->id)
             ->whereBetween('payment_date', [$closing['period']['start_date'], $end])->sum('amount_cents');
+        $unclassifiedCardPurchases = CreditCardTransaction::query()->where('wallet_id', $wallet->id)
+            ->whereBetween('purchase_date', [$closing['period']['start_date'], $end])
+            ->where('expense_account_id', $wallet->suspense_account_id)
+            ->whereHas('journalEntry', fn ($query) => $query->where('status', 'draft'))
+            ->get(['amount_cents']);
 
         return [
             'period' => $closing['period'],
@@ -43,6 +48,8 @@ class BuildManagerialFinancialDashboard
                 'credit_card_overdue_cents' => (int) $invoices->where('status', 'overdue')->sum('balance_cents'),
                 'credit_card_purchases_cents' => $cardPurchases,
                 'credit_card_payments_cents' => $cardPayments,
+                'credit_card_unclassified_count' => $unclassifiedCardPurchases->count(),
+                'credit_card_unclassified_cents' => (int) $unclassifiedCardPurchases->sum('amount_cents'),
             ],
             'closing' => [
                 'status' => $formalClosed ? 'formally_closed' : $closing['status'],
@@ -109,6 +116,7 @@ class BuildManagerialFinancialDashboard
             ['label' => 'Vínculos AP/AR pendentes', 'count' => (int) $bankCounts->sum('pending_links'), 'url' => route('bank-accounts.index')],
             ['label' => 'Transferências aguardando contraparte', 'count' => (int) $bankCounts->sum('pending_transfers'), 'url' => route('bank-transfers.index')],
             ['label' => 'Drafts prontos para postar', 'count' => $closing['accounting']['draft_ready'], 'url' => $closing['links']['pending']],
+            ['label' => 'Compras de cartão a classificar', 'count' => (int) collect($closing['cards'])->sum('unclassified_count'), 'url' => collect($closing['cards'])->firstWhere('unclassified_count', '>', 0)['url'] ?? route('credit-cards.index')],
             ['label' => 'Mês não fechado formalmente', 'count' => $closing['formal_closing']['status'] === 'closed' ? 0 : 1, 'url' => route('monthly-closing.show', ['year' => $closing['period']['year'], 'month' => $closing['period']['month']])],
         ];
     }

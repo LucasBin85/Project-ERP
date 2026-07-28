@@ -7,11 +7,14 @@ use App\Models\CreditCardTransaction;
 use App\Models\JournalEntry;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Services\Accounting\AssessJournalEntryPostingReadiness;
+use App\Services\Financial\ClassifyCreditCardPurchase;
 use App\Services\Financial\ConfirmCreditCardStatement;
 use App\Services\Financial\CreateCreditCard;
 use App\Services\Financial\ParseNubankCreditCardPdf;
 use App\Services\Financial\PreviewCreditCardStatement;
 use App\Services\Financial\ResolveCreditCardStatementTarget;
+use App\Services\Financial\SuggestCreditCardPurchaseClassification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -67,6 +70,76 @@ it('confirms statement purchases as deduplicated drafts without moving a bank ac
     $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $purchase->journal_entry_id, 'chart_of_account_id' => $suspense->id, 'type' => 'debit', 'amount_cents' => 10001]);
     $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $purchase->journal_entry_id, 'chart_of_account_id' => $card->liability_account_id, 'type' => 'credit', 'amount_cents' => 10001]);
     expect(app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura_2026-06-08.csv')['summary']['already_imported'])->toBe(1);
+});
+
+it('classifies only the suspense debit and makes the credit card purchase ready for accounting', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $csv = "date,title,amount\n2026-06-05,Mercado Central,100.01\n";
+    $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura-classificar.csv');
+    app(ConfirmCreditCardStatement::class)->execute(
+        $wallet,
+        $card,
+        $preview,
+        $csv,
+        'fatura-classificar.csv',
+        [['row_key' => $preview['rows'][0]['row_key'], 'action' => 'create']],
+        2026,
+        6,
+    );
+    $purchase = CreditCardTransaction::query()->firstOrFail();
+    $expense = ChartOfAccount::query()->where('wallet_id', $wallet->id)
+        ->where('type', 'despesa')->where('allows_posting', true)->whereDoesntHave('children')->firstOrFail();
+
+    app(ClassifyCreditCardPurchase::class)->execute($wallet, $purchase, $expense->id);
+    $entry = $purchase->journalEntry()->with('lines.chartOfAccount.children')->firstOrFail();
+
+    $this->assertDatabaseHas('journal_lines', [
+        'journal_entry_id' => $entry->id,
+        'chart_of_account_id' => $expense->id,
+        'type' => 'debit',
+        'amount_cents' => 10001,
+    ]);
+    $this->assertDatabaseHas('journal_lines', [
+        'journal_entry_id' => $entry->id,
+        'chart_of_account_id' => $card->liability_account_id,
+        'type' => 'credit',
+        'amount_cents' => 10001,
+    ]);
+    expect(app(AssessJournalEntryPostingReadiness::class)->handle($wallet, $entry)->ready)->toBeTrue();
+});
+
+it('suggests a high confidence classification after two consistent historical purchases', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $expense = ChartOfAccount::query()->where('wallet_id', $wallet->id)
+        ->where('type', 'despesa')->where('allows_posting', true)->whereDoesntHave('children')->firstOrFail();
+
+    foreach ([5, 12, 19] as $index => $day) {
+        $csv = sprintf("date,title,amount\n2026-06-%02d,Mercado Central,10.00\n", $day);
+        $filename = "historico-{$index}.csv";
+        $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, $filename);
+        app(ConfirmCreditCardStatement::class)->execute(
+            $wallet,
+            $card,
+            $preview,
+            $csv,
+            $filename,
+            [['row_key' => $preview['rows'][0]['row_key'], 'action' => 'create']],
+            2026,
+            6,
+        );
+    }
+
+    $purchases = CreditCardTransaction::query()->orderBy('purchase_date')->get();
+    app(ClassifyCreditCardPurchase::class)->execute($wallet, $purchases[0], $expense->id);
+    app(ClassifyCreditCardPurchase::class)->execute($wallet, $purchases[1], $expense->id);
+    $suggestion = app(SuggestCreditCardPurchaseClassification::class)->execute($wallet, $purchases[2]);
+
+    expect($suggestion)
+        ->not->toBeNull()
+        ->and($suggestion['chart_of_account_id'])->toBe($expense->id)
+        ->and($suggestion['confidence'])->toBe('high')
+        ->and($suggestion['history_count'])->toBe(2)
+        ->and($suggestion['can_bulk_apply'])->toBeTrue();
 });
 
 it('links an imported purchase to a child card by its last four digits', function () {

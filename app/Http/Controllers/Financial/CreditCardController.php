@@ -13,10 +13,13 @@ use App\Models\CreditCard;
 use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPayment;
 use App\Models\CreditCardTransaction;
+use App\Services\Financial\BulkApplyCreditCardPurchaseSuggestions;
+use App\Services\Financial\ClassifyCreditCardPurchase;
 use App\Services\Financial\ConfirmCreditCardStatement;
 use App\Services\Financial\CreateCreditCard;
 use App\Services\Financial\CreateCreditCardTransaction;
 use App\Services\Financial\PreviewCreditCardStatement;
+use App\Services\Financial\SuggestCreditCardPurchaseClassification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -160,7 +163,7 @@ class CreditCardController extends Controller
             ->with('success', 'Cartão de crédito cadastrado com sucesso.');
     }
 
-    public function show(Request $request, CreditCard $creditCard): Response
+    public function show(Request $request, CreditCard $creditCard, SuggestCreditCardPurchaseClassification $suggestClassification): Response
     {
         $wallet = $this->resolveActiveWallet($request);
 
@@ -200,6 +203,15 @@ class CreditCardController extends Controller
             ->orderByDesc('id')
             ->limit(50)
             ->get();
+        $transactions->each(function (CreditCardTransaction $transaction) use ($wallet, $suggestClassification) {
+            $pending = (int) $transaction->expense_account_id === (int) $wallet->suspense_account_id
+                && $transaction->journalEntry?->status === 'draft';
+            $transaction->setAttribute('classification_suggestion', $pending
+                ? $suggestClassification->execute($wallet, $transaction)
+                : null);
+        });
+        $classifiedTransactions = $transactions->filter(fn (CreditCardTransaction $transaction) => (int) $transaction->expense_account_id !== (int) $wallet->suspense_account_id);
+        $pendingTransactions = $transactions->filter(fn (CreditCardTransaction $transaction) => (int) $transaction->expense_account_id === (int) $wallet->suspense_account_id);
 
         $payments = CreditCardPayment::query()
             ->where('wallet_id', $wallet->id)
@@ -228,6 +240,15 @@ class CreditCardController extends Controller
             'summary' => [
                 'current_balance_cents' => $currentBalance,
                 'available_limit_cents' => $creditCard->credit_limit_cents - $currentBalance,
+            ],
+            'purchaseClassificationSummary' => [
+                'total_count' => $transactions->count(),
+                'total_cents' => (int) $transactions->sum('amount_cents'),
+                'classified_count' => $classifiedTransactions->count(),
+                'classified_cents' => (int) $classifiedTransactions->sum('amount_cents'),
+                'pending_count' => $pendingTransactions->count(),
+                'pending_cents' => (int) $pendingTransactions->sum('amount_cents'),
+                'high_confidence_count' => $pendingTransactions->filter(fn (CreditCardTransaction $transaction) => ($transaction->classification_suggestion['can_bulk_apply'] ?? false))->count(),
             ],
             'invoices' => $invoices,
             'transactions' => $transactions,
@@ -345,26 +366,76 @@ class CreditCardController extends Controller
             ->with('success', 'Compra no cartão registrada com sucesso.');
     }
 
-    public function classifyTransaction(Request $request, CreditCard $creditCard, CreditCardTransaction $transaction): RedirectResponse
-    {
+    public function classifyTransaction(
+        Request $request,
+        CreditCard $creditCard,
+        CreditCardTransaction $transaction,
+        ClassifyCreditCardPurchase $service,
+    ): RedirectResponse {
         $wallet = $this->resolveActiveWallet($request);
-        abort_unless((int) $creditCard->wallet_id === (int) $wallet->id && (int) $transaction->wallet_id === (int) $wallet->id, 404);
-        $data = $request->validate([
-            'chart_of_account_id' => [
-                'required', 'integer',
-                Rule::exists('chart_of_accounts', 'id')->where('wallet_id', $wallet->id)->whereIn('type', ['despesa', 'ativo'])->where('allows_posting', true),
-            ],
-        ]);
-        $account = ChartOfAccount::query()->where('wallet_id', $wallet->id)->whereKey($data['chart_of_account_id'])
-            ->whereDoesntHave('children')
-            ->whereNotIn('id', fn ($query) => $query->select('chart_of_account_id')->from('bank_accounts'))
-            ->firstOrFail();
-        abort_unless($transaction->journalEntry?->status === 'draft', 422);
-        $transaction->journalEntry->lines()->where('chart_of_account_id', $wallet->suspense_account_id)
-            ->where('type', 'debit')->update(['chart_of_account_id' => $account->id, 'memo' => 'Classificação da compra no cartão']);
-        $transaction->update(['expense_account_id' => $account->id]);
+        $this->authorizeTransaction($wallet->id, $creditCard, $transaction);
+        $data = $request->validate(['chart_of_account_id' => ['required', 'integer']]);
+        $service->execute($wallet, $transaction, (int) $data['chart_of_account_id']);
 
         return back()->with('success', 'Compra classificada e pronta para contabilidade.');
+    }
+
+    public function applyClassificationSuggestion(
+        Request $request,
+        CreditCard $creditCard,
+        CreditCardTransaction $transaction,
+        SuggestCreditCardPurchaseClassification $suggest,
+        ClassifyCreditCardPurchase $classify,
+    ): RedirectResponse {
+        $wallet = $this->resolveActiveWallet($request);
+        $this->authorizeTransaction($wallet->id, $creditCard, $transaction);
+        $data = $request->validate(['suggestion_key' => ['required', 'string', 'max:100']]);
+        $suggestion = $suggest->execute($wallet, $transaction);
+
+        if (! ($suggestion['can_apply'] ?? false)
+            || ! hash_equals((string) ($suggestion['suggestion_key'] ?? ''), $data['suggestion_key'])) {
+            return back()->withErrors(['suggestion' => 'A sugestão mudou ou não está mais disponível. Recarregue e tente novamente.']);
+        }
+
+        $classify->execute($wallet, $transaction, (int) $suggestion['chart_of_account_id']);
+
+        return back()->with('success', 'Sugestão aplicada. A compra está pronta para contabilidade.');
+    }
+
+    public function bulkApplyClassificationSuggestions(
+        Request $request,
+        CreditCard $creditCard,
+        BulkApplyCreditCardPurchaseSuggestions $service,
+    ): RedirectResponse {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $creditCard->wallet_id === (int) $wallet->id && ! $creditCard->parent_card_id, 404);
+        $familyCardIds = $this->familyCardIds($creditCard);
+        $data = $request->validate([
+            'transaction_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'transaction_ids.*' => [
+                'integer',
+                Rule::exists('credit_card_transactions', 'id')
+                    ->where('wallet_id', $wallet->id)
+                    ->whereIn('credit_card_id', $familyCardIds),
+            ],
+        ]);
+        $result = $service->execute($wallet, $data['transaction_ids']);
+
+        return back()->with(
+            'success',
+            "{$result['applied']} sugestões aplicadas; {$result['skipped']} ignoradas; {$result['failed']} falharam.",
+        );
+    }
+
+    private function authorizeTransaction(int $walletId, CreditCard $creditCard, CreditCardTransaction $transaction): void
+    {
+        abort_unless(
+            (int) $creditCard->wallet_id === $walletId
+            && ! $creditCard->parent_card_id
+            && (int) $transaction->wallet_id === $walletId
+            && in_array((int) $transaction->credit_card_id, $this->familyCardIds($creditCard), true),
+            404,
+        );
     }
 
     private function currentBalanceCents(int $walletId, int $liabilityAccountId): int

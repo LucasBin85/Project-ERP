@@ -22,6 +22,7 @@ const cards = [
     ['Faturas vencidas', 'credit_card_overdue_cents', 'red'],
     ['Compras no cartão', 'credit_card_purchases_cents', 'yellow'],
     ['Pagamentos de fatura', 'credit_card_payments_cents', 'green'],
+    ['Compras de cartão a classificar', 'credit_card_unclassified_cents', 'yellow'],
 ];
 function refresh() { router.get(route('dashboard'), filters, { preserveState: true }); }
 </script>

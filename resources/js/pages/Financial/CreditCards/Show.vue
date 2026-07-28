@@ -7,8 +7,9 @@ import StatusBadge from '@/components/ui/StatusBadge.vue';
 import { useCreditCardTransactionForm } from '@/composables/financial/useCreditCardTransactionForm';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatAccount, formatCurrency, formatDate } from '@/lib/formatters';
-import { Link } from '@inertiajs/vue3';
+import { Link, router, useForm } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import { computed, ref } from 'vue';
 import CreditCardStatementImport from '@/components/financial/creditCards/CreditCardStatementImport.vue';
 import InlineCreditCardClassification from '@/components/financial/creditCards/InlineCreditCardClassification.vue';
 
@@ -18,6 +19,7 @@ const props = defineProps<{
     familyCards: Array<Record<string, any>>;
     summaryByCard: Array<Record<string, any>>;
     summary: Record<string, number>;
+    purchaseClassificationSummary: Record<string, number>;
     invoices: Array<Record<string, any>>;
     transactions: Array<Record<string, any>>;
     payments: Array<Record<string, any>>;
@@ -26,6 +28,19 @@ const props = defineProps<{
 }>();
 
 const transaction = useCreditCardTransactionForm(props.creditCard.id);
+const classificationFilter = ref('all');
+const bulkForm = useForm({ transaction_ids: [] as number[] });
+const filteredTransactions = computed(() => props.transactions.filter((item) => {
+    const pending = Number(item.expense_account_id) === Number(props.wallet.suspense_account_id);
+    if (classificationFilter.value === 'unclassified') return pending && item.journal_entry?.status === 'draft';
+    if (classificationFilter.value === 'classified') return !pending;
+    if (classificationFilter.value === 'ready') return !pending && item.journal_entry?.status === 'draft';
+    if (classificationFilter.value === 'posted') return item.journal_entry?.status === 'posted';
+    return true;
+}));
+const highConfidenceIds = computed(() => props.transactions
+    .filter((item) => item.classification_suggestion?.can_bulk_apply)
+    .map((item) => Number(item.id)));
 
 const cardTypes: Record<string, string> = {
     main: 'Principal',
@@ -41,6 +56,17 @@ function submitTransaction() {
     if (!transaction.canSubmit.value) return;
     transaction.form.installment_number = 1;
     transaction.form.post(route('credit-cards.transactions.store', [props.creditCard.id]));
+}
+
+function applySuggestion(item: Record<string, any>) {
+    router.post(route('credit-cards.transactions.apply-classification-suggestion', [props.creditCard.id, item.id]), {
+        suggestion_key: item.classification_suggestion.suggestion_key,
+    }, { preserveScroll: true });
+}
+
+function applyBulkSuggestions() {
+    bulkForm.transaction_ids = highConfidenceIds.value;
+    bulkForm.post(route('credit-cards.classification-suggestions.apply', props.creditCard.id), { preserveScroll: true });
 }
 
 </script>
@@ -229,7 +255,24 @@ function submitTransaction() {
                     </div>
                 </template>
 
-                <ReportTable :empty="transactions.length === 0" empty-message="Nenhuma compra registrada." :empty-colspan="9">
+                <div class="grid grid-cols-1 gap-3 border-b border-gray-700 p-4 sm:grid-cols-3">
+                    <ReportSummaryCard label="Total exibido" :value="`${purchaseClassificationSummary.total_count} · ${formatCurrency(purchaseClassificationSummary.total_cents)}`" tone="neutral" />
+                    <ReportSummaryCard label="Classificado" :value="`${purchaseClassificationSummary.classified_count} · ${formatCurrency(purchaseClassificationSummary.classified_cents)}`" tone="green" />
+                    <ReportSummaryCard label="Pendente" :value="`${purchaseClassificationSummary.pending_count} · ${formatCurrency(purchaseClassificationSummary.pending_cents)}`" tone="yellow" />
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-700 p-4">
+                    <select v-model="classificationFilter" class="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white">
+                        <option value="all">Todas</option>
+                        <option value="unclassified">A classificar</option>
+                        <option value="classified">Classificadas</option>
+                        <option value="ready">Prontas para contabilizar</option>
+                        <option value="posted">Contabilizadas</option>
+                    </select>
+                    <button v-if="highConfidenceIds.length" type="button" :disabled="bulkForm.processing" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="applyBulkSuggestions">
+                        Aplicar sugestões seguras ({{ highConfidenceIds.length }})
+                    </button>
+                </div>
+                <ReportTable :empty="filteredTransactions.length === 0" empty-message="Nenhuma compra para este filtro." :empty-colspan="9">
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Data</th>
@@ -244,7 +287,7 @@ function submitTransaction() {
                         </tr>
                     </template>
 
-                    <tr v-for="item in transactions" :key="item.id" class="hover:bg-gray-800/50">
+                    <tr v-for="item in filteredTransactions" :key="item.id" class="hover:bg-gray-800/50">
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(item.purchase_date) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
                             <span v-if="item.credit_card_invoice">
@@ -259,6 +302,12 @@ function submitTransaction() {
                         <td class="px-4 py-3 text-sm font-semibold text-white">{{ item.merchant_name }}</td>
                         <td class="px-4 py-3 text-sm text-gray-300">{{ item.description }}</td>
                         <td class="px-4 py-3 text-sm text-gray-400">
+                            <div v-if="item.classification_suggestion?.status === 'suggested'" class="mb-2 rounded border border-indigo-500/30 bg-indigo-950/30 p-2 text-xs">
+                                <p class="font-semibold text-indigo-200">{{ item.classification_suggestion.target_label }}</p>
+                                <p class="text-gray-400">{{ item.classification_suggestion.history_count }} ocorrência(s) · confiança {{ item.classification_suggestion.confidence === 'high' ? 'alta' : 'média' }}</p>
+                                <button type="button" class="mt-1 font-semibold text-indigo-300 hover:text-indigo-200" @click="applySuggestion(item)">Aplicar sugestão</button>
+                            </div>
+                            <p v-else-if="item.classification_suggestion?.status === 'ambiguous'" class="mb-2 text-xs text-amber-300">Histórico divergente; escolha manualmente.</p>
                             <InlineCreditCardClassification v-if="item.expense_account_id === wallet.suspense_account_id" :credit-card-id="creditCard.id" :transaction-id="item.id" :accounts="expenseAccounts" />
                             <span v-else>{{ formatAccount(item.expense_account?.code, item.expense_account?.name) }}</span>
                         </td>
