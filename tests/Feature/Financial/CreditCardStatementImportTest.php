@@ -68,6 +68,31 @@ it('confirms statement purchases as deduplicated drafts without moving a bank ac
     expect(app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura.csv')['summary']['already_imported'])->toBe(1);
 });
 
+it('links an imported purchase to a child card by its last four digits', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $child = app(CreateCreditCard::class)->execute($wallet, new CreditCardDTO(
+        name: 'Nubank Virtual 1234', issuerName: 'Nubank', network: 'mastercard', cardType: 'virtual',
+        closingDay: 0, dueDay: 0, bestPurchaseDay: 0, creditLimitCents: 0,
+        parentCardId: $card->id, lastFour: '1234',
+    ));
+    $ofx = '<OFX><SIGNONMSGSRSV1><SONRS><FI><ORG>NUBANK</FI></SONRS></SIGNONMSGSRSV1><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CURDEF>BRL<CCACCTFROM><ACCTID>1234</CCACCTFROM><BANKTRANLIST><DTSTART>20260601<DTEND>20260630<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260605<TRNAMT>-10.00<FITID>child-1<NAME>Compra Virtual</STMTTRN></BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>';
+    $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $ofx, 'fatura.ofx');
+    $decisions = [['row_key' => $preview['rows'][0]['row_key'], 'action' => 'create']];
+
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $preview, $ofx, 'fatura.ofx', $decisions);
+
+    $purchase = CreditCardTransaction::query()->firstOrFail();
+    expect($preview['rows'][0]['credit_card_id'])->toBe($child->id)
+        ->and($purchase->credit_card_id)->toBe($child->id)
+        ->and($purchase->creditCardInvoice->credit_card_id)->toBe($card->id);
+    $this->assertDatabaseHas('journal_lines', [
+        'journal_entry_id' => $purchase->journal_entry_id,
+        'chart_of_account_id' => $card->liability_account_id,
+        'type' => 'credit',
+        'amount_cents' => 1000,
+    ]);
+});
+
 it('parses a sanitized Nubank PDF text layout', function () {
     $text = file_get_contents(base_path('tests/Fixtures/financial/nubank-credit-card-statement.txt'));
     $transactions = app(ParseNubankCreditCardPdf::class)->parse($text);

@@ -24,6 +24,13 @@ class ConfirmCreditCardStatement
         }
 
         return DB::transaction(function () use ($wallet, $card, $preview, $contents, $filename, $decisions) {
+            $mainCard = $this->invoices->mainCard($card);
+            $familyCardIds = CreditCard::query()
+                ->where('wallet_id', $wallet->id)
+                ->where(fn ($query) => $query->whereKey($mainCard->id)->orWhere('parent_card_id', $mainCard->id))
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
             $parsed = $this->parser->parse($contents, $filename);
             $decisionMap = collect($decisions)->keyBy('row_key');
             $created = 0;
@@ -37,7 +44,10 @@ class ConfirmCreditCardStatement
 
                     continue;
                 }
-                if (CreditCardTransaction::query()->where('credit_card_id', $card->id)
+                $targetCardId = in_array((int) ($row['credit_card_id'] ?? 0), $familyCardIds, true)
+                    ? (int) $row['credit_card_id']
+                    : $mainCard->id;
+                if (CreditCardTransaction::query()->whereIn('credit_card_id', $familyCardIds)
                     ->where(fn ($query) => $query->where('import_hash', $row['import_hash'])->orWhere('external_id', $row['external_id']))->exists()) {
                     $ignored++;
 
@@ -45,8 +55,7 @@ class ConfirmCreditCardStatement
                 }
 
                 $transaction = $parsed['transactions'][$row['index']];
-                $invoice = $this->invoices->forPurchaseDate($wallet, $card, $transaction->postedAt);
-                $mainCard = $this->invoices->mainCard($card);
+                $invoice = $this->invoices->forPurchaseDate($wallet, $mainCard, $transaction->postedAt);
                 $entry = $this->journalEntries->execute([
                     'wallet_id' => $wallet->id,
                     'entry_date' => $transaction->postedAt,
@@ -58,7 +67,7 @@ class ConfirmCreditCardStatement
                 ]);
                 CreditCardTransaction::query()->create([
                     'wallet_id' => $wallet->id,
-                    'credit_card_id' => $card->id,
+                    'credit_card_id' => $targetCardId,
                     'credit_card_invoice_id' => $invoice->id,
                     'expense_account_id' => $wallet->suspense_account_id,
                     'journal_entry_id' => $entry->id,

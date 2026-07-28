@@ -22,6 +22,15 @@ class PreviewCreditCardStatement
         }
         $mainCard = $card->parentCard ?: $card;
         $parsed = $this->parser->parse($contents, $filename);
+        $targetCard = $mainCard;
+        if (! empty($parsed['last_four'])) {
+            $targetCard = CreditCard::query()
+                ->where('wallet_id', $wallet->id)
+                ->where(fn ($query) => $query->whereKey($mainCard->id)->orWhere('parent_card_id', $mainCard->id))
+                ->where('last_four', $parsed['last_four'])
+                ->where('is_active', true)
+                ->first() ?? $mainCard;
+        }
         $fileHash = hash('sha256', $this->parser->format($filename).'|'.$contents);
         $seen = [];
         $rows = [];
@@ -56,6 +65,8 @@ class PreviewCreditCardStatement
                 'installment_number' => $installmentNumber,
                 'installments_total' => $installmentsTotal,
                 'invoice_reference' => $this->invoiceReference($mainCard, $transaction->postedAt),
+                'credit_card_id' => $targetCard->id,
+                'credit_card_name' => $targetCard->name,
                 'situation' => $situation,
                 'default_action' => $situation === 'new' ? 'create' : 'ignore',
             ];
@@ -67,8 +78,8 @@ class PreviewCreditCardStatement
             'format' => strtoupper($this->parser->format($filename)),
             'origin' => $this->parser->format($filename) === 'pdf' && $parsed['read_source'] === 'ocr' ? 'PDF/OCR' : strtoupper($this->parser->format($filename)),
             'file_hash' => $fileHash,
-            'credit_card_id' => $card->id,
-            'credit_card_name' => $card->name,
+            'credit_card_id' => $mainCard->id,
+            'credit_card_name' => $mainCard->name,
             'institution' => $parsed['institution'] ?? null,
             'last_four' => $parsed['last_four'] ?? null,
             'holder_name' => $parsed['holder_name'] ?? null,

@@ -5,6 +5,7 @@ use App\Models\AccountReceivable;
 use App\Models\MonthlyWalletClosing;
 use App\Models\User;
 use App\Services\Financial\BuildManagerialFinancialDashboard;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Helpers\AccountingTestHelper;
@@ -50,6 +51,7 @@ it('consolidates multiple banks and monthly operational movements', function () 
 });
 
 it('summarizes open AP AR and posted expense revenue rankings', function () {
+    CarbonImmutable::setTestNow('2026-07-20 12:00:00');
     $context = managerialContext();
     AccountPayable::query()->create(['wallet_id' => $context['wallet']->id, 'expense_account_id' => $context['expense']->id,
         'payee_name' => 'Fornecedor', 'description' => 'AP', 'due_date' => '2026-07-05', 'amount_cents' => 2200, 'status' => 'pending']);
@@ -69,6 +71,7 @@ it('summarizes open AP AR and posted expense revenue rankings', function () {
         ->and($dashboard['receivables']['expected']['count'])->toBe(1)
         ->and($dashboard['rankings']['expenses'][0]['amount_cents'])->toBe(900)
         ->and($dashboard['rankings']['revenues'][0]['amount_cents'])->toBe(1700);
+    CarbonImmutable::setTestNow();
 });
 
 it('uses posted investment balances and exposes formal monthly closing status', function () {

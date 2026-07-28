@@ -16,9 +16,7 @@ use App\Models\CreditCardTransaction;
 use App\Services\Financial\ConfirmCreditCardStatement;
 use App\Services\Financial\CreateCreditCard;
 use App\Services\Financial\CreateCreditCardTransaction;
-use App\Services\Financial\ParseCreditCardStatementFile;
 use App\Services\Financial\PreviewCreditCardStatement;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -123,20 +121,21 @@ class CreditCardController extends Controller
             'bank_id' => ['required_if:card_type,main', 'nullable', 'integer', Rule::exists('banks', 'id')->where('active', true)],
             'bank_account_context_id' => ['nullable', 'integer', Rule::exists('bank_accounts', 'id')->where('wallet_id', $wallet->id)->where('is_active', true)],
             'network' => ['required', Rule::in(['visa', 'mastercard', 'elo', 'amex', 'hipercard', 'other'])],
-            'card_type' => ['required', Rule::in(['main', 'additional', 'virtual'])],
+            'card_type' => ['required', Rule::in(['main', 'physical', 'additional', 'virtual'])],
             'parent_card_id' => ['nullable', 'required_unless:card_type,main', 'integer', Rule::exists('credit_cards', 'id')->where('wallet_id', $wallet->id)->where('card_type', 'main')],
             'holder_name' => ['nullable', 'string', 'max:255'],
             'last_four' => ['nullable', 'string', 'size:4'],
-            'closing_day' => ['required', 'integer', 'min:1', 'max:31'],
-            'due_day' => ['required', 'integer', 'min:1', 'max:31'],
-            'best_purchase_day' => ['required', 'integer', 'min:1', 'max:31'],
+            'closing_day' => ['nullable', 'required_if:card_type,main', 'integer', 'min:1', 'max:31'],
+            'due_day' => ['nullable', 'required_if:card_type,main', 'integer', 'min:1', 'max:31'],
+            'best_purchase_day' => ['nullable', 'required_if:card_type,main', 'integer', 'min:1', 'max:31'],
             'credit_limit_cents' => ['required', 'integer', 'min:0'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
         if (! empty($data['bank_account_context_id'])) {
             $contextBankId = BankAccount::query()->where('wallet_id', $wallet->id)
                 ->whereKey($data['bank_account_context_id'])->value('bank_id');
-            if (! $contextBankId || (int) $data['bank_id'] !== (int) $contextBankId) {
+            if (! $contextBankId || (($data['card_type'] ?? 'main') === 'main'
+                && (int) $data['bank_id'] !== (int) $contextBankId)) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'bank_id' => 'O cartão deve pertencer à mesma instituição do contexto de criação.',
                 ]);
@@ -296,39 +295,6 @@ class CreditCardController extends Controller
         return back()->with('success', "{$result['created']} compras importadas; {$result['ignored']} linhas ignoradas.");
     }
 
-    public function previewSetupFile(Request $request, ParseCreditCardStatementFile $parser): JsonResponse
-    {
-        $this->resolveActiveWallet($request);
-        $request->validate([
-            'statement_file' => ['required', 'file', 'max:10240', 'extensions:ofx,csv,pdf'],
-            'bank_id' => ['nullable', 'integer', Rule::exists('banks', 'id')->where('active', true)],
-        ]);
-        $file = $request->file('statement_file');
-
-        try {
-            $parsed = $parser->parse((string) $file->get(), $file->getClientOriginalName());
-        } catch (\Throwable $exception) {
-            return response()->json(['message' => $exception->getMessage()], 422);
-        }
-
-        $contextBank = $request->filled('bank_id') ? Bank::query()->find($request->integer('bank_id')) : null;
-        $detectedInstitution = $parsed['institution'] ?? null;
-        $institutionMismatch = $contextBank && $detectedInstitution
-            && ! str_contains(mb_strtolower($detectedInstitution), mb_strtolower($contextBank->short_name))
-            && ! str_contains(mb_strtolower($contextBank->short_name), mb_strtolower($detectedInstitution));
-
-        return response()->json([
-            'institution' => $parsed['institution'] ?? null,
-            'institution_mismatch' => (bool) $institutionMismatch,
-            'last_four' => $parsed['last_four'] ?? null,
-            'holder_name' => $parsed['holder_name'] ?? null,
-            'due_day' => isset($parsed['due_date']) ? (int) substr($parsed['due_date'], -2) : null,
-            'warning' => empty($parsed['institution']) && empty($parsed['last_four'])
-                ? 'O arquivo não possui metadados suficientes. Continue o preenchimento manual.'
-                : null,
-        ]);
-    }
-
     public function storeTransaction(Request $request, CreditCard $creditCard, CreateCreditCardTransaction $service): RedirectResponse
     {
         $wallet = $this->resolveActiveWallet($request);
@@ -465,10 +431,11 @@ class CreditCardController extends Controller
             ->when($issuerBankId, fn ($query) => $query->where('issuer_bank_id', $issuerBankId))
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'issuer_name'])
+            ->get(['id', 'name', 'issuer_name', 'issuer_bank_id'])
             ->map(fn (CreditCard $card) => [
                 'id' => $card->id,
                 'label' => "{$card->name} ({$card->issuer_name})",
+                'issuer_bank_id' => $card->issuer_bank_id,
             ])
             ->values()
             ->all();

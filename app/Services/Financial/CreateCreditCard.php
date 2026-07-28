@@ -23,6 +23,8 @@ class CreateCreditCard
                 $parentCard = CreditCard::query()
                     ->where('wallet_id', $wallet->id)
                     ->where('card_type', 'main')
+                    ->whereNull('parent_card_id')
+                    ->where('is_active', true)
                     ->with(['liabilityAccount', 'issuerBank'])
                     ->find($dto->parentCardId);
 
@@ -54,9 +56,21 @@ class CreateCreditCard
                         'bank_id' => 'Selecione uma instituição emissora válida.',
                     ]);
                 }
+
+                if (CreditCard::query()
+                    ->where('wallet_id', $wallet->id)
+                    ->where('issuer_bank_id', $issuerBank->id)
+                    ->where('card_type', 'main')
+                    ->whereNull('parent_card_id')
+                    ->exists()) {
+                    throw ValidationException::withMessages([
+                        'bank_id' => 'Já existe uma fatura principal para esta instituição nesta wallet.',
+                    ]);
+                }
             }
 
-            $liabilityAccount = $parentCard?->liabilityAccount ?? $this->createLiabilityAccount($wallet, $dto->name);
+            $liabilityAccount = $parentCard?->liabilityAccount
+                ?? $this->createLiabilityAccount($wallet, ($issuerBank?->short_name ?: $dto->name).' — Fatura');
 
             return CreditCard::query()->create([
                 'wallet_id' => $wallet->id,

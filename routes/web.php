@@ -195,9 +195,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('credit-cards.statement.preview');
         Route::post('credit-cards/{creditCard}/statement-confirm', [CreditCardController::class, 'confirmStatement'])
             ->name('credit-cards.statement.confirm');
-        Route::post('credit-cards/setup-file-preview', [CreditCardController::class, 'previewSetupFile'])
-            ->name('credit-cards.setup-file.preview');
-
         Route::resource('credit-cards', CreditCardController::class)
             ->only(['index', 'create', 'store', 'show']);
     });

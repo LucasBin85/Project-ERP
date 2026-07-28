@@ -18,7 +18,6 @@ use App\Services\Financial\CreateCreditCardTransaction;
 use App\Services\Financial\LinkCreditCardInvoicePaymentFromBankStatement;
 use App\Services\Financial\PayCreditCardInvoice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\ValidationException;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
@@ -166,84 +165,18 @@ it('does not expose a default payment account in the credit card UI', function (
         ->not->toContain('submitPayment');
 });
 
-it('previews OFX and CSV setup files without creating financial records', function () {
-    $wallet = createTestWalletWithCardGroup();
-    $user = $wallet->user;
-    $nubank = Bank::query()->where('short_name', 'Nubank')->firstOrFail();
-    $ofx = '<OFX><SIGNONMSGSRSV1><SONRS><FI><ORG>NUBANK</FI></SONRS></SIGNONMSGSRSV1><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CURDEF>BRL<CCACCTFROM><ACCTID>1234567193</CCACCTFROM><BANKTRANLIST><DTSTART>20260701<DTEND>20260731<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260705<TRNAMT>-10.00<FITID>setup-safe-1<NAME>Compra Segura</STMTTRN></BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>';
-    $csv = "date,title,amount\n2026-07-05,Compra Segura,10.00\n";
-
-    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
-        ->postJson(route('credit-cards.setup-file.preview'), [
-            'statement_file' => UploadedFile::fake()->createWithContent('fatura.ofx', $ofx),
-            'bank_id' => $nubank->id,
-        ])
-        ->assertOk()
-        ->assertJsonPath('institution', 'NUBANK')
-        ->assertJsonPath('institution_mismatch', false)
-        ->assertJsonPath('last_four', '7193')
-        ->assertJsonMissing(['bank_id']);
-
-    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
-        ->postJson(route('credit-cards.setup-file.preview'), [
-            'statement_file' => UploadedFile::fake()->createWithContent('fatura.csv', $csv),
-            'bank_id' => $nubank->id,
-        ])
-        ->assertOk()
-        ->assertJsonPath('institution', null)
-        ->assertJsonPath('last_four', null);
-
-    expect(\App\Models\CreditCard::query()->count())->toBe(0)
-        ->and(CreditCardInvoice::query()->count())->toBe(0)
-        ->and(CreditCardTransaction::query()->count())->toBe(0)
-        ->and(JournalEntry::query()->count())->toBe(0);
-});
-
-it('returns PDF metadata and warns when the setup file institution differs', function () {
-    $wallet = createTestWalletWithCardGroup();
-    $user = $wallet->user;
-    $itau = Bank::query()->create([
-        'code' => '341', 'name' => 'Itaú Unibanco', 'short_name' => 'Itaú', 'ispb' => '60701190', 'active' => true,
-    ]);
-    $parser = \Mockery::mock(\App\Services\Financial\ParseCreditCardStatementFile::class);
-    $parser->shouldReceive('parse')->once()->andReturn([
-        'institution' => 'Nubank',
-        'last_four' => '7193',
-        'holder_name' => 'Titular Seguro',
-        'due_date' => '2026-07-08',
-        'transactions' => [],
-    ]);
-    $this->app->instance(\App\Services\Financial\ParseCreditCardStatementFile::class, $parser);
-
-    $this->actingAs($user)->withSession(['active_wallet' => $wallet->id])
-        ->postJson(route('credit-cards.setup-file.preview'), [
-            'statement_file' => UploadedFile::fake()->createWithContent('fatura.pdf', '%PDF-1.4 safe'),
-            'bank_id' => $itau->id,
-        ])
-        ->assertOk()
-        ->assertJsonPath('institution', 'Nubank')
-        ->assertJsonPath('institution_mismatch', true)
-        ->assertJsonPath('last_four', '7193')
-        ->assertJsonPath('holder_name', 'Titular Seguro')
-        ->assertJsonPath('due_day', 8)
-        ->assertJsonMissing(['bank_id']);
-
-    expect(\App\Models\CreditCard::query()->count())->toBe(0)
-        ->and(CreditCardInvoice::query()->count())->toBe(0)
-        ->and(CreditCardTransaction::query()->count())->toBe(0)
-        ->and(JournalEntry::query()->count())->toBe(0);
-});
-
-it('sends the setup file with CSRF headers and hides technical session errors', function () {
+it('keeps card setup manual with empty date fields and no setup upload', function () {
     $page = file_get_contents(resource_path('js/pages/Financial/CreditCards/Create.vue'));
-    $layout = file_get_contents(resource_path('views/app.blade.php'));
+    $composable = file_get_contents(resource_path('js/composables/financial/useCreditCardCreate.ts'));
 
-    expect($layout)->toContain('meta name="csrf-token"')
-        ->and($page)->toContain("'X-CSRF-TOKEN': token")
-        ->toContain("'X-Requested-With': 'XMLHttpRequest'")
-        ->toContain("credentials: 'same-origin'")
-        ->toContain('Sua sessão expirou. Recarregue a página e tente novamente.')
-        ->not->toContain('CSRF token mismatch');
+    expect($page)
+        ->not->toContain('Preencher com arquivo da fatura')
+        ->not->toContain('credit-cards.setup-file.preview')
+        ->toContain('O cadastro é manual')
+        ->and($composable)
+        ->toContain("closing_day: ''")
+        ->toContain("due_day: ''")
+        ->toContain("best_purchase_day: ''");
 });
 
 it('creates a virtual credit card sharing parent invoice settings', function () {
@@ -293,6 +226,20 @@ it('creates a virtual credit card sharing parent invoice settings', function () 
         ->and($virtualCard->due_day)->toBe($mainCard->due_day)
         ->and($virtualCard->best_purchase_day)->toBe($mainCard->best_purchase_day)
         ->and($virtualCard->credit_limit_cents)->toBe($mainCard->credit_limit_cents);
+});
+
+it('allows only one main invoice per issuing bank and wallet', function () {
+    $wallet = createTestWalletWithCardGroup();
+
+    app(CreateCreditCard::class)->execute($wallet, new CreditCardDTO(
+        name: 'Nubank — Fatura', issuerName: 'Nubank', network: 'mastercard', cardType: 'main',
+        closingDay: 5, dueDay: 15, bestPurchaseDay: 6, creditLimitCents: 100000,
+    ));
+
+    expect(fn () => app(CreateCreditCard::class)->execute($wallet, new CreditCardDTO(
+        name: 'Segunda fatura Nubank', issuerName: 'Nubank', network: 'mastercard', cardType: 'main',
+        closingDay: 10, dueDay: 20, bestPurchaseDay: 11, creditLimitCents: 200000,
+    )))->toThrow(ValidationException::class);
 });
 
 it('creates a draft journal entry and monthly invoice when registering a credit card purchase', function () {

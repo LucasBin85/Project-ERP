@@ -16,9 +16,9 @@ export function useCreditCardCreate(defaultBankId: number | string | null = null
         parent_card_id: '',
         holder_name: '',
         last_four: '',
-        closing_day: 5,
-        due_day: 15,
-        best_purchase_day: 6,
+        closing_day: '',
+        due_day: '',
+        best_purchase_day: '',
         credit_limit: '',
         credit_limit_cents: 0,
         notes: '',
@@ -27,7 +27,7 @@ export function useCreditCardCreate(defaultBankId: number | string | null = null
     watch(
         () => form.closing_day,
         (value) => {
-            form.best_purchase_day = suggestedBestPurchaseDay(Number(value));
+            form.best_purchase_day = value ? String(suggestedBestPurchaseDay(Number(value))) : '';
         },
     );
 
@@ -46,9 +46,11 @@ export function useCreditCardCreate(defaultBankId: number | string | null = null
             form.name.trim() &&
                 form.network &&
                 form.card_type &&
-                Number(form.closing_day) >= 1 &&
-                Number(form.due_day) >= 1 &&
-                Number(form.best_purchase_day) >= 1 &&
+                (form.card_type !== 'main' || (
+                    Number(form.closing_day) >= 1 &&
+                    Number(form.due_day) >= 1 &&
+                    Number(form.best_purchase_day) >= 1
+                )) &&
                 (form.card_type === 'main' ? form.bank_id : form.parent_card_id),
         );
     });

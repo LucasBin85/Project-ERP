@@ -1,17 +1,39 @@
 <script setup lang="ts">
 import { formatCurrency, formatDate } from '@/lib/formatters';
 import { useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
 
 const props = defineProps<{ creditCardId: number; preview?: Record<string, any> | null }>();
+const safePreview = computed(() => {
+    if (!props.preview) return null;
+
+    return {
+        ...props.preview,
+        file_name: props.preview.file_name ?? 'Arquivo selecionado',
+        origin: props.preview.origin ?? 'Formato não informado',
+        credit_card_name: props.preview.credit_card_name ?? 'Fatura principal',
+        rows: Array.isArray(props.preview.rows) ? props.preview.rows : [],
+        summary: {
+            total_cents: Number(props.preview.summary?.total_cents ?? 0),
+            new: Number(props.preview.summary?.new ?? 0),
+            already_imported: Number(props.preview.summary?.already_imported ?? 0),
+            possible_duplicate: Number(props.preview.summary?.possible_duplicate ?? 0),
+            credits: Number(props.preview.summary?.credits ?? 0),
+        },
+    };
+});
 const file = ref<File | null>(null);
 const upload = useForm<{ statement_file: File | null }>({ statement_file: null });
-const decisions = computed(() => (props.preview?.rows ?? []).map((row: any) => ({
+const decisions = computed(() => (safePreview.value?.rows ?? []).map((row: any) => ({
     row_key: row.row_key,
     action: row.default_action,
 })));
-const confirmation = useForm({ preview_token: props.preview?.token ?? '', rows: decisions.value });
+const confirmation = useForm({ preview_token: safePreview.value?.token ?? '', rows: decisions.value });
+watch(() => safePreview.value?.token, (token) => {
+    confirmation.preview_token = token ?? '';
+    confirmation.rows = decisions.value;
+});
 
 function selectFile(event: Event) {
     file.value = (event.target as HTMLInputElement).files?.[0] ?? null;
@@ -37,22 +59,23 @@ function confirm() {
         </div>
         <p v-if="upload.errors.statement_file" class="mt-2 text-xs text-red-300">{{ upload.errors.statement_file }}</p>
 
-        <div v-if="preview" class="mt-4 space-y-3">
+        <div v-if="safePreview" class="mt-4 space-y-3">
             <ol class="grid grid-cols-4 gap-2 text-center text-xs font-semibold"><li v-for="step in ['1. Arquivo','2. Pré-visualização','3. Confirmação','4. Resultado']" :key="step" class="rounded border border-indigo-500/30 px-2 py-1.5 text-indigo-200">{{ step }}</li></ol>
             <div class="grid gap-2 text-xs sm:grid-cols-5">
-                <span class="rounded bg-gray-900 p-2">{{ preview.file_name }} · {{ preview.origin }}</span>
-                <span class="rounded bg-gray-900 p-2">Cartão: {{ preview.credit_card_name }}</span>
-                <span class="rounded bg-gray-900 p-2">Total: {{ formatCurrency(preview.summary.total_cents) }}</span>
-                <span class="rounded bg-blue-950/40 p-2">{{ preview.summary.new }} novas</span>
-                <span class="rounded bg-gray-900 p-2">{{ preview.summary.already_imported }} já importadas · {{ preview.summary.possible_duplicate }} duplicadas</span>
+                <span class="rounded bg-gray-900 p-2">{{ safePreview.file_name }} · {{ safePreview.origin }}</span>
+                <span class="rounded bg-gray-900 p-2">Cartão: {{ safePreview.credit_card_name }}</span>
+                <span class="rounded bg-gray-900 p-2">Total: {{ formatCurrency(safePreview.summary.total_cents) }}</span>
+                <span class="rounded bg-blue-950/40 p-2">{{ safePreview.summary.new }} novas</span>
+                <span class="rounded bg-gray-900 p-2">{{ safePreview.summary.already_imported }} já importadas · {{ safePreview.summary.possible_duplicate }} duplicadas</span>
             </div>
             <div class="max-h-[52vh] overflow-auto rounded border border-gray-700">
                 <table class="w-full min-w-[950px] table-fixed text-sm">
                     <thead class="sticky top-0 bg-gray-900 text-gray-400"><tr><th class="w-28 p-3 text-left">Data</th><th class="w-[42%] p-3 text-left">Descrição</th><th class="w-32 p-3 text-right">Valor</th><th class="w-24 p-3">Parcela</th><th class="w-24 p-3">Fatura</th><th class="w-44 p-3">Situação</th></tr></thead>
-                    <tbody class="divide-y divide-gray-800"><tr v-for="row in preview.rows" :key="row.row_key"><td class="p-3">{{ formatDate(row.date) }}</td><td class="p-3 text-white">{{ row.description }}</td><td class="p-3 text-right">{{ formatCurrency(row.amount_cents) }}</td><td class="p-3 text-center">{{ row.installment_number }}/{{ row.installments_total }}</td><td class="p-3 text-center">{{ row.invoice_reference }}</td><td class="p-3 text-center">{{ row.situation === 'new' ? 'Nova · A classificar' : row.situation === 'already_imported' ? 'Já importada' : row.situation === 'credit' ? 'Crédito/estorno (ignorado)' : 'Possível duplicada' }}</td></tr></tbody>
+                    <tbody class="divide-y divide-gray-800"><tr v-for="row in safePreview.rows" :key="row.row_key"><td class="p-3">{{ formatDate(row.date) }}</td><td class="p-3 text-white">{{ row.description }}</td><td class="p-3 text-right">{{ formatCurrency(row.amount_cents ?? 0) }}</td><td class="p-3 text-center">{{ row.installment_number ?? 1 }}/{{ row.installments_total ?? 1 }}</td><td class="p-3 text-center">{{ row.invoice_reference ?? '—' }}</td><td class="p-3 text-center">{{ row.situation === 'new' ? 'Nova · A classificar' : row.situation === 'already_imported' ? 'Já importada' : row.situation === 'credit' ? 'Crédito/estorno (ignorado)' : 'Possível duplicada' }}</td></tr></tbody>
                 </table>
             </div>
-            <div class="flex justify-end"><button :disabled="confirmation.processing || !preview.summary.new" class="rounded bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="confirm">Confirmar importação</button></div>
+            <p v-if="safePreview.rows.length === 0" class="rounded bg-amber-950/30 p-3 text-sm text-amber-200">Nenhuma compra reconhecida neste arquivo. Confira se o layout pertence a uma fatura suportada.</p>
+            <div class="flex justify-end"><button :disabled="confirmation.processing || !safePreview.summary.new" class="rounded bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="confirm">Confirmar importação</button></div>
             <p v-if="confirmation.errors.statement_import" class="text-xs text-red-300">{{ confirmation.errors.statement_import }}</p>
         </div>
     </section>

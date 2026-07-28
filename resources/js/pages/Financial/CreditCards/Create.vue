@@ -5,7 +5,7 @@ import { useCreditCardCreate } from '@/composables/financial/useCreditCardCreate
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
-import { ref } from 'vue';
+import { watch } from 'vue';
 
 const props = defineProps<{
     wallet: Record<string, any>;
@@ -16,59 +16,13 @@ const props = defineProps<{
 }>();
 
 const creditCard = useCreditCardCreate(props.issuerContext?.bank_id ?? null, props.issuerContext?.bank_account_id ?? null);
-const setupMessage = ref('');
-const setupLoading = ref(false);
-
-async function fillFromStatement(event: Event) {
-    const file = (event.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-
-    setupLoading.value = true;
-    setupMessage.value = '';
-
-    const body = new FormData();
-    body.append('statement_file', file);
-    if (creditCard.form.bank_id) body.append('bank_id', String(creditCard.form.bank_id));
-
-    const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
-
-    try {
-        const response = await fetch(route('credit-cards.setup-file.preview'), {
-            method: 'POST',
-            body,
-            credentials: 'same-origin',
-            headers: {
-                Accept: 'application/json',
-                'X-CSRF-TOKEN': token,
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-        });
-
-        if (response.status === 419) {
-            setupMessage.value = 'Sua sessão expirou. Recarregue a página e tente novamente.';
-            return;
-        }
-
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            setupMessage.value = data.message ?? 'Não foi possível identificar dados seguros neste arquivo.';
-            return;
-        }
-
-        const institutionMismatch = data.institution_mismatch === true;
-        if (data.last_four) creditCard.form.last_four = data.last_four;
-        if (data.holder_name) creditCard.form.holder_name = data.holder_name;
-        if (data.due_day) creditCard.form.due_day = data.due_day;
-        setupMessage.value = institutionMismatch
-            ? 'Este arquivo parece pertencer a outra instituição. A instituição herdada não foi alterada.'
-            : (data.warning ?? 'Dados seguros identificados. Revise os campos antes de salvar.');
-    } catch {
-        setupMessage.value = 'Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.';
-    } finally {
-        setupLoading.value = false;
-        (event.target as HTMLInputElement).value = '';
-    }
-}
+watch(() => creditCard.form.card_type, (type) => {
+    if (type === 'main') return;
+    const eligible = props.parentCards.filter((card) =>
+        !creditCard.form.bank_id || Number(card.issuer_bank_id) === Number(creditCard.form.bank_id),
+    );
+    if (eligible.length === 1) creditCard.form.parent_card_id = String(eligible[0].id);
+});
 
 function submit() {
     if (!creditCard.canSubmit.value) return;
@@ -93,18 +47,10 @@ function submit() {
                     <div>
                         <h2 class="text-lg font-bold text-white">Dados do cartão</h2>
                         <p class="mt-1 text-sm text-gray-400">
-                            O cartão principal representa a fatura. Cartões virtuais e adicionais ficam dentro dele e compartilham limite, fechamento e vencimento.
+                            O cadastro é manual. A fatura principal representa a fatura consolidada e o passivo contábil do banco; arquivos são importados depois, no detalhe da fatura.
                         </p>
                     </div>
                 </template>
-
-                <div class="border-b border-gray-700 p-6">
-                    <label class="mb-1 block text-sm font-semibold text-gray-300">Preencher com arquivo da fatura</label>
-                    <input type="file" accept=".ofx,.csv,.pdf" class="text-sm text-gray-300" @change="fillFromStatement">
-                    <p class="mt-1 text-xs text-gray-500">Somente metadados seguros serão preenchidos. Este passo não cria cartão, fatura ou compras.</p>
-                    <p v-if="setupLoading" class="mt-1 text-xs text-indigo-300">Analisando arquivo...</p>
-                    <p v-else-if="setupMessage" class="mt-1 text-xs text-amber-300">{{ setupMessage }}</p>
-                </div>
 
                 <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
                     <div>
@@ -128,10 +74,12 @@ function submit() {
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Tipo</label>
                         <select v-model="creditCard.form.card_type" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
-                            <option value="main">Principal / fatura</option>
-                            <option value="additional">Adicional</option>
-                            <option value="virtual">Virtual</option>
+                            <option value="main">Fatura principal do banco</option>
+                            <option value="physical">Cartão físico</option>
+                            <option value="virtual">Cartão virtual</option>
+                            <option value="additional">Cartão adicional</option>
                         </select>
+                        <p class="mt-1 text-xs text-gray-500">{{ creditCard.form.card_type === 'main' ? 'Representa a fatura consolidada e o passivo contábil do cartão.' : 'As compras deste cartão entram na fatura principal do banco.' }}</p>
                         <p class="mt-1 text-sm text-red-400">{{ creditCard.form.errors.card_type }}</p>
                     </div>
 
@@ -154,7 +102,7 @@ function submit() {
                             <option value="">Selecione a fatura principal</option>
                             <option v-for="card in parentCards" :key="card.id" :value="card.id">{{ card.label }}</option>
                         </select>
-                        <p class="mt-1 text-xs text-gray-500">Este cartão herdará limite, vencimento, fechamento, melhor data e conta bancária do cartão principal.</p>
+                        <p class="mt-1 text-xs text-gray-500">Este cartão compartilhará limite, datas e passivo com a fatura principal. Se ela ainda não existir, cadastre-a primeiro.</p>
                         <p class="mt-1 text-sm text-red-400">{{ creditCard.form.errors.parent_card_id }}</p>
                     </div>
 
@@ -186,7 +134,7 @@ function submit() {
                         <div>
                             <label class="mb-1 block text-sm font-semibold text-gray-300">Melhor data de compra</label>
                             <input v-model="creditCard.form.best_purchase_day" type="number" min="1" max="31" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
-                            <p class="mt-1 text-xs text-gray-500">Sugerida automaticamente como o dia após o fechamento.</p>
+                            <p class="mt-1 text-xs text-gray-500">Calculada somente depois que você informar o fechamento; pode ser ajustada.</p>
                             <p class="mt-1 text-sm text-red-400">{{ creditCard.form.errors.best_purchase_day }}</p>
                         </div>
 
