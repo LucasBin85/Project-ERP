@@ -1,113 +1,34 @@
 <script setup lang="ts">
+import CustomerQuickCreateDialog from '@/components/financial/counterparties/CustomerQuickCreateDialog.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import { useAccountReceivableCreate } from '@/composables/financial/useAccountReceivableCreate';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatCurrency } from '@/lib/formatters';
 import { Link } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
-import { computed } from 'vue';
-import { ref } from 'vue';
-import CustomerQuickCreateDialog from '@/components/financial/counterparties/CustomerQuickCreateDialog.vue';
-
-const props = defineProps<{
-    wallet: Record<string, any>;
-    customers: Array<Record<string, any>>;
-    receivableControlAccounts: Array<Record<string, any>>;
-    revenueAccounts: Array<Record<string, any>>;
-    customerNames: string[];
-}>();
-
-const accountReceivable = useAccountReceivableCreate();
-const customers = ref([...props.customers]);
-const customerNames = ref([...props.customerNames]);
-const showCustomerDialog = ref(false);
-const selectedCustomer = computed(() => customers.value.find((customer) => customer.id === Number(accountReceivable.form.customer_id)));
-const preview = computed(() => {
-    const count = Number(accountReceivable.form.installment_count);
-    const base = Math.floor(accountReceivable.form.amount_cents / count);
-    const remainder = accountReceivable.form.amount_cents % count;
-    return Array.from({ length: count }, (_, index) => {
-        const date = new Date(`${accountReceivable.form.due_date}T12:00:00`); date.setMonth(date.getMonth() + index * Number(accountReceivable.form.interval_months));
-        return { number: index + 1, date: date.toLocaleDateString('pt-BR'), amount: ((base + (index < remainder ? 1 : 0)) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) };
-    });
-});
-
-function customerCreated(customer: Record<string, any>) {
-    customers.value.push(customer);
-    customerNames.value.push(customer.name);
-    customers.value.sort((a, b) => a.name.localeCompare(b.name));
-    accountReceivable.form.customer_id = String(customer.id);
-}
-
-function submit() {
-    if (!accountReceivable.canSubmit.value) return;
-    accountReceivable.form.post(route('accounts-receivable.store'));
-}
+import { computed, ref } from 'vue';
+const props = defineProps<{ wallet: Record<string, any>; customers: Array<Record<string, any>>; receivableControlAccounts: Array<Record<string, any>>; revenueAccounts: Array<Record<string, any>>; customerNames: string[] }>();
+const ar = useAccountReceivableCreate(); const customers = ref([...props.customers]); const customerNames = ref([...props.customerNames]); const showDialog = ref(false);
+const selected = computed(() => customers.value.find((item) => item.id === Number(ar.form.customer_id)));
+function created(customer: Record<string, any>) { customers.value.push(customer); customerNames.value.push(customer.name); customers.value.sort((a,b) => a.name.localeCompare(b.name)); ar.form.customer_id = String(customer.id); }
+function submit() { if (ar.canSubmit.value) ar.form.post(route('accounts-receivable.store')); }
 </script>
-
 <template>
-    <AppLayout title="Novo título a receber">
-        <ReportPage title="Novo título a receber" :subtitle="props.wallet?.name">
-            <ReportSection>
-                <template #header>
-                    <div>
-                        <h2 class="text-lg font-bold text-white">Dados do título</h2>
-                        <p class="mt-1 text-sm text-gray-400">O cadastro cria uma provisão contábil em rascunho para posterior postagem.</p>
-                    </div>
-
-                </template>
-
-                <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
-                    <div class="md:col-span-2"><label class="mb-1 block text-sm font-semibold text-gray-300">Forma</label><select v-model="accountReceivable.form.mode" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="single">Único</option><option value="installment">Parcelado</option></select></div>
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Cliente</label>
-                        <div class="flex gap-2"><select v-model="accountReceivable.form.customer_id" class="min-w-0 flex-1 rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o cliente</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select><button type="button" class="rounded-lg border border-indigo-500 px-3 py-2 text-sm text-indigo-300" @click="showCustomerDialog = true">Cadastrar cliente</button></div>
-                        <div v-if="selectedCustomer" class="mt-2 space-y-1 rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-gray-300">
-                            <p>Conta de controle: {{ selectedCustomer.receivable_account.code }} - {{ selectedCustomer.receivable_account.name }}</p>
-                            <p>Receita padrÃ£o: {{ selectedCustomer.default_revenue_account.code }} - {{ selectedCustomer.default_revenue_account.name }}</p>
-                        </div>
-                        <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.customer_id }}</p>
-                    </div>
-                    <template v-if="accountReceivable.form.mode === 'installment'">
-                        <div><label class="mb-1 block text-sm font-semibold text-gray-300">Quantidade de parcelas</label><input v-model.number="accountReceivable.form.installment_count" type="number" min="2" max="360" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
-                        <div><label class="mb-1 block text-sm font-semibold text-gray-300">Intervalo mensal</label><input v-model.number="accountReceivable.form.interval_months" type="number" min="1" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
-                        <div><label class="mb-1 block text-sm font-semibold text-gray-300">Competência</label><input v-model="accountReceivable.form.competence_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" /></div>
-                        <div class="md:col-span-2 rounded-lg border border-gray-700 p-4"><h3 class="mb-2 font-semibold text-white">Prévia das parcelas</h3><div v-for="item in preview" :key="item.number" class="flex justify-between border-t border-gray-800 py-2 text-sm text-gray-300"><span>Parcela {{ item.number }}/{{ accountReceivable.form.installment_count }} · {{ item.date }}</span><span>{{ item.amount }}</span></div></div>
-                    </template>
-
-                    <div class="md:col-span-2">
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Descrição</label>
-                        <input v-model="accountReceivable.form.description" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="Ex: Prestação de serviços julho" />
-                        <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.description }}</p>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Vencimento</label>
-                        <input v-model="accountReceivable.form.due_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" />
-                        <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.due_date }}</p>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Valor</label>
-                        <input :value="accountReceivable.form.amount" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="R$ 0,00" inputmode="numeric" @input="accountReceivable.updateAmount" />
-                        <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.amount_cents }}</p>
-                    </div>
-
-                    <div class="md:col-span-2">
-                        <label class="mb-1 block text-sm font-semibold text-gray-300">Observações</label>
-                        <textarea v-model="accountReceivable.form.notes" rows="3" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="Opcional" />
-                        <p class="mt-1 text-sm text-red-400">{{ accountReceivable.form.errors.notes }}</p>
-                    </div>
-
-                    <div class="md:col-span-2 flex justify-end gap-3">
-                        <Link :href="route('accounts-receivable.index')" class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800">Cancelar</Link>
-                        <button type="submit" :disabled="!accountReceivable.canSubmit.value || accountReceivable.form.processing" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
-                            Salvar título a receber
-                        </button>
-                    </div>
-                </form>
-            </ReportSection>
-        </ReportPage>
-        <CustomerQuickCreateDialog :show="showCustomerDialog" :control-accounts="receivableControlAccounts" :revenue-accounts="revenueAccounts" :existing-names="customerNames" @close="showCustomerDialog = false" @created="customerCreated" />
-    </AppLayout>
+<AppLayout title="Nova conta a receber"><ReportPage title="Nova conta a receber" :subtitle="wallet.name"><ReportSection>
+<template #header><div><h2 class="text-lg font-bold text-white">Dados do título</h2><p class="mt-1 text-sm text-gray-400">A provisão contábil será criada em rascunho pelo valor total.</p></div></template>
+<form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
+<div class="md:col-span-2"><label class="mb-1 block text-sm font-semibold text-gray-300">Descrição</label><input v-model="ar.form.description" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
+<div class="md:col-span-2"><label class="mb-1 block text-sm font-semibold text-gray-300">Cliente</label><div class="flex gap-2"><select v-model="ar.form.customer_id" class="min-w-0 flex-1 rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o cliente</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select><button type="button" class="rounded-lg border border-indigo-500 px-3 py-2 text-sm text-indigo-300" @click="showDialog = true">Cadastrar cliente</button></div><div v-if="selected" class="mt-2 rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-gray-300">Conta de controle: {{ selected.receivable_account.code }} - {{ selected.receivable_account.name }} · Receita: {{ selected.default_revenue_account.code }} - {{ selected.default_revenue_account.name }}</div></div>
+<div><label class="mb-1 block text-sm font-semibold text-gray-300">Valor total</label><input :value="ar.form.amount" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="R$ 0,00" @input="ar.updateAmount" /></div>
+<div><label class="mb-1 block text-sm font-semibold text-gray-300">Vencimento inicial</label><input v-model="ar.form.due_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" /></div>
+<div><label class="mb-1 block text-sm font-semibold text-gray-300">Competência</label><input v-model="ar.form.competence_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" /></div>
+<div><label class="mb-1 block text-sm font-semibold text-gray-300">Forma de recebimento</label><select v-model="ar.form.mode" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="single">À vista</option><option value="installment">Parcelado</option></select></div>
+<template v-if="ar.form.mode === 'installment'"><div><label class="mb-1 block text-sm font-semibold text-gray-300">Quantidade de parcelas</label><input v-model.number="ar.form.installment_count" type="number" min="2" max="360" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div><div><label class="mb-1 block text-sm font-semibold text-gray-300">Intervalo mensal</label><input v-model.number="ar.form.interval_months" type="number" min="1" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
+<div class="md:col-span-2 rounded-lg border border-gray-700"><div class="flex items-center justify-between border-b border-gray-700 p-4"><div><h3 class="font-semibold text-white">Parcelas do título</h3><p class="text-sm text-gray-400">Revise e ajuste os valores antes de salvar.</p></div><div class="flex gap-2"><button type="button" class="rounded border border-gray-600 px-3 py-1.5 text-sm text-gray-200" @click="ar.recalculateInstallments">Recalcular parcelas</button><button v-if="ar.difference.value !== 0" type="button" class="rounded border border-indigo-500 px-3 py-1.5 text-sm text-indigo-300" @click="ar.adjustLastInstallment">Ajustar diferença na última</button></div></div>
+<div class="overflow-x-auto"><table class="w-full"><thead><tr class="text-left text-xs uppercase text-gray-400"><th class="p-3">Parcela</th><th class="p-3">Vencimento</th><th class="p-3">Valor</th><th class="p-3">Validação</th></tr></thead><tbody><tr v-for="(item,index) in ar.form.installments" :key="index" class="border-t border-gray-800"><td class="p-3 text-white">{{ index+1 }}/{{ ar.form.installment_count }}</td><td class="p-3"><input v-model="item.due_date" type="date" class="rounded border border-gray-700 bg-black px-2 py-1 text-white [color-scheme:dark]" /></td><td class="p-3"><input :value="item.amount" class="rounded border border-gray-700 bg-black px-2 py-1 text-white" @input="ar.updateInstallmentAmount(index,$event)" /></td><td class="p-3 text-sm" :class="item.amount_cents > 0 ? 'text-green-400':'text-red-400'">{{ item.amount_cents > 0 ? 'Válida':'Valor inválido' }}</td></tr></tbody></table></div>
+<div class="grid gap-2 border-t border-gray-700 p-4 text-sm md:grid-cols-3"><p class="text-gray-300">Total do título: <strong>{{ formatCurrency(ar.form.amount_cents) }}</strong></p><p class="text-gray-300">Total das parcelas: <strong>{{ formatCurrency(ar.installmentTotal.value) }}</strong></p><p :class="ar.difference.value===0?'text-green-400':'text-red-400'">Diferença: <strong>{{ formatCurrency(ar.difference.value) }}</strong></p><p class="md:col-span-3" :class="ar.difference.value===0?'text-green-400':'text-red-400'">{{ ar.difference.value===0?'Parcelas fecham com o valor total.':'A soma das parcelas precisa ser igual ao valor total.' }}</p></div><p class="px-4 pb-4 text-sm text-red-400">{{ ar.form.errors.installments }}</p></div></template>
+<div class="md:col-span-2"><label class="mb-1 block text-sm font-semibold text-gray-300">Observações</label><textarea v-model="ar.form.notes" rows="3" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
+<div class="md:col-span-2 flex justify-end gap-3"><Link :href="route('accounts-receivable.index')" class="rounded-lg border border-gray-600 px-4 py-2 text-gray-300">Cancelar</Link><button type="submit" :disabled="!ar.canSubmit.value || ar.form.processing" class="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Salvar conta a receber</button></div>
+</form></ReportSection></ReportPage><CustomerQuickCreateDialog :show="showDialog" :control-accounts="receivableControlAccounts" :revenue-accounts="revenueAccounts" :existing-names="customerNames" @close="showDialog=false" @created="created" /></AppLayout>
 </template>

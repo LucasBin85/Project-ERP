@@ -107,8 +107,23 @@ class AccountPayableController extends Controller
             'installment_count' => ['required_if:mode,installment', 'integer', 'min:2', 'max:360'],
             'interval_months' => ['required_if:mode,installment', 'integer', 'min:1', 'max:120'],
             'competence_date' => ['required_if:mode,installment', 'nullable', 'date'],
+            'installments' => ['required_if:mode,installment', 'array'],
+            'installments.*.due_date' => ['required', 'date'],
+            'installments.*.amount_cents' => ['required', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
+        if (($data['mode'] ?? 'single') === 'installment') {
+            if (count($data['installments'] ?? []) !== (int) $data['installment_count']) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'installments' => 'A quantidade de parcelas informada é inválida.',
+                ]);
+            }
+            if (collect($data['installments'])->sum('amount_cents') !== (int) $data['amount_cents']) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'installments' => 'A soma das parcelas precisa ser igual ao valor total.',
+                ]);
+            }
+        }
 
         $service->execute($wallet, AccountPayableDTO::fromArray($data));
 

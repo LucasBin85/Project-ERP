@@ -53,6 +53,12 @@ class CreateAccountReceivable
         }
 
         if ($dto->mode === 'installment') {
+            if ($dto->installments !== [] && (count($dto->installments) !== $dto->installmentCount
+                || collect($dto->installments)->sum('amount_cents') !== $dto->amountCents)) {
+                throw ValidationException::withMessages([
+                    'installments' => 'A soma das parcelas precisa ser igual ao valor total.',
+                ]);
+            }
             $this->ensurePeriodIsOpen->handle($wallet, $dto->competenceDate ?? $dto->dueDate);
         }
 
@@ -98,7 +104,14 @@ class CreateAccountReceivable
             'total_amount_cents' => $dto->amountCents, 'installment_count' => $dto->installmentCount,
             'competence_date' => $competenceDate, 'provision_journal_entry_id' => $provision->id,
         ]);
-        $titles = collect($this->installmentSchedule->build($dto->amountCents, $dto->installmentCount, $dto->dueDate, $dto->intervalMonths))
+        $schedule = $dto->installments !== []
+            ? collect($dto->installments)->values()->map(fn (array $item, int $index) => [
+                'number' => $index + 1,
+                'due_date' => (string) $item['due_date'],
+                'amount_cents' => (int) $item['amount_cents'],
+            ])->all()
+            : $this->installmentSchedule->build($dto->amountCents, $dto->installmentCount, $dto->dueDate, $dto->intervalMonths);
+        $titles = collect($schedule)
             ->map(fn (array $item) => AccountReceivable::query()->create([
                 'wallet_id' => $wallet->id, 'series_id' => $series->id,
                 'installment_number' => $item['number'], 'installment_count' => $dto->installmentCount,

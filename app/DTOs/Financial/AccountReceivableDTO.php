@@ -17,6 +17,7 @@ final readonly class AccountReceivableDTO
         public int $installmentCount = 1,
         public int $intervalMonths = 1,
         public ?string $competenceDate = null,
+        public array $installments = [],
     ) {}
 
     public static function fromArray(array $data): self
@@ -34,6 +35,7 @@ final readonly class AccountReceivableDTO
             installmentCount: (int) ($data['installment_count'] ?? 1),
             intervalMonths: (int) ($data['interval_months'] ?? 1),
             competenceDate: $data['competence_date'] ?? null,
+            installments: array_values($data['installments'] ?? []),
         );
     }
 }
