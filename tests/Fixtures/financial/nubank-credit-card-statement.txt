@@ -1,7 +1,38 @@
 Olá, Cliente.
-Esta é a sua fatura Nubank.
+Esta é a sua fatura Nubank de julho, no valor de
+R$ 1.448,89
 Data de vencimento: 08 JUL 2026
-05 JUN Mercado Sanitizado 1/3
-R$ 100,01
-12 JUN Serviço Sanitizado
-R$ 49,99
+Período vigente: 01 JUN a 01 JUL
+Limite total do cartão de crédito: R$ 6.650,00
+CLIENTE SANITIZADO
+FATURA 08 JUL 2026 EMISSÃO E ENVIO 01 JUL 2026
+RESUMO DA FATURA ATUAL
+Fatura anterior R$ 1.403,17
+Pagamento recebido −R$ 1.403,17
+Total de compras de todos os cartões, 01 JUN a 01 JUL R$ 1.448,89
+Total a pagar R$ 1.448,89
+TRANSAÇÕES DE 01 JUN A 01 JUL
+CLIENTE SANITIZADO R$ 1.448,89
+01 JUN •••• 1234Compra Sanitizada 01 R$ 100,00
+01 JUN •••• 1234Compra Sanitizada 02 - Parcela 2/5 R$ 50,00
+01 JUN •••• 1234Compra Sanitizada 03 R$ 75,00
+01 JUN •••• 1234Compra Sanitizada 04 R$ 30,00
+03 JUN •••• 1234Compra Sanitizada 05 R$ 40,00
+04 JUN •••• 5678Compra Sanitizada 06 R$ 80,00
+05 JUN •••• 1234Compra Sanitizada 07 R$ 60,00
+06 JUN •••• 9012Compra Internacional Sanitizada
+USD 20.00
+Conversão: USD 1 = R$ 5,55
+R$ 111,05
+06 JUN IOF de "Compra Internacional Sanitizada" R$ 3,84
+07 JUN •••• 3456Compra Sanitizada 10 R$ 90,00
+07 JUN •••• 1234Compra Sanitizada 11 R$ 45,00
+13 JUN •••• 1234Compra Sanitizada 12 R$ 70,00
+15 JUN •••• 1234Compra Sanitizada 13 R$ 55,00
+19 JUN Compra Sanitizada 14 - NuPay R$ 65,00
+20 JUN •••• 1234Compra Sanitizada 15 R$ 100,00
+22 JUN •••• 1234Compra Sanitizada 16 R$ 200,00
+28 JUN •••• 1234Compra Sanitizada 17 R$ 274,00
+Pagamentos -R$ 1.403,17
+08 JUN Pagamento em 08 JUN −R$ 1.403,17
+Em cumprimento à regulação do Banco Central, os lançamentos desta fatura foram encerrados.

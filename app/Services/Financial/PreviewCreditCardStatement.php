@@ -84,6 +84,8 @@ class PreviewCreditCardStatement
             'last_four' => $parsed['last_four'] ?? null,
             'holder_name' => $parsed['holder_name'] ?? null,
             'due_date' => $parsed['due_date'] ?? null,
+            'ignored_items' => $parsed['ignored_items'] ?? [],
+            'warning' => $parsed['warning'] ?? null,
             'rows' => $rows,
             'summary' => [
                 'total_cents' => (int) collect($rows)->where('situation', '!=', 'credit')->sum('amount_cents'),

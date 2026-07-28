@@ -45,9 +45,21 @@ class ParseCreditCardStatementFile
         }
 
         $extraction = $this->pdf->extractForMetadata($contents);
-        $transactions = $this->nubankPdf->parse($extraction['text']);
+        $diagnostics = $this->nubankPdf->parseWithDiagnostics($extraction['text']);
+        $transactions = $diagnostics['transactions'];
+        $ignoredItems = [
+            ...$diagnostics['ignored'],
+            ...collect($transactions)
+                ->where('direction', 'in')
+                ->map(fn (ParsedOfxTransactionDTO $transaction) => [
+                    'reason' => 'Pagamento, crédito ou estorno.',
+                    'sample' => mb_substr($transaction->description, 0, 120),
+                ])
+                ->values()
+                ->all(),
+        ];
         if ($transactions === []) {
-            throw new RuntimeException('O arquivo foi lido, mas o layout da fatura ainda não foi reconhecido.');
+            throw new RuntimeException('O PDF foi lido, mas nenhuma compra da fatura foi reconhecida.');
         }
 
         return [
@@ -61,6 +73,10 @@ class ParseCreditCardStatementFile
             'holder_name' => null,
             'due_date' => $this->dueDate($extraction['text']),
             'read_source' => $extraction['source'],
+            'ignored_items' => $ignoredItems,
+            'warning' => $ignoredItems !== []
+                ? 'O PDF foi lido, mas alguns itens foram ignorados por parecerem resumo, pagamento ou crédito.'
+                : null,
         ];
     }
 

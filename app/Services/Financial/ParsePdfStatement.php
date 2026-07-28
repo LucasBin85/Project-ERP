@@ -15,7 +15,9 @@ class ParsePdfStatement
 
     public function parse(string $contents): array
     {
-        if (! str_starts_with($contents, '%PDF-')) throw new RuntimeException('O arquivo selecionado não possui uma estrutura PDF válida.');
+        if (! str_starts_with($contents, '%PDF-')) {
+            throw new RuntimeException('O arquivo selecionado não possui uma estrutura PDF válida.');
+        }
 
         $extraction = $this->extract($contents);
         $text = $extraction['text'];
@@ -32,13 +34,15 @@ class ParsePdfStatement
         }
 
         if ($transactions === []) {
-            if (app()->environment('local', 'testing')) Log::debug('PDF sem transações reconhecidas', $this->safeDiagnostics($text));
+            if (app()->environment('local', 'testing')) {
+                Log::debug('PDF sem transações reconhecidas', $this->safeDiagnostics($text));
+            }
             throw new RuntimeException($ocrReadText
                 ? 'O OCR leu o PDF, mas o layout ainda não foi reconhecido.'
                 : 'O PDF foi lido, mas o layout ainda não foi reconhecido.');
         }
 
-        return ['started_at' => null, 'ended_at' => null, 'account' => array_fill_keys(['container','bank_id','branch_id','account_id','account_key','account_type','broker_id','routing_number','bank_name','organization','financial_institution_id','currency'], null), 'transactions' => $transactions, 'errors' => [], 'read_source' => $extraction['source']];
+        return ['started_at' => null, 'ended_at' => null, 'account' => array_fill_keys(['container', 'bank_id', 'branch_id', 'account_id', 'account_key', 'account_type', 'broker_id', 'routing_number', 'bank_name', 'organization', 'financial_institution_id', 'currency'], null), 'transactions' => $transactions, 'errors' => [], 'read_source' => $extraction['source']];
     }
 
     public function extractText(string $contents): string
@@ -72,7 +76,9 @@ class ParsePdfStatement
         $result = ['text' => '', 'source' => null, 'smalot_text' => '', 'fallback_text' => '', 'smalot_error' => null];
         try {
             $text = (new Parser)->parseContent($contents)->getText();
-            if ($this->isUsefulText($text)) $result['smalot_text'] = $this->mercadoPago->normalize($text);
+            if ($this->isUsefulText($text)) {
+                $result['smalot_text'] = $this->mercadoPago->normalize($text);
+            }
         } catch (\Throwable $exception) {
             $result['smalot_error'] = $exception->getMessage();
         }
@@ -85,6 +91,7 @@ class ParsePdfStatement
             $result['text'] = $result['fallback_text'];
             $result['source'] = 'fallback';
         }
+
         return $result;
     }
 
@@ -108,6 +115,7 @@ class ParsePdfStatement
                 $ocr['exception'] = $exception->getMessage();
             }
         }
+
         return $extraction + [
             'bytes' => strlen($contents),
             'objects' => preg_match_all('/\d+\s+\d+\s+obj\b/', $contents),
@@ -127,6 +135,9 @@ class ParsePdfStatement
         $sample = implode(' | ', $lines);
         $sample = preg_replace('/\b\d{3}[.\-]?\d{3}[.\-]?\d{3}[-.]?\d{2}\b|\b\d{2}[.\-]?\d{3}[.\-]?\d{3}[\/]?\d{4}[-.]?\d{2}\b/u', '[documento]', $sample);
         $sample = preg_replace('/\b(?:ag(?:ência)?|conta)\s*:?[\s\-]*[\d.\-]+/ui', '$1 [mascarado]', $sample);
+        $sample = preg_replace('/\bOlá,\s*[^.|]+/ui', 'Olá, [nome]', $sample);
+        $sample = preg_replace('/\b[\p{Lu}]{2,}(?:\s+[\p{Lu}]{2,}){1,}\b/u', '[nome]', $sample);
+
         return mb_substr($sample, 0, 1200);
     }
 
@@ -134,13 +145,18 @@ class ParsePdfStatement
     {
         $pieces = [];
         preg_match_all('/\(((?:\\.|[^\\()])*)\)\s*Tj/s', $contents, $literal);
-        foreach ($literal[1] ?? [] as $value) $pieces[] = stripcslashes($value);
+        foreach ($literal[1] ?? [] as $value) {
+            $pieces[] = stripcslashes($value);
+        }
         preg_match_all('/<([0-9A-Fa-f]{4,})>\s*Tj/', $contents, $hex);
         foreach ($hex[1] ?? [] as $value) {
             $decoded = @hex2bin($value);
-            if (is_string($decoded)) $pieces[] = str_starts_with($decoded, "\xFE\xFF") ? mb_convert_encoding(substr($decoded, 2), 'UTF-8', 'UTF-16BE') : $decoded;
+            if (is_string($decoded)) {
+                $pieces[] = str_starts_with($decoded, "\xFE\xFF") ? mb_convert_encoding(substr($decoded, 2), 'UTF-8', 'UTF-16BE') : $decoded;
+            }
         }
         $text = implode("\n", $pieces);
+
         return $this->isUsefulText($text) ? $this->mercadoPago->normalize($text) : '';
     }
 
@@ -151,8 +167,11 @@ class ParsePdfStatement
 
     private function isUsefulText(?string $text): bool
     {
-        if (! is_string($text) || trim($text) === '' || ! mb_check_encoding($text, 'UTF-8')) return false;
+        if (! is_string($text) || trim($text) === '' || ! mb_check_encoding($text, 'UTF-8')) {
+            return false;
+        }
         $printable = preg_replace('/[\p{L}\p{N}\p{P}\p{S}\s]/u', '', $text);
+
         return mb_strlen($printable) <= max(5, (int) (mb_strlen($text) * 0.05));
     }
 }

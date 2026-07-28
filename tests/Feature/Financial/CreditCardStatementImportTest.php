@@ -96,8 +96,31 @@ it('links an imported purchase to a child card by its last four digits', functio
 it('parses a sanitized Nubank PDF text layout', function () {
     $text = file_get_contents(base_path('tests/Fixtures/financial/nubank-credit-card-statement.txt'));
     $transactions = app(ParseNubankCreditCardPdf::class)->parse($text);
+    $purchases = collect($transactions)->where('direction', 'out');
+    $credits = collect($transactions)->where('direction', 'in');
 
-    expect($transactions)->toHaveCount(2)
-        ->and($transactions[0]->amountCents)->toBe(10001)
-        ->and($transactions[0]->postedAt)->toBe('2026-06-05');
+    expect($transactions)->toHaveCount(18)
+        ->and($purchases)->toHaveCount(17)
+        ->and($purchases->sum('amountCents'))->toBe(144889)
+        ->and($credits)->toHaveCount(1)
+        ->and($credits->first()->description)->toContain('Pagamento em')
+        ->and($transactions[0]->postedAt)->toBe('2026-06-01')
+        ->and(collect($transactions)->pluck('description')->implode('|'))
+        ->not->toContain('a 01 JUL')
+        ->not->toContain('CLIENTE SANITIZADO')
+        ->not->toContain('Total a pagar');
+});
+
+it('renders an accessible statement file selector with defensive preview states', function () {
+    $component = file_get_contents(resource_path('js/components/financial/creditCards/CreditCardStatementImport.vue'));
+
+    expect($component)
+        ->toContain('Selecionar arquivo')
+        ->toContain('Nenhum arquivo selecionado')
+        ->toContain(':disabled="!file || upload.processing"')
+        ->toContain('showPreview.value = false')
+        ->toContain('upload.clearErrors()')
+        ->toContain('total_cents: Number(props.preview.summary?.total_cents ?? 0)')
+        ->toContain('ignored_items: Array.isArray(props.preview.ignored_items)')
+        ->toContain('O PDF foi lido, mas nenhuma compra da fatura foi reconhecida.');
 });
