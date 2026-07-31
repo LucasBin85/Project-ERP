@@ -10,6 +10,8 @@ use App\Models\Bank;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCard;
+use App\Models\CreditCardInstallmentPlan;
+use App\Models\CreditCardInstallmentPlanItem;
 use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPayment;
 use App\Models\CreditCardTransaction;
@@ -227,6 +229,19 @@ class CreditCardController extends Controller
             ->get();
 
         $currentBalance = $this->currentBalanceCents($wallet->id, $creditCard->liability_account_id);
+        $installmentPlans = CreditCardInstallmentPlan::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('main_credit_card_id', $creditCard->id)
+            ->with([
+                'classificationAccount:id,code,name',
+                'recognitionJournalEntry:id,status',
+                'items' => fn ($query) => $query->orderBy('installment_number'),
+                'items.invoice:id,reference_year,reference_month',
+            ])->orderByDesc('id')->get();
+        $futureInstallments = (int) CreditCardInstallmentPlanItem::query()
+            ->whereHas('plan', fn ($query) => $query->where('wallet_id', $wallet->id)
+                ->where('main_credit_card_id', $creditCard->id)->whereIn('status', ['active', 'ambiguous']))
+            ->whereIn('status', ['expected', 'adjusted'])->sum('amount_cents');
 
         return Inertia::render('Financial/CreditCards/Show', [
             'wallet' => [
@@ -239,8 +254,11 @@ class CreditCardController extends Controller
             'summaryByCard' => $this->summaryByCard($wallet->id, $familyCardIds),
             'summary' => [
                 'current_balance_cents' => $currentBalance,
+                'future_installments_cents' => $futureInstallments,
+                'used_limit_cents' => $currentBalance,
                 'available_limit_cents' => $creditCard->credit_limit_cents - $currentBalance,
             ],
+            'installmentPlans' => $installmentPlans,
             'purchaseClassificationSummary' => [
                 'total_count' => $transactions->count(),
                 'total_cents' => (int) $transactions->sum('amount_cents'),
@@ -293,7 +311,19 @@ class CreditCardController extends Controller
             'preview_token' => ['required', 'string', 'size:64'],
             'rows' => ['required', 'array'],
             'rows.*.row_key' => ['required', 'string', 'size:64'],
-            'rows.*.action' => ['required', Rule::in(['create', 'ignore'])],
+            'rows.*.action' => ['required', Rule::in(['create', 'ignore', 'confirm_plan', 'pending_plan', 'link_plan', 'normal'])],
+            'rows.*.plan_id' => ['nullable', 'integer'],
+            'rows.*.description_base' => ['nullable', 'string', 'max:255'],
+            'rows.*.recognized_from_installment' => ['nullable', 'integer', 'min:1', 'max:60'],
+            'rows.*.recognized_to_installment' => ['nullable', 'integer', 'min:1', 'max:60'],
+            'rows.*.recognized_total_cents' => ['nullable', 'integer', 'min:1'],
+            'rows.*.original_total_cents' => ['nullable', 'integer', 'min:1'],
+            'rows.*.classification_account_id' => ['nullable', 'integer'],
+            'rows.*.recognition_date' => ['nullable', 'date'],
+            'rows.*.notes' => ['nullable', 'string', 'max:2000'],
+            'rows.*.installments' => ['nullable', 'array'],
+            'rows.*.installments.*.installment_number' => ['required', 'integer', 'min:1', 'max:60'],
+            'rows.*.installments.*.amount_cents' => ['required', 'integer', 'min:1'],
             'target_year' => ['required', 'integer', 'min:2000', 'max:2100'],
             'target_month' => ['required', 'integer', 'min:1', 'max:12'],
         ]);

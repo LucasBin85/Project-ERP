@@ -80,4 +80,9 @@ class CreditCard extends Model
     {
         return $this->hasMany(CreditCardInvoice::class);
     }
+
+    public function installmentPlans(): HasMany
+    {
+        return $this->hasMany(CreditCardInstallmentPlan::class, 'main_credit_card_id');
+    }
 }

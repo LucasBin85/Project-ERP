@@ -3,6 +3,8 @@
 namespace App\Services\Financial;
 
 use App\Models\ChartOfAccount;
+use App\Models\CreditCardInstallmentPlan;
+use App\Models\CreditCardInstallmentPlanItem;
 use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPayment;
 use App\Models\CreditCardTransaction;
@@ -32,6 +34,12 @@ class BuildManagerialFinancialDashboard
             ->where('expense_account_id', $wallet->suspense_account_id)
             ->whereHas('journalEntry', fn ($query) => $query->where('status', 'draft'))
             ->get(['amount_cents']);
+        $activeInstallmentPlans = CreditCardInstallmentPlan::query()->where('wallet_id', $wallet->id)->where('status', 'active')->count();
+        $pendingInstallmentPlans = CreditCardInstallmentPlan::query()->where('wallet_id', $wallet->id)->whereIn('status', ['pending_confirmation', 'ambiguous'])->count();
+        $startedBeforeErpPlans = CreditCardInstallmentPlan::query()->where('wallet_id', $wallet->id)->where('started_before_erp', true)->whereIn('status', ['active', 'completed'])->count();
+        $futureInstallments = (int) CreditCardInstallmentPlanItem::query()
+            ->whereHas('plan', fn ($query) => $query->where('wallet_id', $wallet->id)->where('status', 'active'))
+            ->whereIn('status', ['expected', 'adjusted'])->sum('amount_cents');
 
         return [
             'period' => $closing['period'],
@@ -50,6 +58,10 @@ class BuildManagerialFinancialDashboard
                 'credit_card_payments_cents' => $cardPayments,
                 'credit_card_unclassified_count' => $unclassifiedCardPurchases->count(),
                 'credit_card_unclassified_cents' => (int) $unclassifiedCardPurchases->sum('amount_cents'),
+                'credit_card_installment_plans_active_count' => $activeInstallmentPlans,
+                'credit_card_installment_plans_pending_count' => $pendingInstallmentPlans,
+                'credit_card_installment_plans_started_before_erp_count' => $startedBeforeErpPlans,
+                'credit_card_installments_future_cents' => $futureInstallments,
             ],
             'closing' => [
                 'status' => $formalClosed ? 'formally_closed' : $closing['status'],

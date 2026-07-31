@@ -3,6 +3,8 @@
 use App\DTOs\Financial\CreditCardDTO;
 use App\Models\Bank;
 use App\Models\ChartOfAccount;
+use App\Models\CreditCardInstallmentPlan;
+use App\Models\CreditCardInstallmentPlanItem;
 use App\Models\CreditCardTransaction;
 use App\Models\JournalEntry;
 use App\Models\User;
@@ -46,12 +48,119 @@ it('previews OFX and CSV credit card statements with installments', function () 
     $csv = "date,title,amount\n2026-06-05,Compra Sanitizada 1/3,100.01\n";
     $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura_2026-06-08.csv');
     expect($preview['format'])->toBe('CSV')
-        ->and($preview['summary']['new'])->toBe(1)
+        ->and($preview['summary']['installments_pending'])->toBe(1)
+        ->and($preview['rows'][0]['situation'])->toBe('installment_detected')
         ->and($preview['rows'][0]['installment_number'])->toBe(1)
         ->and($preview['rows'][0]['installments_total'])->toBe(3);
 
     $ofx = '<OFX><SIGNONMSGSRSV1><SONRS><FI><ORG>NUBANK</FI></SONRS></SIGNONMSGSRSV1><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CURDEF>BRL<CCACCTFROM><ACCTID>1234</CCACCTFROM><BANKTRANLIST><DTSTART>20260601<DTEND>20260630<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260605<TRNAMT>-10.00<FITID>safe-1<NAME>Compra Segura</STMTTRN></BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>';
     expect(app(PreviewCreditCardStatement::class)->execute($wallet, $card, $ofx, 'fatura.ofx')['summary']['new'])->toBe(1);
+});
+
+it('detects supported installment descriptions and removes the marker from the base description', function (string $description, int $number, int $total) {
+    $detected = app(\App\Services\Financial\DetectCreditCardInstallment::class)->execute($description);
+
+    expect($detected)->not->toBeNull()
+        ->and($detected['installment_number'])->toBe($number)
+        ->and($detected['installments_total'])->toBe($total)
+        ->and($detected['description_base'])->toBe('Havan Guaíba')
+        ->and($detected['normalized_description'])->toBe('havan guaiba');
+})->with([
+    ['Havan Guaíba - Parcela 2/5', 2, 5],
+    ['Havan Guaíba 02/10', 2, 10],
+    ['Havan Guaíba 3 de 12', 3, 12],
+]);
+
+it('requires resolution before importing a detected installment', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $csv = "date,title,amount\n2026-07-05,Havan Guaiba Parcela 2/5,19.99\n";
+    $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura_2026-07-08.csv');
+
+    expect(fn () => app(ConfirmCreditCardStatement::class)->execute(
+        $wallet, $card, $preview, $csv, 'fatura_2026-07-08.csv',
+        [['row_key' => $preview['rows'][0]['row_key'], 'action' => 'create']],
+    ))->toThrow(\Illuminate\Validation\ValidationException::class);
+
+    expect(CreditCardInstallmentPlan::query()->count())->toBe(0)
+        ->and(JournalEntry::query()->count())->toBe(0);
+});
+
+it('keeps an imported plan operationally pending until it has a valid classification', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $csv = "date,title,amount\n2026-07-05,Havan Guaiba Parcela 2/5,19.99\n";
+    $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura_2026-07-08.csv');
+    $row = $preview['rows'][0];
+
+    expect(fn () => app(ConfirmCreditCardStatement::class)->execute(
+        $wallet, $card, $preview, $csv, 'fatura_2026-07-08.csv',
+        [['row_key' => $row['row_key'], 'action' => 'confirm_plan']],
+    ))->toThrow(\Illuminate\Validation\ValidationException::class);
+
+    app(ConfirmCreditCardStatement::class)->execute(
+        $wallet, $card, $preview, $csv, 'fatura_2026-07-08.csv',
+        [['row_key' => $row['row_key'], 'action' => 'pending_plan']],
+    );
+
+    expect(CreditCardInstallmentPlan::query()->value('status'))->toBe('pending_confirmation')
+        ->and(CreditCardInstallmentPlan::query()->value('recognition_journal_entry_id'))->toBeNull()
+        ->and(JournalEntry::query()->count())->toBe(0);
+});
+
+it('recognizes an in-progress installment plan once and keeps previous and future items financial only', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $expense = ChartOfAccount::query()->where('wallet_id', $wallet->id)
+        ->where('type', 'despesa')->where('allows_posting', true)->whereDoesntHave('children')->firstOrFail();
+    $csv = "date,title,amount\n2026-07-05,Havan Guaiba Parcela 2/5,19.99\n";
+    $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura_2026-07-08.csv');
+    $row = $preview['rows'][0];
+    app(ConfirmCreditCardStatement::class)->execute(
+        $wallet, $card, $preview, $csv, 'fatura_2026-07-08.csv',
+        [[
+            'row_key' => $row['row_key'], 'action' => 'confirm_plan',
+            'classification_account_id' => $expense->id,
+            'recognized_total_cents' => 7996,
+            'installments' => collect(range(1, 5))->map(fn ($number) => [
+                'installment_number' => $number, 'amount_cents' => 1999,
+            ])->all(),
+        ]],
+    );
+
+    $plan = CreditCardInstallmentPlan::query()->with('items')->firstOrFail();
+    expect($plan->started_before_erp)->toBeTrue()
+        ->and($plan->recognized_from_installment)->toBe(2)
+        ->and($plan->recognized_total_cents)->toBe(7996)
+        ->and($plan->items)->toHaveCount(5)
+        ->and($plan->items->firstWhere('installment_number', 1)->status)->toBe('previous_before_erp')
+        ->and($plan->items->firstWhere('installment_number', 2)->status)->toBe('matched')
+        ->and($plan->items->firstWhere('installment_number', 3)->status)->toBe('expected')
+        ->and(JournalEntry::query()->count())->toBe(1);
+    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $plan->recognition_journal_entry_id, 'chart_of_account_id' => $expense->id, 'type' => 'debit', 'amount_cents' => 7996]);
+    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $plan->recognition_journal_entry_id, 'chart_of_account_id' => $card->liability_account_id, 'type' => 'credit', 'amount_cents' => 7996]);
+});
+
+it('matches the next invoice installment without a new plan or expense entry', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $expense = ChartOfAccount::query()->where('wallet_id', $wallet->id)
+        ->where('type', 'despesa')->where('allows_posting', true)->whereDoesntHave('children')->firstOrFail();
+    $firstCsv = "date,title,amount\n2026-07-05,Havan Guaiba Parcela 2/5,19.99\n";
+    $first = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $firstCsv, 'fatura_2026-07-08.csv');
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $first, $firstCsv, 'fatura_2026-07-08.csv', [[
+        'row_key' => $first['rows'][0]['row_key'], 'action' => 'confirm_plan',
+        'classification_account_id' => $expense->id, 'recognized_total_cents' => 7996,
+    ]]);
+
+    $nextCsv = "date,title,amount\n2026-08-05,Havan Guaíba - Parcela 3/5,19.99\n";
+    $next = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $nextCsv, 'fatura_2026-08-08.csv');
+    expect($next['rows'][0]['situation'])->toBe('installment_matched');
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $next, $nextCsv, 'fatura_2026-08-08.csv', [[
+        'row_key' => $next['rows'][0]['row_key'], 'action' => 'link_plan',
+        'plan_id' => $next['rows'][0]['installment_plan_matches'][0]['id'],
+    ]]);
+
+    expect(CreditCardInstallmentPlan::query()->count())->toBe(1)
+        ->and(JournalEntry::query()->count())->toBe(1)
+        ->and(CreditCardTransaction::query()->count())->toBe(2)
+        ->and(CreditCardInstallmentPlanItem::query()->where('installment_number', 3)->value('status'))->toBe('matched');
 });
 
 it('confirms statement purchases as deduplicated drafts without moving a bank account', function () {
@@ -238,4 +347,20 @@ it('renders an accessible statement file selector with defensive preview states'
         ->toContain('total_cents: Number(props.preview.summary?.total_cents ?? 0)')
         ->toContain('ignored_items: Array.isArray(props.preview.ignored_items)')
         ->toContain('O PDF foi lido, mas nenhuma compra da fatura foi reconhecida.');
+});
+
+it('renders installment amounts as BRL fields inside a review modal instead of raw-cent labels', function () {
+    $component = file_get_contents(resource_path('js/components/financial/creditCards/CreditCardStatementImport.vue'));
+    $plans = file_get_contents(resource_path('js/pages/Financial/CreditCards/Show.vue'));
+
+    expect($component)
+        ->toContain('Revisar parcelamento')
+        ->toContain('Confirmar parcelamento')
+        ->toContain('formatCurrency(reviewingDecision.recognized_total_cents)')
+        ->toContain('formatCurrency(item.amount_cents)')
+        ->not->toContain('Valor a reconhecer (centavos)')
+        ->and($plans)
+        ->toContain('Valor reconhecido:')
+        ->toContain('Valor futuro:')
+        ->toContain('Fatura vinculada');
 });

@@ -59,6 +59,11 @@ class JournalEntry extends Model
         return $this->hasOne(CreditCardPayment::class);
     }
 
+    public function creditCardInstallmentPlan(): HasOne
+    {
+        return $this->hasOne(CreditCardInstallmentPlan::class, 'recognition_journal_entry_id');
+    }
+
     /**
      * Recalcula is_balanced e balance_diff_cents (debit - credit)
      */

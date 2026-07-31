@@ -6,6 +6,7 @@ use App\Models\AccountPayable;
 use App\Models\AccountReceivable;
 use App\Models\BankAccount;
 use App\Models\CreditCard;
+use App\Models\CreditCardInstallmentPlan;
 use App\Models\CreditCardInvoice;
 use App\Models\CreditCardTransaction;
 use App\Models\JournalEntry;
@@ -135,11 +136,16 @@ class BuildMonthlyWalletClosingSummary
                         ->whereHas('journalEntry', fn ($query) => $query->where('status', 'draft'))
                         ->get(['amount_cents'])
                     : collect();
+                $pendingPlans = CreditCardInstallmentPlan::query()
+                    ->where('wallet_id', $wallet->id)->where('main_credit_card_id', $card->id)
+                    ->whereIn('status', ['pending_confirmation', 'ambiguous'])
+                    ->whereYear('recognition_date', $year)->whereMonth('recognition_date', $month)->count();
 
                 return ['id' => $card->id, 'name' => $card->name, 'issuer_name' => $card->issuer_name,
                     'invoice_id' => $invoice?->id, 'total_cents' => $invoice?->total_cents, 'paid_cents' => $invoice?->paid_cents,
                     'balance_cents' => $invoice?->balance_cents, 'status' => $status,
                     'unclassified_count' => $unclassified->count(),
+                    'pending_installment_plans_count' => $pendingPlans,
                     'unclassified_cents' => (int) $unclassified->sum('amount_cents'),
                     'status_label' => match ($status) {
                         'paid' => 'Paga', 'partial' => 'Parcialmente paga', 'open' => 'Em aberto', 'divergent' => 'Com divergência', default => 'Sem fatura'

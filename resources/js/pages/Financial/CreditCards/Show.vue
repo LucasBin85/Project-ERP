@@ -23,6 +23,7 @@ const props = defineProps<{
     invoices: Array<Record<string, any>>;
     transactions: Array<Record<string, any>>;
     payments: Array<Record<string, any>>;
+    installmentPlans: Array<Record<string, any>>;
     expenseAccounts: Array<Record<string, any>>;
     creditCardStatementPreview?: Record<string, any> | null;
 }>();
@@ -79,7 +80,27 @@ function applyBulkSuggestions() {
                 <Link :href="route('credit-cards.create')" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Adicionar virtual/adicional</Link>
             </div>
 
-            <CreditCardStatementImport :credit-card-id="creditCard.id" :preview="creditCardStatementPreview" />
+            <CreditCardStatementImport :credit-card-id="creditCard.id" :preview="creditCardStatementPreview" :expense-accounts="expenseAccounts" />
+
+            <ReportSection>
+                <template #header>
+                    <div><h2 class="text-lg font-bold text-white">Parcelamentos do cartão</h2><p class="text-sm text-gray-400">Planos reconhecidos uma única vez na contabilidade e conciliados nas faturas.</p></div>
+                </template>
+                <div v-if="installmentPlans.length" class="grid gap-4 p-4 lg:grid-cols-2">
+                    <article v-for="plan in installmentPlans" :key="plan.id" class="rounded-xl border border-gray-700 bg-gray-900/50 p-4">
+                        <div class="flex justify-between gap-3"><div><h3 class="font-bold text-white">{{ plan.description_base }}</h3><span class="mt-1 inline-block rounded-full border border-indigo-500/40 px-2 py-0.5 text-xs font-semibold text-indigo-200">Status: {{ plan.status === 'active' ? 'Ativo' : plan.status === 'completed' ? 'Conciliado' : plan.status === 'ambiguous' ? 'Divergente' : 'Aguardando classificação' }}</span></div><Link v-if="plan.recognition_journal_entry_id" :href="route('journal-entries.show', plan.recognition_journal_entry_id)" class="text-xs font-semibold text-indigo-300">JE-{{ String(plan.recognition_journal_entry_id).padStart(6, '0') }}</Link></div>
+                        <div class="mt-3 grid gap-1 text-xs text-gray-300 sm:grid-cols-2">
+                            <p>Valor reconhecido: <b class="text-white">{{ formatCurrency(plan.recognized_total_cents) }}</b></p>
+                            <p>Valor futuro: <b class="text-white">{{ formatCurrency(plan.items.filter((item) => ['expected', 'adjusted'].includes(item.status)).reduce((sum, item) => sum + Number(item.amount_cents), 0)) }}</b></p>
+                            <p class="sm:col-span-2">Classificação: {{ plan.classification_account ? formatAccount(plan.classification_account.code, plan.classification_account.name) : 'Pendente' }}</p>
+                            <p>{{ plan.items.filter((item) => item.status === 'matched').length }} conciliada(s) · {{ plan.items.filter((item) => ['expected', 'adjusted'].includes(item.status)).length }} prevista(s)</p>
+                            <p v-if="plan.started_before_erp">Começou antes do ERP</p>
+                        </div>
+                        <div class="mt-3 overflow-x-auto rounded border border-gray-700"><table class="w-full min-w-[680px] text-xs"><thead class="bg-gray-950 text-gray-400"><tr><th class="p-2 text-left">Parcela</th><th class="p-2 text-left">Status</th><th class="p-2 text-left">Fatura prevista</th><th class="p-2 text-left">Fatura vinculada</th><th class="p-2 text-right">Valor</th><th class="p-2 text-left">Observação</th></tr></thead><tbody class="divide-y divide-gray-800"><tr v-for="item in plan.items" :key="item.id"><td class="p-2">{{ item.installment_number }}/{{ plan.total_installments }}</td><td class="p-2">{{ item.status === 'previous_before_erp' ? 'Anterior ao ERP' : item.status === 'matched' ? 'Conciliada' : item.status === 'adjusted' ? 'Divergente' : 'Prevista' }}</td><td class="p-2">{{ item.expected_invoice_month ? String(item.expected_invoice_month).padStart(2, '0') + '/' + item.expected_invoice_year : '—' }}</td><td class="p-2">{{ item.invoice ? String(item.invoice.reference_month).padStart(2, '0') + '/' + item.invoice.reference_year : '—' }}</td><td class="p-2 text-right">{{ formatCurrency(item.amount_cents) }}</td><td class="p-2">{{ item.status === 'previous_before_erp' ? 'Não gera contabilidade' : item.status === 'matched' ? 'Fatura conciliada' : 'Aguardando fatura' }}</td></tr></tbody></table></div>
+                    </article>
+                </div>
+                <p v-else class="p-4 text-sm text-gray-400">Nenhum parcelamento confirmado.</p>
+            </ReportSection>
 
             <ReportSection>
                 <template #header>
@@ -96,9 +117,10 @@ function applyBulkSuggestions() {
                     </div>
                 </template>
 
-                <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-5">
+                <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-6">
                     <ReportSummaryCard label="Limite compartilhado" :value="formatCurrency(creditCard.credit_limit_cents)" tone="neutral" />
                     <ReportSummaryCard label="Saldo em aberto" :value="formatCurrency(summary.current_balance_cents)" tone="yellow" />
+                    <ReportSummaryCard label="Parcelamentos futuros" :value="formatCurrency(summary.future_installments_cents)" tone="yellow" />
                     <ReportSummaryCard label="Limite disponível" :value="formatCurrency(summary.available_limit_cents)" :tone="summary.available_limit_cents >= 0 ? 'green' : 'red'" />
                     <ReportSummaryCard label="Fechamento" :value="creditCard.closing_day === 31 ? 'Último dia do mês' : `Dia ${creditCard.closing_day}`" tone="blue" />
                     <ReportSummaryCard label="Vencimento" :value="`Dia ${creditCard.due_day}`" tone="blue" />

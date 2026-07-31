@@ -380,18 +380,14 @@ it('splits a credit card purchase into installments across monthly invoices', fu
         ->orderBy('installment_number')
         ->get();
 
-    expect($installments)->toHaveCount(3)
-        ->and(JournalEntry::query()->count())->toBe(3)
-        ->and(JournalLine::query()->count())->toBe(6)
-        ->and($firstInstallment->parent_transaction_id)->toBeNull()
-        ->and($installments[1]->parent_transaction_id)->toBe($firstInstallment->id)
-        ->and($installments[2]->parent_transaction_id)->toBe($firstInstallment->id);
-
-    expect($installments->pluck('amount_cents')->all())->toBe([30000, 30000, 30000])
-        ->and($installments->pluck('purchase_date')->map->toDateString()->all())->toBe([
-            '2026-07-10',
-            '2026-08-10',
-            '2026-09-10',
+    expect($installments)->toHaveCount(1)
+        ->and(JournalEntry::query()->count())->toBe(1)
+        ->and(JournalLine::query()->count())->toBe(2)
+        ->and($firstInstallment->amount_cents)->toBe(30000)
+        ->and(\App\Models\CreditCardInstallmentPlan::query()->value('recognized_total_cents'))->toBe(90000)
+        ->and(\App\Models\CreditCardInstallmentPlanItem::query()->count())->toBe(3)
+        ->and(\App\Models\CreditCardInstallmentPlanItem::query()->orderBy('installment_number')->pluck('status')->all())->toBe([
+            'matched', 'expected', 'expected',
         ]);
 
     $invoices = CreditCardInvoice::query()
@@ -399,10 +395,10 @@ it('splits a credit card purchase into installments across monthly invoices', fu
         ->orderBy('reference_month')
         ->get();
 
-    expect($invoices)->toHaveCount(3)
-        ->and($invoices->pluck('reference_month')->all())->toBe([8, 9, 10])
-        ->and($invoices->pluck('total_cents')->all())->toBe([30000, 30000, 30000])
-        ->and($invoices->pluck('balance_cents')->all())->toBe([30000, 30000, 30000]);
+    expect($invoices)->toHaveCount(1)
+        ->and($invoices->pluck('reference_month')->all())->toBe([8])
+        ->and($invoices->pluck('total_cents')->all())->toBe([30000])
+        ->and($invoices->pluck('balance_cents')->all())->toBe([30000]);
 });
 
 it('creates a draft journal entry when paying a specific credit card invoice', function () {

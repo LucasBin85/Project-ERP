@@ -88,6 +88,10 @@ class ManageMonthlyWalletClosing
             $reasons[] = 'Existem compras de cartão pendentes de classificação.';
         }
 
+        if (collect($summary['cards'] ?? [])->sum('pending_installment_plans_count') > 0) {
+            $reasons[] = 'Existem parcelamentos de cartão pendentes de confirmação.';
+        }
+
         return array_values(array_unique($reasons));
     }
 }

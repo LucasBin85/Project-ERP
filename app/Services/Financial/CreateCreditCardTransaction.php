@@ -18,6 +18,7 @@ class CreateCreditCardTransaction
         private readonly CreateJournalEntry $createJournalEntry,
         private readonly ResolveCreditCardInvoice $resolveCreditCardInvoice,
         private readonly CreateCreditCardInstallments $installments,
+        private readonly ResolveCreditCardInstallmentPlan $installmentPlans,
     ) {}
 
     public function execute(Wallet $wallet, CreditCardTransactionDTO $dto): CreditCardTransaction
@@ -48,6 +49,51 @@ class CreateCreditCardTransaction
             $installmentsTotal = max(1, $dto->installmentsTotal);
             $amounts = $this->installments->split($dto->amountCents, $installmentsTotal);
             $purchaseDate = CarbonImmutable::parse($dto->purchaseDate)->startOfDay();
+            if ($installmentsTotal > 1) {
+                $invoice = $this->resolveCreditCardInvoice->forPurchaseDate($wallet, $creditCard, $purchaseDate->toDateString());
+                $transaction = CreditCardTransaction::query()->create([
+                    'wallet_id' => $wallet->id,
+                    'credit_card_id' => $creditCard->id,
+                    'credit_card_invoice_id' => $invoice->id,
+                    'expense_account_id' => $expenseAccount->id,
+                    'journal_entry_id' => null,
+                    'source' => 'manual',
+                    'purchase_date' => $purchaseDate->toDateString(),
+                    'merchant_name' => $dto->merchantName,
+                    'description' => $dto->description,
+                    'amount_cents' => $amounts[0],
+                    'installments_total' => $installmentsTotal,
+                    'installment_number' => 1,
+                    'status' => 'draft',
+                    'notes' => $dto->notes,
+                ]);
+                $detected = app(DetectCreditCardInstallment::class)->normalize($dto->description);
+                $this->installmentPlans->create(
+                    $wallet, $mainCard, $creditCard, $invoice, $transaction,
+                    [
+                        'installment_number' => 1,
+                        'installments_total' => $installmentsTotal,
+                        'amount_cents' => $amounts[0],
+                        'description_base' => $dto->description,
+                        'normalized_description' => $detected,
+                    ],
+                    [
+                        'description_base' => $dto->description,
+                        'recognized_total_cents' => $dto->amountCents,
+                        'original_total_cents' => $dto->amountCents,
+                        'classification_account_id' => $expenseAccount->id,
+                        'recognition_date' => $purchaseDate->toDateString(),
+                        'installments' => collect($amounts)->map(fn ($amount, $index) => [
+                            'installment_number' => $index + 1, 'amount_cents' => $amount,
+                        ])->all(),
+                        'notes' => $dto->notes,
+                        'source' => 'manual',
+                    ],
+                );
+                $this->resolveCreditCardInvoice->refreshTotals($invoice);
+
+                return $transaction->fresh(['creditCard', 'creditCardInvoice', 'expenseAccount', 'journalEntry.lines.chartOfAccount']);
+            }
             $firstTransaction = null;
             $invoices = collect();
 

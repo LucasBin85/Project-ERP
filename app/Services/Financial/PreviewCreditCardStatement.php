@@ -14,6 +14,8 @@ class PreviewCreditCardStatement
         private readonly NormalizeBankStatementDescription $descriptions,
         private readonly ResolveCreditCardStatementTarget $targets,
         private readonly ResolveCreditCardCycleDates $cycles,
+        private readonly DetectCreditCardInstallment $installments,
+        private readonly ResolveCreditCardInstallmentPlan $plans,
     ) {}
 
     public function execute(Wallet $wallet, CreditCard $card, string $contents, string $filename): array
@@ -48,7 +50,9 @@ class PreviewCreditCardStatement
         $rows = [];
 
         foreach ($parsed['transactions'] as $index => $transaction) {
-            [$installmentNumber, $installmentsTotal] = $this->installment($transaction->description);
+            $installment = $this->installments->execute($transaction->description);
+            $installmentNumber = $installment['installment_number'] ?? 1;
+            $installmentsTotal = $installment['installments_total'] ?? 1;
             $normalized = $this->descriptions->execute($transaction->description);
             $hash = hash('sha256', implode('|', [
                 $mainCard->id, $transaction->postedAt, $normalized, $transaction->amountCents,
@@ -65,6 +69,17 @@ class PreviewCreditCardStatement
                 ->exists();
             $credit = $transaction->direction === 'in';
             $situation = $duplicateInFile ? 'possible_duplicate' : ($existing ? 'already_imported' : ($credit ? 'credit' : 'new'));
+            $matches = [];
+            if ($installment && $situation === 'new' && $target) {
+                $matches = $this->plans->findMatches(
+                    $wallet, $mainCard, $targetCard->id, $installment['normalized_description'],
+                    $installmentsTotal, $installmentNumber, $transaction->amountCents,
+                    (int) $target['reference_year'], (int) $target['reference_month'],
+                );
+                $situation = count($matches) === 1
+                    ? 'installment_matched'
+                    : (count($matches) > 1 ? 'installment_ambiguous' : 'installment_detected');
+            }
 
             $rows[] = [
                 'row_key' => hash('sha256', $fileHash.'|'.$index.'|'.$hash),
@@ -76,11 +91,21 @@ class PreviewCreditCardStatement
                 'import_hash' => $hash,
                 'installment_number' => $installmentNumber,
                 'installments_total' => $installmentsTotal,
+                'description_base' => $installment['description_base'] ?? null,
+                'normalized_description' => $installment['normalized_description'] ?? null,
+                'started_before_erp' => $installment['started_before_erp'] ?? false,
+                'recognized_total_cents' => $installment ? $transaction->amountCents * ($installmentsTotal - $installmentNumber + 1) : null,
+                'installment_plan_matches' => $matches,
                 'invoice_reference' => $target['reference'] ?? null,
                 'credit_card_id' => $targetCard->id,
                 'credit_card_name' => $targetCard->name,
                 'situation' => $situation,
-                'default_action' => $situation === 'new' ? 'create' : 'ignore',
+                'default_action' => match ($situation) {
+                    'new' => 'create',
+                    'installment_matched' => 'link_plan',
+                    'installment_detected', 'installment_ambiguous' => 'resolve',
+                    default => 'ignore',
+                },
             ];
         }
 
@@ -115,18 +140,11 @@ class PreviewCreditCardStatement
                 'already_imported' => collect($rows)->where('situation', 'already_imported')->count(),
                 'possible_duplicate' => collect($rows)->where('situation', 'possible_duplicate')->count(),
                 'credits' => collect($rows)->where('situation', 'credit')->count(),
+                'installments_pending' => collect($rows)->whereIn('situation', ['installment_detected', 'installment_ambiguous'])->count(),
+                'installments_matched' => collect($rows)->where('situation', 'installment_matched')->count(),
                 'ignored' => collect($rows)->where('situation', '!=', 'new')->count(),
             ],
         ];
-    }
-
-    private function installment(string $description): array
-    {
-        if (preg_match('/\b(\d{1,2})\s*\/\s*(\d{1,2})\b/u', $description, $match)) {
-            return [(int) $match[1], (int) $match[2]];
-        }
-
-        return [1, 1];
     }
 
     private function hasDatesOutsidePeriod(array $rows, ?string $start, ?string $end): bool
