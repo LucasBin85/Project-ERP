@@ -16,6 +16,7 @@ class PreviewOfxBankStatement
         private readonly FindMatchingOfxJournalLine $matchingJournalLines,
         private readonly OfxTransactionIdentity $identity,
         private readonly ValidateOfxBankAccount $accountValidation,
+        private readonly DetectFinancialStatementFileType $fileTypes,
     ) {}
 
     /**
@@ -32,7 +33,18 @@ class PreviewOfxBankStatement
     ): array {
         $this->validateContext($wallet, $bankAccount);
 
-        $parsed = $this->parser->parse($contents, $originalFilename);
+        $fileType = $this->fileTypes->execute($contents, $originalFilename);
+        if ($fileType === 'credit_card_statement') {
+            throw new \RuntimeException('Arquivo incompatível: fatura de cartão detectada. Importe-o pelo módulo de Cartões de Crédito.');
+        }
+
+        try {
+            $parsed = $this->parser->parse($contents, $originalFilename);
+        } catch (\RuntimeException $exception) {
+            throw $fileType === 'unknown' && str_contains(mb_strtolower($exception->getMessage()), 'layout')
+                ? new \RuntimeException('O arquivo foi lido, mas o layout não foi reconhecido para este tipo de importação.', previous: $exception)
+                : $exception;
+        }
         $accountValidation = $this->accountValidation->execute($bankAccount, $parsed['account']);
         $fileHash = hash('sha256', $this->parser->format($originalFilename).'|'.$contents);
         $rows = [];

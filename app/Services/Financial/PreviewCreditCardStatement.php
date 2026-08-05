@@ -16,6 +16,7 @@ class PreviewCreditCardStatement
         private readonly ResolveCreditCardCycleDates $cycles,
         private readonly DetectCreditCardInstallment $installments,
         private readonly ResolveCreditCardInstallmentPlan $plans,
+        private readonly DetectFinancialStatementFileType $fileTypes,
     ) {}
 
     public function execute(Wallet $wallet, CreditCard $card, string $contents, string $filename): array
@@ -23,8 +24,24 @@ class PreviewCreditCardStatement
         if ((int) $card->wallet_id !== (int) $wallet->id || ! $card->is_active) {
             throw ValidationException::withMessages(['statement_file' => 'O cartão deve estar ativo e pertencer à wallet atual.']);
         }
+        $fileType = $this->fileTypes->execute($contents, $filename);
+        if ($fileType === 'bank_statement') {
+            throw ValidationException::withMessages([
+                'statement_file' => 'Arquivo incompatível: extrato bancário detectado. Importe-o pelo Extrato da Conta Bancária.',
+            ]);
+        }
         $mainCard = $card->parentCard ?: $card;
-        $parsed = $this->parser->parse($contents, $filename);
+        try {
+            $parsed = $this->parser->parse($contents, $filename);
+        } catch (\RuntimeException $exception) {
+            if ($fileType === 'unknown' && str_contains(mb_strtolower($exception->getMessage()), 'layout')) {
+                throw ValidationException::withMessages([
+                    'statement_file' => 'O arquivo foi lido, mas o layout não foi reconhecido para este tipo de importação.',
+                ]);
+            }
+
+            throw $exception;
+        }
         $target = $this->targets->execute($mainCard, $parsed, $filename);
         if ($target) {
             $cycle = $this->cycles->forReference(
@@ -123,7 +140,7 @@ class PreviewCreditCardStatement
                     'new' => 'create',
                     'installment_matched' => 'link_plan',
                     'installment_plan_pending' => 'link_pending_plan',
-                    'installment_divergent' => 'link_divergent_plan',
+                    'installment_divergent' => 'resolve_divergence',
                     'installment_detected', 'installment_ambiguous' => 'resolve',
                     default => 'ignore',
                 },

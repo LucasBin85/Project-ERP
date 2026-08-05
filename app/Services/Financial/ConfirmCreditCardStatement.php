@@ -82,7 +82,7 @@ class ConfirmCreditCardStatement
 
                 $transaction = $parsed['transactions'][$row['index']];
                 $isInstallment = (int) $row['installments_total'] > 1;
-                if ($isInstallment && ! in_array($action, ['confirm_plan', 'pending_plan', 'link_plan', 'link_pending_plan', 'link_divergent_plan', 'normal'], true)) {
+                if ($isInstallment && ! in_array($action, ['confirm_plan', 'pending_plan', 'link_plan', 'link_pending_plan', 'reconcile_divergence', 'normal'], true)) {
                     throw ValidationException::withMessages([
                         'installments' => 'Resolva todos os parcelamentos detectados antes de confirmar a importação.',
                     ]);
@@ -138,14 +138,24 @@ class ConfirmCreditCardStatement
                     $this->installmentPlans->match(
                         $plan, $invoice, $purchase, (int) $row['installment_number'], (int) $row['amount_cents']
                     );
-                } elseif ($isInstallment && in_array($action, ['link_pending_plan', 'link_divergent_plan'], true)) {
+                } elseif ($isInstallment && $action === 'link_pending_plan') {
                     $planId = (int) ($decision['plan_id'] ?? data_get($row, 'installment_plan_matches.0.id'));
                     $plan = \App\Models\CreditCardInstallmentPlan::query()
                         ->where('wallet_id', $wallet->id)->where('main_credit_card_id', $mainCard->id)
                         ->whereIn('id', collect($row['installment_plan_matches'] ?? [])->pluck('id'))->findOrFail($planId);
                     $this->installmentPlans->linkForReview(
                         $plan, $invoice, $purchase, (int) $row['installment_number'], (int) $row['amount_cents'],
-                        $action === 'link_pending_plan' ? 'possible_match' : 'divergent',
+                        'possible_match',
+                    );
+                } elseif ($isInstallment && $action === 'reconcile_divergence') {
+                    $planId = (int) ($decision['plan_id'] ?? data_get($row, 'installment_plan_matches.0.id'));
+                    $plan = \App\Models\CreditCardInstallmentPlan::query()
+                        ->where('wallet_id', $wallet->id)->where('main_credit_card_id', $mainCard->id)
+                        ->whereIn('id', collect($row['installment_plan_matches'] ?? [])->pluck('id'))->findOrFail($planId);
+                    $this->installmentPlans->reconcileDivergence(
+                        $plan, $invoice, $purchase, (int) $row['installment_number'], (int) $row['amount_cents'],
+                        (int) ($decision['expected_amount_cents'] ?? $row['amount_cents']),
+                        (int) ($decision['recognized_total_cents'] ?? $plan->recognized_total_cents),
                     );
                 }
                 $created++;

@@ -29,14 +29,15 @@ function makeDecisions() {
         action: row.default_action,
         plan_id: row.installment_plan_matches?.[0]?.id ?? null,
         description_base: row.description_base,
-        recognized_from_installment: row.installment_number,
-        recognized_to_installment: row.installments_total,
-        recognized_total_cents: row.recognized_total_cents,
-        original_total_cents: Number(row.amount_cents) * Number(row.installments_total),
+        recognized_from_installment: row.installment_plan_matches?.[0]?.recognized_from_installment ?? row.installment_number,
+        recognized_to_installment: row.installment_plan_matches?.[0]?.recognized_to_installment ?? row.installments_total,
+        recognized_total_cents: row.installment_plan_matches?.[0]?.recognized_total_cents ?? row.recognized_total_cents,
+        original_total_cents: row.installment_plan_matches?.[0]?.original_total_cents ?? Number(row.amount_cents) * Number(row.installments_total),
+        expected_amount_cents: row.installment_plan_matches?.[0]?.expected_amount_cents ?? Number(row.amount_cents),
         classification_account_id: null,
         recognition_date: row.date,
         notes: '',
-        installments: Array.from({ length: Number(row.installments_total ?? 1) }, (_, index) => ({
+        installments: row.installment_plan_matches?.[0]?.installments ?? Array.from({ length: Number(row.installments_total ?? 1) }, (_, index) => ({
             installment_number: index + 1, amount_cents: Number(row.amount_cents),
         })),
     }));
@@ -57,11 +58,16 @@ watch(() => safePreview.value?.token, (token) => {
     showPreview.value = Boolean(token);
 });
 const unresolved = computed(() => (safePreview.value?.rows ?? []).filter((row: any, index: number) =>
-    Number(row.installments_total) > 1 && decisions.value[index]?.action === 'resolve'
+    Number(row.installments_total) > 1 && String(decisions.value[index]?.action).startsWith('resolve')
 ).length);
 const reviewingIndex = ref<number | null>(null);
 const reviewingRow = computed(() => reviewingIndex.value === null ? null : safePreview.value?.rows[reviewingIndex.value]);
 const reviewingDecision = computed(() => reviewingIndex.value === null ? null : decisions.value[reviewingIndex.value]);
+const installmentSum = computed(() => (reviewingDecision.value?.installments ?? [])
+    .filter((item: any) => Number(item.installment_number) >= Number(reviewingDecision.value?.recognized_from_installment)
+        && Number(item.installment_number) <= Number(reviewingDecision.value?.recognized_to_installment))
+    .reduce((sum: number, item: any) => sum + Number(item.amount_cents), 0));
+const installmentDifference = computed(() => Number(reviewingDecision.value?.recognized_total_cents ?? 0) - installmentSum.value);
 
 function openInstallment(index: number) {
     reviewingIndex.value = index;
@@ -76,6 +82,23 @@ function confirmInstallment() {
     if (!reviewingDecision.value?.classification_account_id) return;
     reviewingDecision.value.action = 'confirm_plan';
     reviewingIndex.value = null;
+}
+
+function confirmDivergence() {
+    if (!reviewingDecision.value || !reviewingRow.value) return;
+    reviewingDecision.value.action = 'reconcile_divergence';
+    reviewingDecision.value.expected_amount_cents = Number(reviewingDecision.value.expected_amount_cents || reviewingRow.value.amount_cents);
+    reviewingIndex.value = null;
+}
+
+function recalculateInstallments() {
+    if (!reviewingDecision.value || !reviewingRow.value) return;
+    reviewingDecision.value.installments.forEach((item: any) => { item.amount_cents = Number(reviewingRow.value.amount_cents); });
+}
+
+function adjustDifference(index: number) {
+    const item = reviewingDecision.value?.installments?.[index];
+    if (item) item.amount_cents += installmentDifference.value;
 }
 
 function leavePending() {
@@ -158,7 +181,7 @@ function situation(row: any) {
                     <div><p class="font-bold text-white">{{ row.description_base }}</p><p class="text-xs text-amber-200">Parcela {{ row.installment_number }}/{{ row.installments_total }} · {{ formatCurrency(row.amount_cents) }}</p><p v-if="row.started_before_erp" class="text-xs text-gray-400">Parcelamento já estava em andamento quando entrou no sistema.</p></div>
                     <div class="flex items-center gap-2">
                         <span class="rounded-full border border-amber-500/40 bg-amber-950/40 px-2.5 py-1 text-xs font-semibold text-amber-200">{{ installmentStatus(row, index) }}</span>
-                        <button v-if="['installment_detected', 'installment_ambiguous'].includes(row.situation)" type="button" class="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white" @click="openInstallment(index)">Revisar parcelamento</button>
+                        <button v-if="['installment_detected', 'installment_ambiguous', 'installment_divergent'].includes(row.situation)" type="button" class="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white" @click="openInstallment(index)">Revisar parcelamento</button>
                     </div>
                 </div>
                 <p v-if="row.situation === 'installment_ambiguous'" class="text-xs text-amber-300">Possível parcelamento existente encontrado. Confirme o vínculo manualmente.</p>
@@ -192,6 +215,11 @@ function situation(row: any) {
                 </div>
 
                 <div class="mt-5 grid gap-3 md:grid-cols-3">
+                    <template v-if="reviewingRow.situation === 'installment_divergent'">
+                        <label class="text-xs text-gray-300">Valor esperado da parcela<input :value="formatCurrency(reviewingDecision.expected_amount_cents)" inputmode="decimal" class="field" @input="setMoney(reviewingDecision, 'expected_amount_cents', $event)"></label>
+                        <div class="rounded border border-amber-700 p-3 text-xs text-amber-200"><p>Valor importado</p><strong>{{ formatCurrency(reviewingRow.amount_cents) }}</strong></div>
+                        <div class="rounded border border-gray-700 p-3 text-xs text-gray-300"><p>JE do plano</p><strong>{{ reviewingRow.installment_plan_matches?.[0]?.recognition_status === 'posted' ? 'Contabilizado' : 'Rascunho ajustável' }}</strong></div>
+                    </template>
                     <label class="text-xs text-gray-300">Descrição base<input v-model="reviewingDecision.description_base" class="field"></label>
                     <label class="text-xs text-gray-300">Parcela atual<input v-model.number="reviewingDecision.recognized_from_installment" type="number" min="1" :max="reviewingRow.installments_total" class="field"></label>
                     <label class="text-xs text-gray-300">Total de parcelas<input v-model.number="reviewingDecision.recognized_to_installment" type="number" :min="reviewingRow.installment_number" :max="reviewingRow.installments_total" class="field"></label>
@@ -210,6 +238,20 @@ function situation(row: any) {
                     </label>
                     <label class="text-xs text-gray-300">Observações<input v-model="reviewingDecision.notes" class="field"></label>
                 </div>
+
+                <div class="mt-4 grid gap-2 rounded border border-gray-700 bg-gray-900/50 p-3 text-sm md:grid-cols-4">
+                    <p>Valor original estimado: <strong>{{ formatCurrency(reviewingDecision.original_total_cents) }}</strong></p>
+                    <p>Valor reconhecido no ERP: <strong>{{ formatCurrency(reviewingDecision.recognized_total_cents) }}</strong></p>
+                    <p>Soma das parcelas: <strong>{{ formatCurrency(installmentSum) }}</strong></p>
+                    <p :class="installmentDifference === 0 ? 'text-green-300' : 'text-amber-300'">Diferença: <strong>{{ formatCurrency(installmentDifference) }}</strong></p>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <button type="button" class="rounded border border-gray-600 px-3 py-2 text-xs" @click="recalculateInstallments">Recalcular parcelas</button>
+                    <button type="button" class="rounded border border-gray-600 px-3 py-2 text-xs" @click="adjustDifference(Number(reviewingDecision.recognized_from_installment) - 1)">Ajustar diferença na primeira parcela</button>
+                    <button type="button" class="rounded border border-gray-600 px-3 py-2 text-xs" @click="adjustDifference(Number(reviewingDecision.recognized_to_installment) - 1)">Ajustar diferença na última parcela</button>
+                </div>
+                <p class="mt-2 text-xs text-gray-400">Os valores das parcelas são estimativas e podem ser ajustados individualmente.</p>
+                <p v-if="reviewingRow.situation === 'installment_divergent' && reviewingRow.installment_plan_matches?.[0]?.recognition_status === 'posted'" class="mt-3 rounded border border-amber-700 p-3 text-sm text-amber-200">O parcelamento já foi contabilizado. Será necessário registrar ajuste/reclassificação para alterar o valor reconhecido.</p>
 
                 <div class="mt-5 overflow-x-auto rounded border border-gray-700">
                     <table class="w-full min-w-[760px] text-sm">
@@ -235,7 +277,8 @@ function situation(row: any) {
                     </div>
                     <div class="flex gap-2">
                         <button type="button" class="rounded border border-amber-600 px-3 py-2 text-sm text-amber-200" @click="leavePending">Importar como pendente</button>
-                        <button type="button" :disabled="!reviewingDecision.classification_account_id" class="rounded bg-green-700 px-4 py-2 font-semibold text-white disabled:opacity-50" @click="confirmInstallment">Confirmar parcelamento</button>
+                        <button v-if="reviewingRow.situation === 'installment_divergent'" type="button" class="rounded bg-green-700 px-4 py-2 font-semibold text-white" @click="confirmDivergence">Confirmar conciliação</button>
+                        <button v-else type="button" :disabled="!reviewingDecision.classification_account_id" class="rounded bg-green-700 px-4 py-2 font-semibold text-white disabled:opacity-50" @click="confirmInstallment">Confirmar parcelamento</button>
                     </div>
                 </div>
             </div>

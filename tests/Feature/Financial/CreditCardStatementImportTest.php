@@ -10,6 +10,7 @@ use App\Models\JournalEntry;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Accounting\AssessJournalEntryPostingReadiness;
+use App\Services\Accounting\PostJournalEntry;
 use App\Services\Financial\ClassifyCreditCardPurchase;
 use App\Services\Financial\ConfirmCreditCardStatement;
 use App\Services\Financial\CreateCreditCard;
@@ -56,6 +57,20 @@ it('previews OFX and CSV credit card statements with installments', function () 
     $ofx = '<OFX><SIGNONMSGSRSV1><SONRS><FI><ORG>NUBANK</FI></SONRS></SIGNONMSGSRSV1><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CURDEF>BRL<CCACCTFROM><ACCTID>1234</CCACCTFROM><BANKTRANLIST><DTSTART>20260601<DTEND>20260630<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260605<TRNAMT>-10.00<FITID>safe-1<NAME>Compra Segura</STMTTRN></BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>';
     expect(app(PreviewCreditCardStatement::class)->execute($wallet, $card, $ofx, 'fatura.ofx')['summary']['new'])->toBe(1);
 });
+
+it('blocks bank statement files in the credit card preview without creating financial records', function (string $contents, string $filename) {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+
+    expect(fn () => app(PreviewCreditCardStatement::class)->execute($wallet, $card, $contents, $filename))
+        ->toThrow(\Illuminate\Validation\ValidationException::class, 'Arquivo incompatível: extrato bancário detectado')
+        ->and(CreditCardTransaction::query()->count())->toBe(0)
+        ->and(CreditCardInstallmentPlan::query()->count())->toBe(0)
+        ->and(JournalEntry::query()->count())->toBe(0);
+})->with([
+    'bank OFX' => ['<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKACCTFROM><BANKID>260<ACCTID>123</BANKACCTFROM><BANKTRANLIST></BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>', 'extrato.ofx'],
+    'bank CSV' => ["data,descricao,valor,saldo\n01/07/2026,PIX,10.00,100.00", 'extrato.csv'],
+    'bank PDF' => ["%PDF-1.4\n(Extrato de conta saldo inicial saldo final agencia conta entradas saidas) Tj\n%%EOF", 'extrato.pdf'],
+]);
 
 it('detects supported installment descriptions and removes the marker from the base description', function (string $description, int $number, int $total) {
     $detected = app(\App\Services\Financial\DetectCreditCardInstallment::class)->execute($description);
@@ -191,16 +206,24 @@ it('links a divergent expected installment for review without a new plan or jour
     $next = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $nextCsv, 'fatura_2026-08-08.csv');
     expect($next['rows'][0]['situation'])->toBe('installment_divergent')
         ->and($next['rows'][0]['installment_plan_matches'][0]['expected_amount_cents'])->toBe(26266)
-        ->and($next['rows'][0]['default_action'])->toBe('link_divergent_plan');
+        ->and($next['rows'][0]['default_action'])->toBe('resolve_divergence');
     app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $next, $nextCsv, 'fatura_2026-08-08.csv', [[
-        'row_key' => $next['rows'][0]['row_key'], 'action' => 'link_divergent_plan',
+        'row_key' => $next['rows'][0]['row_key'], 'action' => 'reconcile_divergence',
         'plan_id' => $next['rows'][0]['installment_plan_matches'][0]['id'],
+        'expected_amount_cents' => 26300, 'recognized_total_cents' => 52566,
     ]]);
 
     expect(CreditCardInstallmentPlan::query()->count())->toBe(1)
-        ->and(CreditCardInstallmentPlan::query()->value('status'))->toBe('ambiguous')
+        ->and(CreditCardInstallmentPlan::query()->value('status'))->toBe('completed')
+        ->and(CreditCardInstallmentPlan::query()->value('recognized_total_cents'))->toBe(52566)
         ->and(JournalEntry::query()->count())->toBe(1)
-        ->and(CreditCardInstallmentPlanItem::query()->where('installment_number', 3)->value('status'))->toBe('divergent');
+        ->and(JournalEntry::query()->firstOrFail()->lines()->pluck('amount_cents')->unique()->all())->toBe([52566])
+        ->and(CreditCardInstallmentPlanItem::query()->where('installment_number', 3)->value('status'))->toBe('matched');
+
+    $reimport = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $nextCsv, 'fatura_2026-08-08.csv');
+    expect($reimport['rows'][0]['situation'])->toBe('already_imported')
+        ->and(CreditCardInstallmentPlan::query()->count())->toBe(1)
+        ->and(JournalEntry::query()->count())->toBe(1);
 });
 
 it('links a future installment to a pending plan without duplicating recognition', function () {
@@ -224,6 +247,36 @@ it('links a future installment to a pending plan without duplicating recognition
         ->and(CreditCardInstallmentPlan::query()->value('status'))->toBe('pending_confirmation')
         ->and(JournalEntry::query()->count())->toBe(0)
         ->and(CreditCardInstallmentPlanItem::query()->where('installment_number', 3)->value('status'))->toBe('possible_match');
+});
+
+it('keeps posted installment recognition immutable while allowing the divergent invoice item to be linked', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $expense = ChartOfAccount::query()->where('wallet_id', $wallet->id)
+        ->where('type', 'despesa')->where('allows_posting', true)->whereDoesntHave('children')->firstOrFail();
+    $firstCsv = "date,title,amount\n2026-07-05,Loja Teste Parcela 2/3,20.03\n";
+    $first = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $firstCsv, 'fatura_2026-07-08.csv');
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $first, $firstCsv, 'fatura_2026-07-08.csv', [[
+        'row_key' => $first['rows'][0]['row_key'], 'action' => 'confirm_plan',
+        'classification_account_id' => $expense->id, 'recognized_total_cents' => 4006,
+    ]]);
+    $plan = CreditCardInstallmentPlan::query()->firstOrFail();
+    app(PostJournalEntry::class)->handle($plan->recognitionJournalEntry);
+
+    $nextCsv = "date,title,amount\n2026-08-05,Loja Teste Parcela 3/3,19.99\n";
+    $next = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $nextCsv, 'fatura_2026-08-08.csv');
+    expect(fn () => app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $next, $nextCsv, 'fatura_2026-08-08.csv', [[
+        'row_key' => $next['rows'][0]['row_key'], 'action' => 'reconcile_divergence', 'plan_id' => $plan->id,
+        'expected_amount_cents' => 1999, 'recognized_total_cents' => 4002,
+    ]]))->toThrow(\Illuminate\Validation\ValidationException::class, 'já foi contabilizado');
+
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $next, $nextCsv, 'fatura_2026-08-08.csv', [[
+        'row_key' => $next['rows'][0]['row_key'], 'action' => 'reconcile_divergence', 'plan_id' => $plan->id,
+        'expected_amount_cents' => 1999, 'recognized_total_cents' => 4006,
+    ]]);
+    expect($plan->fresh()->recognized_total_cents)->toBe(4006)
+        ->and($plan->recognitionJournalEntry->fresh()->status)->toBe('posted')
+        ->and(CreditCardInstallmentPlanItem::query()->where('installment_number', 3)->value('status'))->toBe('matched')
+        ->and(JournalEntry::query()->count())->toBe(1);
 });
 
 it('confirms statement purchases as deduplicated drafts without moving a bank account', function () {
@@ -424,6 +477,11 @@ it('renders installment amounts as BRL fields inside a review modal instead of r
         ->toContain('Conciliada com parcelamento existente')
         ->toContain('Reconhecimento contábil já realizado no plano.')
         ->toContain('Valor esperado:')
+        ->toContain('Recalcular parcelas')
+        ->toContain('Ajustar diferença na primeira parcela')
+        ->toContain('Ajustar diferença na última parcela')
+        ->toContain('Confirmar conciliação')
+        ->toContain('O parcelamento já foi contabilizado.')
         ->not->toContain('Valor a reconhecer (centavos)')
         ->and($plans)
         ->toContain('Valor reconhecido:')

@@ -1,7 +1,7 @@
 <?php
 
-use App\DTOs\Financial\OfxImportResultDTO;
 use App\DTOs\Financial\OfxClassificationDTO;
+use App\DTOs\Financial\OfxImportResultDTO;
 use App\Exceptions\OfxImportException;
 use App\Models\BankAccount;
 use App\Models\BankAccountTransfer;
@@ -13,11 +13,11 @@ use App\Models\JournalLine;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Accounting\CreateBankImportEntry;
-use App\Services\Financial\ConfirmOfxBankStatement;
 use App\Services\Financial\ClassifyOfxDraftEntry;
+use App\Services\Financial\ConfirmOfxBankStatement;
 use App\Services\Financial\OfxOperationTypePolicy;
-use App\Services\Financial\ParseOfxStatement;
 use App\Services\Financial\ParseMercadoPagoPdfStatement;
+use App\Services\Financial\ParseOfxStatement;
 use App\Services\Financial\PreviewOfxBankStatement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -96,6 +96,21 @@ NEWFILEUID:NONE
 </OFX>
 OFX;
 }
+
+it('blocks credit card statement files in the bank preview without creating records', function (string $contents, string $filename) {
+    $wallet = createWalletForOfxImport();
+    $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.001', 'Banco Principal');
+
+    expect(fn () => app(PreviewOfxBankStatement::class)->execute($wallet, $bankAccount, $contents, $filename))
+        ->toThrow(RuntimeException::class, 'Arquivo incompatível: fatura de cartão detectada')
+        ->and(BankStatementImport::query()->count())->toBe(0)
+        ->and(BankStatementImportTransaction::query()->count())->toBe(0)
+        ->and(JournalEntry::query()->count())->toBe(0);
+})->with([
+    'credit card OFX' => ['<OFX><CREDITCARDMSGSRSV1><CCSTMTRS><CCSTMTTRN></CCSTMTRS></CREDITCARDMSGSRSV1></OFX>', 'fatura.ofx'],
+    'credit card CSV' => ["date,title,amount\n2026-07-01,Compra,10.00", 'fatura.csv'],
+    'credit card PDF' => ["%PDF-1.4\n(Fatura cartao limite vencimento compras) Tj\n%%EOF", 'fatura.pdf'],
+]);
 
 function singleOfxTransaction(
     ?string $fitId,
@@ -863,7 +878,7 @@ it('previews and confirms through a wallet-bound cached token and prevents token
     $this->post(route('ofx-imports.confirm'), $payload)
         ->assertSessionHasErrors('preview_token');
 
-expect(JournalEntry::query()->count())->toBe(2)
+    expect(JournalEntry::query()->count())->toBe(2)
         ->and(BankStatementImport::query()->count())->toBe(1);
 });
 

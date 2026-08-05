@@ -38,10 +38,13 @@ class ResolveCreditCardInstallmentPlan
             ->whereHas('items', fn ($query) => $query
                 ->where('installment_number', $number)
                 ->whereIn('status', ['expected', 'adjusted']))
-            ->with(['items' => fn ($query) => $query->where('installment_number', $number)])
+            ->with([
+                'items' => fn ($query) => $query->orderBy('installment_number'),
+                'recognitionJournalEntry:id,status',
+            ])
             ->get()
-            ->map(function (CreditCardInstallmentPlan $plan) use ($amountCents, $year, $month) {
-                $item = $plan->items->first();
+            ->map(function (CreditCardInstallmentPlan $plan) use ($amountCents, $year, $month, $number) {
+                $item = $plan->items->firstWhere('installment_number', $number);
 
                 return [
                     'id' => $plan->id,
@@ -52,6 +55,16 @@ class ResolveCreditCardInstallmentPlan
                     'amount_matches' => abs((int) $item?->amount_cents - $amountCents) <= 1,
                     'invoice_matches' => (int) $item?->expected_invoice_year === $year
                         && (int) $item?->expected_invoice_month === $month,
+                    'recognized_total_cents' => $plan->recognized_total_cents,
+                    'original_total_cents' => $plan->original_total_cents,
+                    'recognized_from_installment' => $plan->recognized_from_installment,
+                    'recognized_to_installment' => $plan->recognized_to_installment,
+                    'installments' => $plan->items->map(fn ($planItem) => [
+                        'installment_number' => $planItem->installment_number,
+                        'amount_cents' => $planItem->amount_cents,
+                    ])->values()->all(),
+                    'recognition_journal_entry_id' => $plan->recognition_journal_entry_id,
+                    'recognition_status' => $plan->recognitionJournalEntry?->status,
                 ];
             })->all();
     }
@@ -217,6 +230,58 @@ class ResolveCreditCardInstallmentPlan
         if ($status === 'divergent') {
             $plan->update(['status' => 'ambiguous']);
         }
+    }
+
+    public function reconcileDivergence(
+        CreditCardInstallmentPlan $plan,
+        CreditCardInvoice $invoice,
+        CreditCardTransaction $purchase,
+        int $number,
+        int $importedAmountCents,
+        int $expectedAmountCents,
+        int $recognizedTotalCents,
+    ): void {
+        $item = $plan->items()->where('installment_number', $number)->lockForUpdate()->firstOrFail();
+        if ((int) $item->expected_invoice_year !== (int) $invoice->reference_year
+            || (int) $item->expected_invoice_month !== (int) $invoice->reference_month) {
+            throw ValidationException::withMessages(['installment_plan' => 'A parcela esperada pertence a outra fatura.']);
+        }
+        if ($expectedAmountCents <= 0 || $recognizedTotalCents <= 0) {
+            throw ValidationException::withMessages(['installment_plan' => 'Os valores ajustados devem ser maiores que zero.']);
+        }
+
+        $entry = $plan->recognitionJournalEntry()->with('lines')->lockForUpdate()->first();
+        if ($recognizedTotalCents !== (int) $plan->recognized_total_cents) {
+            if (! $entry || $entry->status !== 'draft') {
+                throw ValidationException::withMessages([
+                    'installment_plan' => 'O parcelamento já foi contabilizado. Será necessário registrar ajuste/reclassificação para alterar o valor reconhecido.',
+                ]);
+            }
+            $entry->lines()->update(['amount_cents' => $recognizedTotalCents]);
+            $entry->recalcBalance();
+            $entry->save();
+            $plan->update(['recognized_total_cents' => $recognizedTotalCents]);
+        }
+
+        $item->update([
+            'amount_cents' => $expectedAmountCents,
+            'credit_card_invoice_id' => $invoice->id,
+            'credit_card_purchase_id' => $purchase->id,
+            'status' => 'matched',
+            'source' => 'statement',
+            'matched_at' => now(),
+            'metadata_json' => array_merge($item->metadata_json ?? [], [
+                'previous_expected_amount_cents' => (int) $item->getOriginal('amount_cents'),
+                'imported_amount_cents' => $importedAmountCents,
+                'divergence_reviewed' => true,
+            ]),
+        ]);
+        $purchase->update([
+            'expense_account_id' => $plan->classification_account_id ?? $purchase->expense_account_id,
+            'journal_entry_id' => $plan->recognition_journal_entry_id,
+        ]);
+        $plan->update(['status' => $plan->items()->whereIn('status', ['expected', 'adjusted', 'possible_match', 'divergent'])->exists()
+            ? 'active' : 'completed']);
     }
 
     private function amounts(int $current, int $total, int $default, array $custom): array
