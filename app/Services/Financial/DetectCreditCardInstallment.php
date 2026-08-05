@@ -10,7 +10,7 @@ class DetectCreditCardInstallment
     {
         $patterns = [
             '/\bparcela\s*(\d{1,2})\s*\/\s*(\d{1,2})\b/iu',
-            '/\b(\d{1,2})\s+de\s+(\d{1,2})\b/iu',
+            '/\b(?:parcela\s*)?(\d{1,2})\s+de\s+(\d{1,2})\b/iu',
             '/\b(\d{1,2})\s*\/\s*(\d{1,2})\b/u',
         ];
 

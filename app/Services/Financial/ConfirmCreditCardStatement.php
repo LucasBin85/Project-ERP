@@ -64,6 +64,7 @@ class ConfirmCreditCardStatement
                 $action = $decision['action'] ?? 'ignore';
                 if ($action === 'ignore' || ! in_array($row['situation'], [
                     'new', 'installment_detected', 'installment_matched', 'installment_ambiguous',
+                    'installment_plan_pending', 'installment_divergent',
                 ], true)) {
                     $ignored++;
 
@@ -81,7 +82,7 @@ class ConfirmCreditCardStatement
 
                 $transaction = $parsed['transactions'][$row['index']];
                 $isInstallment = (int) $row['installments_total'] > 1;
-                if ($isInstallment && ! in_array($action, ['confirm_plan', 'pending_plan', 'link_plan', 'normal'], true)) {
+                if ($isInstallment && ! in_array($action, ['confirm_plan', 'pending_plan', 'link_plan', 'link_pending_plan', 'link_divergent_plan', 'normal'], true)) {
                     throw ValidationException::withMessages([
                         'installments' => 'Resolva todos os parcelamentos detectados antes de confirmar a importação.',
                     ]);
@@ -132,9 +133,19 @@ class ConfirmCreditCardStatement
                     $plan = \App\Models\CreditCardInstallmentPlan::query()
                         ->where('wallet_id', $wallet->id)
                         ->where('main_credit_card_id', $mainCard->id)
+                        ->whereIn('id', collect($row['installment_plan_matches'] ?? [])->pluck('id'))
                         ->findOrFail($planId);
                     $this->installmentPlans->match(
                         $plan, $invoice, $purchase, (int) $row['installment_number'], (int) $row['amount_cents']
+                    );
+                } elseif ($isInstallment && in_array($action, ['link_pending_plan', 'link_divergent_plan'], true)) {
+                    $planId = (int) ($decision['plan_id'] ?? data_get($row, 'installment_plan_matches.0.id'));
+                    $plan = \App\Models\CreditCardInstallmentPlan::query()
+                        ->where('wallet_id', $wallet->id)->where('main_credit_card_id', $mainCard->id)
+                        ->whereIn('id', collect($row['installment_plan_matches'] ?? [])->pluck('id'))->findOrFail($planId);
+                    $this->installmentPlans->linkForReview(
+                        $plan, $invoice, $purchase, (int) $row['installment_number'], (int) $row['amount_cents'],
+                        $action === 'link_pending_plan' ? 'possible_match' : 'divergent',
                     );
                 }
                 $created++;

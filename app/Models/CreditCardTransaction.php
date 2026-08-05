@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CreditCardTransaction extends Model
 {
@@ -69,5 +70,10 @@ class CreditCardTransaction extends Model
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function installmentPlanItem(): HasOne
+    {
+        return $this->hasOne(CreditCardInstallmentPlanItem::class, 'credit_card_purchase_id');
     }
 }

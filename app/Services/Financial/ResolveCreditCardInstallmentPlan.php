@@ -31,24 +31,29 @@ class ResolveCreditCardInstallmentPlan
             ->where('main_credit_card_id', $mainCard->id)
             ->where('normalized_description', $normalizedDescription)
             ->where('total_installments', $total)
-            ->whereIn('status', ['active', 'ambiguous'])
+            ->whereIn('status', ['active', 'ambiguous', 'pending_confirmation'])
             ->when($childCardId && $childCardId !== $mainCard->id, fn ($query) => $query->where(
                 fn ($query) => $query->whereNull('child_credit_card_id')->orWhere('child_credit_card_id', $childCardId)
             ))
             ->whereHas('items', fn ($query) => $query
                 ->where('installment_number', $number)
-                ->where('expected_invoice_year', $year)
-                ->where('expected_invoice_month', $month)
-                ->whereIn('status', ['expected', 'adjusted'])
-                ->whereBetween('amount_cents', [max(1, $amountCents - 1), $amountCents + 1]))
+                ->whereIn('status', ['expected', 'adjusted']))
             ->with(['items' => fn ($query) => $query->where('installment_number', $number)])
             ->get()
-            ->map(fn (CreditCardInstallmentPlan $plan) => [
-                'id' => $plan->id,
-                'description_base' => $plan->description_base,
-                'status' => $plan->status,
-                'expected_amount_cents' => $plan->items->first()?->amount_cents,
-            ])->all();
+            ->map(function (CreditCardInstallmentPlan $plan) use ($amountCents, $year, $month) {
+                $item = $plan->items->first();
+
+                return [
+                    'id' => $plan->id,
+                    'description_base' => $plan->description_base,
+                    'status' => $plan->status,
+                    'expected_amount_cents' => $item?->amount_cents,
+                    'imported_amount_cents' => $amountCents,
+                    'amount_matches' => abs((int) $item?->amount_cents - $amountCents) <= 1,
+                    'invoice_matches' => (int) $item?->expected_invoice_year === $year
+                        && (int) $item?->expected_invoice_month === $month,
+                ];
+            })->all();
     }
 
     public function create(
@@ -152,6 +157,10 @@ class ResolveCreditCardInstallmentPlan
         int $amountCents,
     ): void {
         $item = $plan->items()->where('installment_number', $number)->lockForUpdate()->firstOrFail();
+        if ((int) $item->expected_invoice_year !== (int) $invoice->reference_year
+            || (int) $item->expected_invoice_month !== (int) $invoice->reference_month) {
+            throw ValidationException::withMessages(['installment_plan' => 'A parcela esperada pertence a outra fatura.']);
+        }
         if ($item->status === 'matched') {
             if ((int) $item->credit_card_purchase_id !== (int) $purchase->id) {
                 throw ValidationException::withMessages(['installment_plan' => 'Esta parcela já foi conciliada com outra compra.']);
@@ -169,8 +178,44 @@ class ResolveCreditCardInstallmentPlan
             'source' => 'statement',
             'matched_at' => now(),
         ]);
-        if (! $plan->items()->whereIn('status', ['expected', 'adjusted'])->exists()) {
+        $purchase->update([
+            'expense_account_id' => $plan->classification_account_id ?? $purchase->expense_account_id,
+            'journal_entry_id' => $plan->recognition_journal_entry_id,
+        ]);
+        if (! $plan->items()->whereIn('status', ['expected', 'adjusted', 'possible_match', 'divergent'])->exists()) {
             $plan->update(['status' => 'completed']);
+        }
+    }
+
+    public function linkForReview(
+        CreditCardInstallmentPlan $plan,
+        CreditCardInvoice $invoice,
+        CreditCardTransaction $purchase,
+        int $number,
+        int $amountCents,
+        string $status,
+    ): void {
+        $item = $plan->items()->where('installment_number', $number)->lockForUpdate()->firstOrFail();
+        if ((int) $item->expected_invoice_year !== (int) $invoice->reference_year
+            || (int) $item->expected_invoice_month !== (int) $invoice->reference_month) {
+            throw ValidationException::withMessages(['installment_plan' => 'A parcela esperada pertence a outra fatura.']);
+        }
+        if ($item->credit_card_purchase_id && (int) $item->credit_card_purchase_id !== (int) $purchase->id) {
+            throw ValidationException::withMessages(['installment_plan' => 'Esta parcela já está vinculada a outra compra.']);
+        }
+
+        $item->update([
+            'credit_card_invoice_id' => $invoice->id,
+            'credit_card_purchase_id' => $purchase->id,
+            'status' => $status,
+            'source' => 'statement',
+            'metadata_json' => array_merge($item->metadata_json ?? [], [
+                'expected_amount_cents' => (int) $item->amount_cents,
+                'imported_amount_cents' => $amountCents,
+            ]),
+        ]);
+        if ($status === 'divergent') {
+            $plan->update(['status' => 'ambiguous']);
         }
     }
 

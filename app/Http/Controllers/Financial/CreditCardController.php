@@ -200,6 +200,7 @@ class CreditCardController extends Controller
                 'creditCardInvoice:id,reference_month,reference_year,status,due_at',
                 'expenseAccount:id,code,name',
                 'journalEntry:id,status',
+                'installmentPlanItem.plan:id,description_base,classification_account_id,recognition_journal_entry_id',
             ])
             ->orderByDesc('purchase_date')
             ->orderByDesc('id')
@@ -311,7 +312,7 @@ class CreditCardController extends Controller
             'preview_token' => ['required', 'string', 'size:64'],
             'rows' => ['required', 'array'],
             'rows.*.row_key' => ['required', 'string', 'size:64'],
-            'rows.*.action' => ['required', Rule::in(['create', 'ignore', 'confirm_plan', 'pending_plan', 'link_plan', 'normal'])],
+            'rows.*.action' => ['required', Rule::in(['create', 'ignore', 'confirm_plan', 'pending_plan', 'link_plan', 'link_pending_plan', 'link_divergent_plan', 'normal'])],
             'rows.*.plan_id' => ['nullable', 'integer'],
             'rows.*.description_base' => ['nullable', 'string', 'max:255'],
             'rows.*.recognized_from_installment' => ['nullable', 'integer', 'min:1', 'max:60'],

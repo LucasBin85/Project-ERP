@@ -76,9 +76,28 @@ class PreviewCreditCardStatement
                     $installmentsTotal, $installmentNumber, $transaction->amountCents,
                     (int) $target['reference_year'], (int) $target['reference_month'],
                 );
-                $situation = count($matches) === 1
-                    ? 'installment_matched'
-                    : (count($matches) > 1 ? 'installment_ambiguous' : 'installment_detected');
+                $safeMatches = collect($matches)->where('status', 'active')
+                    ->where('amount_matches', true)->where('invoice_matches', true)->values();
+                $pendingMatches = collect($matches)->where('status', 'pending_confirmation')
+                    ->where('amount_matches', true)->where('invoice_matches', true)->values();
+                $divergentMatches = collect($matches)->where('invoice_matches', true)
+                    ->where('amount_matches', false)->values();
+                $situation = match (true) {
+                    $safeMatches->count() === 1 => 'installment_matched',
+                    $safeMatches->count() > 1 => 'installment_ambiguous',
+                    $pendingMatches->count() === 1 => 'installment_plan_pending',
+                    $divergentMatches->count() === 1 => 'installment_divergent',
+                    count($matches) > 0 => 'installment_ambiguous',
+                    default => 'installment_detected',
+                };
+                if (in_array($situation, ['installment_matched', 'installment_plan_pending', 'installment_divergent'], true)) {
+                    $selected = match ($situation) {
+                        'installment_matched' => $safeMatches,
+                        'installment_plan_pending' => $pendingMatches,
+                        default => $divergentMatches,
+                    };
+                    $matches = $selected->all();
+                }
             }
 
             $rows[] = [
@@ -103,6 +122,8 @@ class PreviewCreditCardStatement
                 'default_action' => match ($situation) {
                     'new' => 'create',
                     'installment_matched' => 'link_plan',
+                    'installment_plan_pending' => 'link_pending_plan',
+                    'installment_divergent' => 'link_divergent_plan',
                     'installment_detected', 'installment_ambiguous' => 'resolve',
                     default => 'ignore',
                 },
@@ -140,7 +161,7 @@ class PreviewCreditCardStatement
                 'already_imported' => collect($rows)->where('situation', 'already_imported')->count(),
                 'possible_duplicate' => collect($rows)->where('situation', 'possible_duplicate')->count(),
                 'credits' => collect($rows)->where('situation', 'credit')->count(),
-                'installments_pending' => collect($rows)->whereIn('situation', ['installment_detected', 'installment_ambiguous'])->count(),
+                'installments_pending' => collect($rows)->whereIn('situation', ['installment_detected', 'installment_ambiguous', 'installment_plan_pending', 'installment_divergent'])->count(),
                 'installments_matched' => collect($rows)->where('situation', 'installment_matched')->count(),
                 'ignored' => collect($rows)->where('situation', '!=', 'new')->count(),
             ],

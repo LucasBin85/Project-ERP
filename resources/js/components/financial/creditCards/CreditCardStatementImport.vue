@@ -85,8 +85,10 @@ function leavePending() {
 
 function installmentStatus(row: any, index: number) {
     const action = decisions.value[index]?.action;
-    if (row.situation === 'installment_matched') return 'Conciliado';
-    if (row.situation === 'installment_ambiguous') return 'Divergente';
+    if (row.situation === 'installment_matched') return 'Conciliada com parcelamento existente';
+    if (row.situation === 'installment_divergent') return 'Valor divergente';
+    if (row.situation === 'installment_plan_pending') return 'Possível parcela de plano pendente';
+    if (row.situation === 'installment_ambiguous') return 'Correspondência ambígua';
     if (action === 'confirm_plan') return 'Confirmado';
     if (action === 'pending_plan') return 'Aguardando classificação';
     return 'Aguardando revisão';
@@ -110,8 +112,9 @@ function situation(row: any) {
     return ({
         new: 'Compra normal · A classificar', already_imported: 'Já importada',
         credit: 'Crédito/estorno/pagamento ignorado', possible_duplicate: 'Possível duplicada',
-        installment_detected: 'Parcelamento detectado', installment_matched: 'Parcelamento já conciliável',
-        installment_ambiguous: 'Parcelamento ambíguo',
+        installment_detected: 'Parcelamento detectado', installment_matched: 'Conciliada com parcelamento existente',
+        installment_ambiguous: 'Parcelamento ambíguo', installment_divergent: 'Parcela esperada com valor divergente',
+        installment_plan_pending: 'Possível parcela de plano pendente',
     } as Record<string, string>)[row.situation] ?? row.situation;
 }
 </script>
@@ -155,10 +158,23 @@ function situation(row: any) {
                     <div><p class="font-bold text-white">{{ row.description_base }}</p><p class="text-xs text-amber-200">Parcela {{ row.installment_number }}/{{ row.installments_total }} · {{ formatCurrency(row.amount_cents) }}</p><p v-if="row.started_before_erp" class="text-xs text-gray-400">Parcelamento já estava em andamento quando entrou no sistema.</p></div>
                     <div class="flex items-center gap-2">
                         <span class="rounded-full border border-amber-500/40 bg-amber-950/40 px-2.5 py-1 text-xs font-semibold text-amber-200">{{ installmentStatus(row, index) }}</span>
-                        <button type="button" class="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white" @click="openInstallment(index)">Revisar parcelamento</button>
+                        <button v-if="['installment_detected', 'installment_ambiguous'].includes(row.situation)" type="button" class="rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white" @click="openInstallment(index)">Revisar parcelamento</button>
                     </div>
                 </div>
                 <p v-if="row.situation === 'installment_ambiguous'" class="text-xs text-amber-300">Possível parcelamento existente encontrado. Confirme o vínculo manualmente.</p>
+                <div v-if="row.situation === 'installment_matched'" class="space-y-1 text-xs text-green-300">
+                    <p>Plano: {{ row.installment_plan_matches?.[0]?.description_base }}</p>
+                    <p>Reconhecimento contábil já realizado no plano.</p>
+                </div>
+                <div v-if="row.situation === 'installment_divergent'" class="space-y-1 text-xs text-amber-300">
+                    <p>Plano: {{ row.installment_plan_matches?.[0]?.description_base }}</p>
+                    <p>Valor esperado: {{ formatCurrency(row.installment_plan_matches?.[0]?.expected_amount_cents) }} · valor importado: {{ formatCurrency(row.amount_cents) }}.</p>
+                    <p>Nenhum novo lançamento contábil será criado; o ajuste deverá ser revisado.</p>
+                </div>
+                <div v-if="row.situation === 'installment_plan_pending'" class="space-y-1 text-xs text-amber-300">
+                    <p>Plano: {{ row.installment_plan_matches?.[0]?.description_base }}</p>
+                    <p>O vínculo será mantido pendente até a confirmação e classificação do plano.</p>
+                </div>
             </div>
             <p v-if="safePreview.rows.length === 0" class="rounded bg-amber-950/30 p-3 text-sm text-amber-200">{{ String(safePreview.origin).includes('PDF') ? 'O PDF foi lido, mas nenhuma compra da fatura foi reconhecida.' : 'Nenhuma compra reconhecida.' }}</p>
             <div class="flex justify-end"><button :disabled="confirmation.processing || unresolved > 0 || !confirmation.target_month || !confirmation.target_year" class="rounded bg-green-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="confirm">Confirmar importação</button></div>

@@ -267,6 +267,8 @@ it('resolves last-day cycles without gaps and adjusts weekend due dates', functi
 });
 
 it('creates a draft journal entry and monthly invoice when registering a credit card purchase', function () {
+    $this->travelTo('2026-08-04');
+
     $wallet = createTestWalletWithCardGroup();
 
     $expenseAccount = AccountingTestHelper::account($wallet, '5.9.91', 'Despesa Administrativa', 'despesa', 'debit');

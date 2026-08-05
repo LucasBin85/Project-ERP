@@ -69,6 +69,7 @@ it('detects supported installment descriptions and removes the marker from the b
     ['Havan Guaíba - Parcela 2/5', 2, 5],
     ['Havan Guaíba 02/10', 2, 10],
     ['Havan Guaíba 3 de 12', 3, 12],
+    ['Havan Guaíba Parcela 3 de 12', 3, 12],
 ]);
 
 it('requires resolution before importing a detected installment', function () {
@@ -160,7 +161,69 @@ it('matches the next invoice installment without a new plan or expense entry', f
     expect(CreditCardInstallmentPlan::query()->count())->toBe(1)
         ->and(JournalEntry::query()->count())->toBe(1)
         ->and(CreditCardTransaction::query()->count())->toBe(2)
-        ->and(CreditCardInstallmentPlanItem::query()->where('installment_number', 3)->value('status'))->toBe('matched');
+        ->and(CreditCardInstallmentPlanItem::query()->where('installment_number', 3)->value('status'))->toBe('matched')
+        ->and(CreditCardTransaction::query()->latest('id')->value('expense_account_id'))->toBe($expense->id)
+        ->and(CreditCardTransaction::query()->latest('id')->value('journal_entry_id'))
+        ->toBe(CreditCardInstallmentPlan::query()->value('recognition_journal_entry_id'));
+
+    $reimport = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $nextCsv, 'fatura_2026-08-08.csv');
+    expect($reimport['rows'][0]['situation'])->toBe('already_imported');
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $reimport, $nextCsv, 'fatura_2026-08-08.csv', [[
+        'row_key' => $reimport['rows'][0]['row_key'], 'action' => 'ignore',
+    ]]);
+    expect(CreditCardInstallmentPlan::query()->count())->toBe(1)
+        ->and(JournalEntry::query()->count())->toBe(1)
+        ->and(CreditCardTransaction::query()->count())->toBe(2);
+});
+
+it('links a divergent expected installment for review without a new plan or journal entry', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $expense = ChartOfAccount::query()->where('wallet_id', $wallet->id)
+        ->where('type', 'despesa')->where('allows_posting', true)->whereDoesntHave('children')->firstOrFail();
+    $firstCsv = "date,title,amount\n2026-07-05,Munhoz Pneus - Parcela 2/3,262.66\n";
+    $first = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $firstCsv, 'fatura_2026-07-08.csv');
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $first, $firstCsv, 'fatura_2026-07-08.csv', [[
+        'row_key' => $first['rows'][0]['row_key'], 'action' => 'confirm_plan',
+        'classification_account_id' => $expense->id, 'recognized_total_cents' => 52532,
+    ]]);
+
+    $nextCsv = "date,title,amount\n2026-08-05,Munhoz Pneus Parcela 3 de 3,263.00\n";
+    $next = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $nextCsv, 'fatura_2026-08-08.csv');
+    expect($next['rows'][0]['situation'])->toBe('installment_divergent')
+        ->and($next['rows'][0]['installment_plan_matches'][0]['expected_amount_cents'])->toBe(26266)
+        ->and($next['rows'][0]['default_action'])->toBe('link_divergent_plan');
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $next, $nextCsv, 'fatura_2026-08-08.csv', [[
+        'row_key' => $next['rows'][0]['row_key'], 'action' => 'link_divergent_plan',
+        'plan_id' => $next['rows'][0]['installment_plan_matches'][0]['id'],
+    ]]);
+
+    expect(CreditCardInstallmentPlan::query()->count())->toBe(1)
+        ->and(CreditCardInstallmentPlan::query()->value('status'))->toBe('ambiguous')
+        ->and(JournalEntry::query()->count())->toBe(1)
+        ->and(CreditCardInstallmentPlanItem::query()->where('installment_number', 3)->value('status'))->toBe('divergent');
+});
+
+it('links a future installment to a pending plan without duplicating recognition', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $firstCsv = "date,title,amount\n2026-07-05,Munhoz Pneus - Parcela 2/3,262.66\n";
+    $first = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $firstCsv, 'fatura_2026-07-08.csv');
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $first, $firstCsv, 'fatura_2026-07-08.csv', [[
+        'row_key' => $first['rows'][0]['row_key'], 'action' => 'pending_plan',
+    ]]);
+
+    $nextCsv = "date,title,amount\n2026-08-05,Munhoz Pneus Parcela 3 de 3,262.66\n";
+    $next = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $nextCsv, 'fatura_2026-08-08.csv');
+    expect($next['rows'][0]['situation'])->toBe('installment_plan_pending')
+        ->and($next['rows'][0]['default_action'])->toBe('link_pending_plan');
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $next, $nextCsv, 'fatura_2026-08-08.csv', [[
+        'row_key' => $next['rows'][0]['row_key'], 'action' => 'link_pending_plan',
+        'plan_id' => $next['rows'][0]['installment_plan_matches'][0]['id'],
+    ]]);
+
+    expect(CreditCardInstallmentPlan::query()->count())->toBe(1)
+        ->and(CreditCardInstallmentPlan::query()->value('status'))->toBe('pending_confirmation')
+        ->and(JournalEntry::query()->count())->toBe(0)
+        ->and(CreditCardInstallmentPlanItem::query()->where('installment_number', 3)->value('status'))->toBe('possible_match');
 });
 
 it('confirms statement purchases as deduplicated drafts without moving a bank account', function () {
@@ -358,9 +421,13 @@ it('renders installment amounts as BRL fields inside a review modal instead of r
         ->toContain('Confirmar parcelamento')
         ->toContain('formatCurrency(reviewingDecision.recognized_total_cents)')
         ->toContain('formatCurrency(item.amount_cents)')
+        ->toContain('Conciliada com parcelamento existente')
+        ->toContain('Reconhecimento contábil já realizado no plano.')
+        ->toContain('Valor esperado:')
         ->not->toContain('Valor a reconhecer (centavos)')
         ->and($plans)
         ->toContain('Valor reconhecido:')
         ->toContain('Valor futuro:')
-        ->toContain('Fatura vinculada');
+        ->toContain('Fatura vinculada')
+        ->toContain('Reconhecida no plano');
 });
