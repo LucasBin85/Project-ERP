@@ -78,8 +78,14 @@ function setMoney(target: Record<string, any>, key: string, event: Event) {
     target[key] = Number(digits || 0);
 }
 
+function setUnifiedTotal(event: Event) {
+    if (!reviewingDecision.value) return;
+    setMoney(reviewingDecision.value, 'original_total_cents', event);
+    reviewingDecision.value.recognized_total_cents = reviewingDecision.value.original_total_cents;
+}
+
 function confirmInstallment() {
-    if (!reviewingDecision.value?.classification_account_id) return;
+    if (!reviewingDecision.value || installmentDifference.value !== 0) return;
     reviewingDecision.value.action = 'confirm_plan';
     reviewingIndex.value = null;
 }
@@ -223,24 +229,29 @@ function situation(row: any) {
                     <label class="text-xs text-gray-300">Descrição base<input v-model="reviewingDecision.description_base" class="field"></label>
                     <label class="text-xs text-gray-300">Parcela atual<input v-model.number="reviewingDecision.recognized_from_installment" type="number" min="1" :max="reviewingRow.installments_total" class="field"></label>
                     <label class="text-xs text-gray-300">Total de parcelas<input v-model.number="reviewingDecision.recognized_to_installment" type="number" :min="reviewingRow.installment_number" :max="reviewingRow.installments_total" class="field"></label>
-                    <label class="text-xs text-gray-300">Valor total original
+                    <label v-if="Number(reviewingDecision.original_total_cents) === Number(reviewingDecision.recognized_total_cents)" class="text-xs text-gray-300">Valor total do parcelamento
+                        <input :value="formatCurrency(reviewingDecision.original_total_cents)" inputmode="decimal" class="field" @input="setUnifiedTotal($event)">
+                    </label>
+                    <label v-if="Number(reviewingDecision.original_total_cents) !== Number(reviewingDecision.recognized_total_cents)" class="text-xs text-gray-300">Valor total estimado da compra
                         <input :value="formatCurrency(reviewingDecision.original_total_cents)" inputmode="decimal" class="field" @input="setMoney(reviewingDecision, 'original_total_cents', $event)">
                     </label>
-                    <label class="text-xs text-gray-300">Valor total reconhecido
+                    <label v-if="Number(reviewingDecision.original_total_cents) !== Number(reviewingDecision.recognized_total_cents)" class="text-xs text-gray-300">Valor reconhecido no ERP
                         <input :value="formatCurrency(reviewingDecision.recognized_total_cents)" inputmode="decimal" class="field" @input="setMoney(reviewingDecision, 'recognized_total_cents', $event)">
                     </label>
+                    <p v-if="Number(reviewingDecision.original_total_cents) !== Number(reviewingDecision.recognized_total_cents)" class="rounded border border-amber-700 p-3 text-xs text-amber-200 md:col-span-3">Parte deste parcelamento é anterior ao início do ERP. Apenas o saldo reconhecido será lançado contabilmente.</p>
                     <label class="text-xs text-gray-300">Competência<input v-model="reviewingDecision.recognition_date" type="date" class="field"></label>
                     <label class="text-xs text-gray-300 md:col-span-2">Classificação contábil
                         <select v-model="reviewingDecision.classification_account_id" class="field">
-                            <option :value="null">Selecione uma conta analítica</option>
+                            <option :value="null">A classificar</option>
                             <option v-for="account in expenseAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
                         </select>
                     </label>
                     <label class="text-xs text-gray-300">Observações<input v-model="reviewingDecision.notes" class="field"></label>
                 </div>
+                <p class="mt-2 text-sm" :class="installmentDifference === 0 ? 'text-green-300' : 'text-amber-300'">{{ installmentDifference === 0 ? 'Parcelas fecham com o valor reconhecido.' : 'A soma das parcelas precisa ser igual ao valor reconhecido.' }}</p>
 
                 <div class="mt-4 grid gap-2 rounded border border-gray-700 bg-gray-900/50 p-3 text-sm md:grid-cols-4">
-                    <p>Valor original estimado: <strong>{{ formatCurrency(reviewingDecision.original_total_cents) }}</strong></p>
+                    <p v-if="Number(reviewingDecision.original_total_cents) !== Number(reviewingDecision.recognized_total_cents)">Valor original estimado: <strong>{{ formatCurrency(reviewingDecision.original_total_cents) }}</strong></p>
                     <p>Valor reconhecido no ERP: <strong>{{ formatCurrency(reviewingDecision.recognized_total_cents) }}</strong></p>
                     <p>Soma das parcelas: <strong>{{ formatCurrency(installmentSum) }}</strong></p>
                     <p :class="installmentDifference === 0 ? 'text-green-300' : 'text-amber-300'">Diferença: <strong>{{ formatCurrency(installmentDifference) }}</strong></p>
@@ -269,7 +280,7 @@ function situation(row: any) {
                     </table>
                 </div>
 
-                <p v-if="!reviewingDecision.classification_account_id" class="mt-3 text-sm text-amber-300">Selecione a classificação para criar o lançamento contábil único. Você também pode importar o plano como pendente.</p>
+                <p v-if="!reviewingDecision.classification_account_id" class="mt-3 text-sm text-amber-300">O plano será reconhecido em “A classificar” e poderá ser classificado depois enquanto o JE estiver em rascunho.</p>
                 <div class="mt-5 flex flex-wrap justify-between gap-3">
                     <div class="flex gap-2">
                         <button type="button" class="rounded border border-gray-600 px-3 py-2 text-sm" @click="reviewingDecision.action = 'normal'; reviewingIndex = null">Marcar como compra normal</button>
@@ -278,7 +289,7 @@ function situation(row: any) {
                     <div class="flex gap-2">
                         <button type="button" class="rounded border border-amber-600 px-3 py-2 text-sm text-amber-200" @click="leavePending">Importar como pendente</button>
                         <button v-if="reviewingRow.situation === 'installment_divergent'" type="button" class="rounded bg-green-700 px-4 py-2 font-semibold text-white" @click="confirmDivergence">Confirmar conciliação</button>
-                        <button v-else type="button" :disabled="!reviewingDecision.classification_account_id" class="rounded bg-green-700 px-4 py-2 font-semibold text-white disabled:opacity-50" @click="confirmInstallment">Confirmar parcelamento</button>
+                        <button v-else type="button" :disabled="installmentDifference !== 0" class="rounded bg-green-700 px-4 py-2 font-semibold text-white disabled:opacity-50" @click="confirmInstallment">Confirmar parcelamento</button>
                     </div>
                 </div>
             </div>

@@ -73,8 +73,10 @@ class ConfirmCreditCardStatement
                 $targetCardId = in_array((int) ($row['credit_card_id'] ?? 0), $familyCardIds, true)
                     ? (int) $row['credit_card_id']
                     : $mainCard->id;
-                if (CreditCardTransaction::query()->whereIn('credit_card_id', $familyCardIds)
-                    ->where(fn ($query) => $query->where('import_hash', $row['import_hash'])->orWhere('external_id', $row['external_id']))->exists()) {
+                $existingPurchase = CreditCardTransaction::query()->whereIn('credit_card_id', $familyCardIds)
+                    ->where(fn ($query) => $query->where('import_hash', $row['import_hash'])
+                        ->when($row['external_id'], fn ($query) => $query->orWhere('external_id', $row['external_id'])))->first();
+                if ($existingPurchase?->credit_card_invoice_id || ($existingPurchase && (int) $row['installments_total'] <= 1)) {
                     $ignored++;
 
                     continue;
@@ -99,7 +101,7 @@ class ConfirmCreditCardStatement
                         ],
                     ]);
                 }
-                $purchase = CreditCardTransaction::query()->create([
+                $purchaseData = [
                     'wallet_id' => $wallet->id,
                     'credit_card_id' => $targetCardId,
                     'credit_card_invoice_id' => $invoice->id,
@@ -116,7 +118,13 @@ class ConfirmCreditCardStatement
                     'installments_total' => $row['installments_total'],
                     'installment_number' => $row['installment_number'],
                     'status' => 'draft',
-                ]);
+                ];
+                if ($existingPurchase) {
+                    $existingPurchase->update($purchaseData);
+                    $purchase = $existingPurchase->fresh();
+                } else {
+                    $purchase = CreditCardTransaction::query()->create($purchaseData);
+                }
                 if ($isInstallment && in_array($action, ['confirm_plan', 'pending_plan'], true)) {
                     $row['statement_file_hash'] = $preview['file_hash'] ?? null;
                     $this->installmentPlans->create(

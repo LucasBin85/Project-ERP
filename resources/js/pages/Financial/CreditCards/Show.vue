@@ -31,6 +31,7 @@ const props = defineProps<{
 const transaction = useCreditCardTransactionForm(props.creditCard.id);
 const classificationFilter = ref('all');
 const bulkForm = useForm({ transaction_ids: [] as number[] });
+const planClassifications = ref<Record<number, number | string>>({});
 const filteredTransactions = computed(() => props.transactions.filter((item) => {
     const pending = Number(item.expense_account_id) === Number(props.wallet.suspense_account_id);
     if (classificationFilter.value === 'unclassified') return pending && item.journal_entry?.status === 'draft';
@@ -70,6 +71,14 @@ function applyBulkSuggestions() {
     bulkForm.post(route('credit-cards.classification-suggestions.apply', props.creditCard.id), { preserveScroll: true });
 }
 
+function classifyPlan(plan: Record<string, any>) {
+    const accountId = Number(planClassifications.value[plan.id] || 0);
+    if (!accountId) return;
+    router.post(route('credit-cards.installment-plans.classify', [props.creditCard.id, plan.id]), {
+        classification_account_id: accountId,
+    }, { preserveScroll: true });
+}
+
 </script>
 
 <template>
@@ -91,10 +100,17 @@ function applyBulkSuggestions() {
                         <div class="flex justify-between gap-3"><div><h3 class="font-bold text-white">{{ plan.description_base }}</h3><span class="mt-1 inline-block rounded-full border border-indigo-500/40 px-2 py-0.5 text-xs font-semibold text-indigo-200">Status: {{ plan.status === 'active' ? 'Ativo' : plan.status === 'completed' ? 'Conciliado' : plan.status === 'ambiguous' ? 'Divergente' : 'Aguardando classificação' }}</span></div><Link v-if="plan.recognition_journal_entry_id" :href="route('journal-entries.show', plan.recognition_journal_entry_id)" class="text-xs font-semibold text-indigo-300">JE-{{ String(plan.recognition_journal_entry_id).padStart(6, '0') }}</Link></div>
                         <div class="mt-3 grid gap-1 text-xs text-gray-300 sm:grid-cols-2">
                             <p>Valor reconhecido: <b class="text-white">{{ formatCurrency(plan.recognized_total_cents) }}</b></p>
+                            <p>Soma reconhecida: <b class="text-white">{{ formatCurrency(plan.items.filter((item) => item.installment_number >= plan.recognized_from_installment && item.installment_number <= plan.recognized_to_installment).reduce((sum, item) => sum + Number(item.amount_cents), 0)) }}</b></p>
+                            <p>Já faturado: <b class="text-white">{{ formatCurrency(plan.items.filter((item) => item.status === 'matched').reduce((sum, item) => sum + Number(item.amount_cents), 0)) }}</b></p>
                             <p>Valor futuro: <b class="text-white">{{ formatCurrency(plan.items.filter((item) => ['expected', 'adjusted'].includes(item.status)).reduce((sum, item) => sum + Number(item.amount_cents), 0)) }}</b></p>
                             <p class="sm:col-span-2">Classificação: {{ plan.classification_account ? formatAccount(plan.classification_account.code, plan.classification_account.name) : 'Pendente' }}</p>
                             <p>{{ plan.items.filter((item) => item.status === 'matched').length }} conciliada(s) · {{ plan.items.filter((item) => ['expected', 'adjusted', 'possible_match', 'divergent'].includes(item.status)).length }} prevista(s)</p>
                             <p v-if="plan.started_before_erp">Começou antes do ERP</p>
+                        </div>
+                        <div v-if="Number(plan.classification_account_id) === Number(wallet.suspense_account_id)" class="mt-3 flex flex-wrap gap-2 rounded border border-amber-700/60 p-3">
+                            <span class="w-full text-xs font-semibold text-amber-200">Plano a classificar</span>
+                            <select v-model="planClassifications[plan.id]" class="min-w-56 flex-1 rounded border border-gray-600 bg-black px-3 py-2 text-xs text-white"><option value="">Selecione a conta</option><option v-for="account in expenseAccounts" :key="account.id" :value="account.id">{{ account.label }}</option></select>
+                            <button type="button" class="rounded bg-indigo-600 px-3 py-2 text-xs font-semibold text-white" @click="classifyPlan(plan)">Classificar plano</button>
                         </div>
                         <div class="mt-3 overflow-x-auto rounded border border-gray-700"><table class="w-full min-w-[680px] text-xs"><thead class="bg-gray-950 text-gray-400"><tr><th class="p-2 text-left">Parcela</th><th class="p-2 text-left">Status</th><th class="p-2 text-left">Fatura prevista</th><th class="p-2 text-left">Fatura vinculada</th><th class="p-2 text-right">Valor</th><th class="p-2 text-left">Observação</th></tr></thead><tbody class="divide-y divide-gray-800"><tr v-for="item in plan.items" :key="item.id"><td class="p-2">{{ item.installment_number }}/{{ plan.total_installments }}</td><td class="p-2">{{ item.status === 'previous_before_erp' ? 'Anterior ao ERP' : item.status === 'matched' ? 'Conciliada' : item.status === 'divergent' ? 'Divergente' : item.status === 'possible_match' ? 'Possível vínculo' : 'Prevista' }}</td><td class="p-2">{{ item.expected_invoice_month ? String(item.expected_invoice_month).padStart(2, '0') + '/' + item.expected_invoice_year : '—' }}</td><td class="p-2">{{ item.invoice ? String(item.invoice.reference_month).padStart(2, '0') + '/' + item.invoice.reference_year : '—' }}</td><td class="p-2 text-right">{{ formatCurrency(item.amount_cents) }}</td><td class="p-2">{{ item.status === 'previous_before_erp' ? 'Não gera contabilidade' : item.status === 'matched' ? 'Fatura conciliada' : item.status === 'divergent' ? 'Revisar valor importado' : item.status === 'possible_match' ? 'Aguardando confirmação do plano' : 'Aguardando fatura' }}</td></tr></tbody></table></div>
                     </article>

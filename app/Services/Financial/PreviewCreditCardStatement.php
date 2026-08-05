@@ -82,10 +82,11 @@ class PreviewCreditCardStatement
                     $query->where('credit_card_id', $card->id)
                         ->orWhereHas('creditCard', fn ($query) => $query->where('parent_card_id', $mainCard->id));
                 })
-                ->where(fn ($query) => $query->where('import_hash', $hash)->orWhere('external_id', $transaction->fitId))
-                ->exists();
+                ->where(fn ($query) => $query->where('import_hash', $hash)
+                    ->when($transaction->fitId, fn ($query) => $query->orWhere('external_id', $transaction->fitId)))
+                ->first();
             $credit = $transaction->direction === 'in';
-            $situation = $duplicateInFile ? 'possible_duplicate' : ($existing ? 'already_imported' : ($credit ? 'credit' : 'new'));
+            $situation = $duplicateInFile ? 'possible_duplicate' : ($existing?->credit_card_invoice_id ? 'already_imported' : ($credit ? 'credit' : 'new'));
             $matches = [];
             if ($installment && $situation === 'new' && $target) {
                 $matches = $this->plans->findMatches(

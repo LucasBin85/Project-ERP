@@ -16,6 +16,7 @@ use App\Models\CreditCardInvoice;
 use App\Models\CreditCardPayment;
 use App\Models\CreditCardTransaction;
 use App\Services\Financial\BulkApplyCreditCardPurchaseSuggestions;
+use App\Services\Financial\ClassifyCreditCardInstallmentPlan;
 use App\Services\Financial\ClassifyCreditCardPurchase;
 use App\Services\Financial\ConfirmCreditCardStatement;
 use App\Services\Financial\CreateCreditCard;
@@ -410,6 +411,22 @@ class CreditCardController extends Controller
         $service->execute($wallet, $transaction, (int) $data['chart_of_account_id']);
 
         return back()->with('success', 'Compra classificada e pronta para contabilidade.');
+    }
+
+    public function classifyInstallmentPlan(
+        Request $request,
+        CreditCard $creditCard,
+        CreditCardInstallmentPlan $installmentPlan,
+        ClassifyCreditCardInstallmentPlan $service,
+    ): RedirectResponse {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $creditCard->wallet_id === (int) $wallet->id
+            && (int) $installmentPlan->wallet_id === (int) $wallet->id
+            && (int) $installmentPlan->main_credit_card_id === (int) $creditCard->id, 404);
+        $data = $request->validate(['classification_account_id' => ['required', 'integer']]);
+        $service->execute($wallet, $installmentPlan, (int) $data['classification_account_id']);
+
+        return back()->with('success', 'Plano classificado no mesmo lançamento contábil.');
     }
 
     public function applyClassificationSuggestion(

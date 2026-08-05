@@ -83,6 +83,14 @@ class ResolveCreditCardInstallmentPlan
         $recognizedFrom = (int) ($decision['recognized_from_installment'] ?? $number);
         $recognizedTo = (int) ($decision['recognized_to_installment'] ?? $total);
         $amounts = $this->amounts($number, $total, (int) $row['amount_cents'], $decision['installments'] ?? []);
+        $providedInstallments = collect($decision['installments'] ?? []);
+        if ($providedInstallments->isNotEmpty() && ($providedInstallments->count() !== $total
+            || $providedInstallments->pluck('installment_number')->unique()->count() !== $total
+            || $providedInstallments->contains(fn ($item) => (int) ($item['amount_cents'] ?? 0) <= 0))) {
+            throw ValidationException::withMessages([
+                'installments' => 'Informe exatamente uma vez cada parcela, com valores maiores que zero.',
+            ]);
+        }
         $recognizedTotal = (int) ($decision['recognized_total_cents'] ?? collect($amounts)
             ->filter(fn ($amount, $installment) => $installment >= $recognizedFrom && $installment <= $recognizedTo)->sum());
         $calculated = (int) collect($amounts)
@@ -96,13 +104,10 @@ class ResolveCreditCardInstallmentPlan
 
         $accountId = isset($decision['classification_account_id']) ? (int) $decision['classification_account_id'] : null;
         $pending = ($decision['action'] ?? null) === 'pending_plan';
-        if (! $pending && ! $accountId) {
-            throw ValidationException::withMessages([
-                'classification_account_id' => 'Selecione uma classificação válida para confirmar o parcelamento.',
-            ]);
-        }
-        if ($accountId && (! $wallet->chartOfAccounts()->whereKey($accountId)->whereIn('type', ['despesa', 'ativo'])
-            ->where('allows_posting', true)->whereDoesntHave('children')->exists()
+        $accountId ??= $pending ? null : (int) $wallet->suspense_account_id;
+        if ($accountId && $accountId !== (int) $wallet->suspense_account_id
+            && (! $wallet->chartOfAccounts()->whereKey($accountId)->whereIn('type', ['despesa', 'ativo'])
+                ->where('allows_posting', true)->whereDoesntHave('children')->exists()
             || $accountId === (int) $mainCard->liability_account_id)) {
             throw ValidationException::withMessages(['classification_account_id' => 'A classificação do parcelamento é inválida.']);
         }
