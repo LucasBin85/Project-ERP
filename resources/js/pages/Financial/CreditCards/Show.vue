@@ -346,7 +346,17 @@ function classifyPlan(plan: Record<string, any>) {
                                 <button type="button" class="mt-1 font-semibold text-indigo-300 hover:text-indigo-200" @click="applySuggestion(item)">Aplicar sugestão</button>
                             </div>
                             <p v-else-if="item.classification_suggestion?.status === 'ambiguous'" class="mb-2 text-xs text-amber-300">Histórico divergente; escolha manualmente.</p>
-                            <span v-if="item.installment_plan_item?.status === 'matched'">Reconhecida no plano</span>
+                            <div v-if="item.installment_plan_item?.status === 'matched' && item.installment_plan_item?.plan?.classification_account_id === wallet.suspense_account_id" class="space-y-2">
+                                <p class="text-xs font-semibold text-amber-300">Plano a classificar</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <select v-model="planClassifications[item.installment_plan_item.plan.id]" class="min-w-48 rounded border border-gray-600 bg-black px-2 py-1.5 text-xs text-white">
+                                        <option value="">Selecione a conta</option>
+                                        <option v-for="account in expenseAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
+                                    </select>
+                                    <button type="button" class="rounded bg-indigo-600 px-2 py-1.5 text-xs font-semibold text-white" @click="classifyPlan(item.installment_plan_item.plan)">Classificar plano</button>
+                                </div>
+                            </div>
+                            <span v-else-if="item.installment_plan_item?.status === 'matched'">Reconhecida no plano</span>
                             <InlineCreditCardClassification v-else-if="item.expense_account_id === wallet.suspense_account_id" :credit-card-id="creditCard.id" :transaction-id="item.id" :accounts="expenseAccounts" />
                             <span v-else>{{ formatAccount(item.expense_account?.code, item.expense_account?.name) }}</span>
                         </td>

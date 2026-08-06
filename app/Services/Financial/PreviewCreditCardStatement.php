@@ -77,16 +77,27 @@ class PreviewCreditCardStatement
             $duplicateInFile = isset($seen[$hash]);
             $seen[$hash] = true;
             $existing = CreditCardTransaction::query()
+                ->with(['creditCardInvoice:id,reference_year,reference_month', 'installmentPlanItem:id,credit_card_purchase_id,installment_number'])
                 ->where('wallet_id', $wallet->id)
                 ->where(function ($query) use ($mainCard, $card) {
                     $query->where('credit_card_id', $card->id)
                         ->orWhereHas('creditCard', fn ($query) => $query->where('parent_card_id', $mainCard->id));
                 })
                 ->where(fn ($query) => $query->where('import_hash', $hash)
-                    ->when($transaction->fitId, fn ($query) => $query->orWhere('external_id', $transaction->fitId)))
+                    ->when($transaction->fitId, fn ($query) => $query->orWhere(fn ($query) => $query
+                        ->where('external_id', $transaction->fitId)
+                        ->whereDate('purchase_date', $transaction->postedAt)
+                        ->where('amount_cents', $transaction->amountCents)
+                        ->where('description', $transaction->description))))
                 ->first();
             $credit = $transaction->direction === 'in';
-            $situation = $duplicateInFile ? 'possible_duplicate' : ($existing?->credit_card_invoice_id ? 'already_imported' : ($credit ? 'credit' : 'new'));
+            $correctInvoice = $existing?->creditCardInvoice
+                && (int) $existing->creditCardInvoice->reference_year === (int) ($target['reference_year'] ?? 0)
+                && (int) $existing->creditCardInvoice->reference_month === (int) ($target['reference_month'] ?? 0);
+            $completeInstallment = ! $installment
+                || ((int) ($existing?->installmentPlanItem?->installment_number ?? 0) === (int) $installmentNumber);
+            $alreadyImported = $correctInvoice && $completeInstallment;
+            $situation = $duplicateInFile ? 'possible_duplicate' : ($alreadyImported ? 'already_imported' : ($credit ? 'credit' : 'new'));
             $matches = [];
             if ($installment && $situation === 'new' && $target) {
                 $matches = $this->plans->findMatches(
@@ -118,6 +129,7 @@ class PreviewCreditCardStatement
                 }
             }
 
+            $behavior = $this->financialBehavior($situation, (bool) $installment);
             $rows[] = [
                 'row_key' => hash('sha256', $fileHash.'|'.$index.'|'.$hash),
                 'index' => $index,
@@ -137,6 +149,7 @@ class PreviewCreditCardStatement
                 'credit_card_id' => $targetCard->id,
                 'credit_card_name' => $targetCard->name,
                 'situation' => $situation,
+                ...$behavior,
                 'default_action' => match ($situation) {
                     'new' => 'create',
                     'installment_matched' => 'link_plan',
@@ -174,7 +187,7 @@ class PreviewCreditCardStatement
             'period_end' => $parsed['period_end'] ?? $parsed['ended_at'] ?? null,
             'rows' => $rows,
             'summary' => [
-                'total_cents' => (int) collect($rows)->where('situation', '!=', 'credit')->sum('amount_cents'),
+                'total_cents' => (int) collect($rows)->where('composes_invoice_total', true)->sum('amount_cents'),
                 'new' => collect($rows)->where('situation', 'new')->count(),
                 'already_imported' => collect($rows)->where('situation', 'already_imported')->count(),
                 'possible_duplicate' => collect($rows)->where('situation', 'possible_duplicate')->count(),
@@ -183,6 +196,34 @@ class PreviewCreditCardStatement
                 'installments_matched' => collect($rows)->where('situation', 'installment_matched')->count(),
                 'ignored' => collect($rows)->where('situation', '!=', 'new')->count(),
             ],
+        ];
+    }
+
+    private function financialBehavior(string $situation, bool $isInstallment): array
+    {
+        $ignored = in_array($situation, ['credit', 'possible_duplicate'], true);
+        $alreadyImported = $situation === 'already_imported';
+        $usesPlan = $isInstallment && in_array($situation, [
+            'installment_matched', 'installment_plan_pending', 'installment_divergent',
+        ], true);
+
+        return [
+            'composes_invoice_total' => ! $ignored,
+            'creates_financial_item' => ! $ignored && ! $alreadyImported,
+            'creates_accounting_recognition' => ! $ignored && ! $alreadyImported && ! $usesPlan,
+            'uses_plan_recognition' => $usesPlan,
+            'ignored' => $ignored,
+            'reason' => match ($situation) {
+                'credit' => 'Crédito ou pagamento não compõe o total das compras da fatura.',
+                'possible_duplicate' => 'Linha duplicada no mesmo arquivo.',
+                'already_imported' => 'Item financeiro já vinculado à fatura alvo.',
+                'installment_matched' => 'Parcela usa o reconhecimento contábil do plano existente.',
+                'installment_plan_pending' => 'Parcela será vinculada ao plano pendente de confirmação.',
+                'installment_divergent' => 'Parcela requer conciliação com o plano existente.',
+                default => $isInstallment
+                    ? 'Parcela compõe a fatura e requer resolução do plano.'
+                    : 'Compra compõe a fatura e gera reconhecimento contábil.',
+            },
         ];
     }
 

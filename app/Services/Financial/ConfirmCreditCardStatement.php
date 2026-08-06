@@ -73,17 +73,26 @@ class ConfirmCreditCardStatement
                 $targetCardId = in_array((int) ($row['credit_card_id'] ?? 0), $familyCardIds, true)
                     ? (int) $row['credit_card_id']
                     : $mainCard->id;
+                $transaction = $parsed['transactions'][$row['index']];
+                $isInstallment = (int) $row['installments_total'] > 1;
                 $existingPurchase = CreditCardTransaction::query()->whereIn('credit_card_id', $familyCardIds)
                     ->where(fn ($query) => $query->where('import_hash', $row['import_hash'])
-                        ->when($row['external_id'], fn ($query) => $query->orWhere('external_id', $row['external_id'])))->first();
-                if ($existingPurchase?->credit_card_invoice_id || ($existingPurchase && (int) $row['installments_total'] <= 1)) {
+                        ->when($row['external_id'], fn ($query) => $query->orWhere(fn ($query) => $query
+                            ->where('external_id', $row['external_id'])
+                            ->whereDate('purchase_date', $transaction->postedAt)
+                            ->where('amount_cents', $transaction->amountCents)
+                            ->where('description', $transaction->description))))
+                    ->with('installmentPlanItem:id,credit_card_purchase_id,installment_number')
+                    ->first();
+                $completePurchase = (int) ($existingPurchase?->credit_card_invoice_id ?? 0) === (int) $invoice->id
+                    && (! $isInstallment
+                        || (int) ($existingPurchase?->installmentPlanItem?->installment_number ?? 0) === (int) $row['installment_number']);
+                if ($completePurchase) {
                     $ignored++;
 
                     continue;
                 }
 
-                $transaction = $parsed['transactions'][$row['index']];
-                $isInstallment = (int) $row['installments_total'] > 1;
                 if ($isInstallment && ! in_array($action, ['confirm_plan', 'pending_plan', 'link_plan', 'link_pending_plan', 'reconcile_divergence', 'normal'], true)) {
                     throw ValidationException::withMessages([
                         'installments' => 'Resolva todos os parcelamentos detectados antes de confirmar a importação.',
@@ -169,9 +178,32 @@ class ConfirmCreditCardStatement
                 $created++;
             }
 
-            $this->invoices->refreshTotals($invoice);
+            $invoice = $this->invoices->refreshTotals($invoice);
+            $previewHashes = collect($preview['rows'])
+                ->where('composes_invoice_total', true)
+                ->pluck('import_hash');
+            $unrepresentedTotal = (int) $invoice->transactions()
+                ->whereIn('status', ['draft', 'posted'])
+                ->whereNotIn('import_hash', $previewHashes)
+                ->sum('amount_cents');
+            $expectedTotal = $unrepresentedTotal + (int) collect($preview['rows'])
+                ->where('composes_invoice_total', true)
+                ->sum('amount_cents');
+            $missingItems = collect($preview['rows'])
+                ->where('creates_financial_item', true)
+                ->contains(fn (array $row) => ! CreditCardTransaction::query()
+                    ->where('wallet_id', $wallet->id)
+                    ->where('credit_card_invoice_id', $invoice->id)
+                    ->where('import_hash', $row['import_hash'])
+                    ->exists());
 
-            return ['created' => $created, 'ignored' => $ignored];
+            if ($missingItems || (int) $invoice->total_cents !== $expectedTotal) {
+                throw ValidationException::withMessages([
+                    'statement_import' => 'A importação não foi concluída porque o total confirmado diverge da prévia.',
+                ]);
+            }
+
+            return ['created' => $created, 'ignored' => $ignored, 'total_cents' => (int) $invoice->total_cents];
         });
     }
 }

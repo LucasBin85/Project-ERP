@@ -242,6 +242,69 @@ it('matches the next invoice installment without a new plan or expense entry', f
         ->and(CreditCardTransaction::query()->count())->toBe(2);
 });
 
+it('persists every Nubank invoice item and preserves the exact preview total on reimport', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $expense = ChartOfAccount::query()->where('wallet_id', $wallet->id)
+        ->where('type', 'despesa')->where('allows_posting', true)->whereDoesntHave('children')->firstOrFail();
+    $firstCsv = "date,title,amount\n2026-06-05,Havan Guaiba Parcela 1/5,19.99\n2026-06-06,Munhoz Pneus Parcela 1/3,262.66\n";
+    $first = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $firstCsv, 'fatura_2026-06-08.csv');
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $first, $firstCsv, 'fatura_2026-06-08.csv', collect($first['rows'])->map(fn (array $row) => [
+        'row_key' => $row['row_key'],
+        'action' => 'confirm_plan',
+        'classification_account_id' => $expense->id,
+    ])->all());
+
+    $csv = "date,title,amount\n"
+        ."2026-07-02,Outras compras,1162.51\n"
+        ."2026-07-03,Munhoz Pneus Parcela 2/3,262.66\n"
+        ."2026-07-04,Havan Guaiba Parcela 2/5,19.99\n"
+        ."2026-07-05,IOF de compra internacional,3.73\n"
+        ."2026-07-06,Pagamento recebido,1605.09\n";
+    $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura_2026-07-08.csv');
+
+    expect($preview['summary']['total_cents'])->toBe(144889)
+        ->and(collect($preview['rows'])->firstWhere('description', 'Munhoz Pneus Parcela 2/3')['uses_plan_recognition'])->toBeTrue()
+        ->and(collect($preview['rows'])->firstWhere('description', 'Havan Guaiba Parcela 2/5')['creates_financial_item'])->toBeTrue()
+        ->and(collect($preview['rows'])->firstWhere('description', 'IOF de compra internacional')['creates_accounting_recognition'])->toBeTrue()
+        ->and(collect($preview['rows'])->firstWhere('description', 'Pagamento recebido')['ignored'])->toBeTrue();
+
+    $decisions = collect($preview['rows'])->map(function (array $row) {
+        return [
+            'row_key' => $row['row_key'],
+            'action' => match ($row['situation']) {
+                'new' => 'create',
+                'installment_matched' => 'link_plan',
+                default => 'ignore',
+            },
+            'plan_id' => data_get($row, 'installment_plan_matches.0.id'),
+        ];
+    })->all();
+    $result = app(ConfirmCreditCardStatement::class)->execute(
+        $wallet, $card, $preview, $csv, 'fatura_2026-07-08.csv', $decisions
+    );
+
+    $invoice = \App\Models\CreditCardInvoice::query()->where('reference_year', 2026)->where('reference_month', 7)->firstOrFail();
+    expect($result['total_cents'])->toBe(144889)
+        ->and($invoice->total_cents)->toBe(144889)
+        ->and($invoice->transactions)->toHaveCount(4)
+        ->and(CreditCardInstallmentPlan::query()->count())->toBe(2)
+        ->and(JournalEntry::query()->count())->toBe(4)
+        ->and(CreditCardTransaction::query()->where('description', 'IOF de compra internacional')->value('journal_entry_id'))->not->toBeNull()
+        ->and(CreditCardTransaction::query()->where('description', 'Munhoz Pneus Parcela 2/3')->firstOrFail()->installmentPlanItem)->not->toBeNull()
+        ->and(CreditCardTransaction::query()->where('description', 'Havan Guaiba Parcela 2/5')->firstOrFail()->installmentPlanItem)->not->toBeNull();
+
+    $reimport = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura_2026-07-08.csv');
+    expect($reimport['summary']['total_cents'])->toBe(144889)
+        ->and(collect($reimport['rows'])->where('situation', 'already_imported'))->toHaveCount(4);
+    app(ConfirmCreditCardStatement::class)->execute(
+        $wallet, $card, $reimport, $csv, 'fatura_2026-07-08.csv',
+        collect($reimport['rows'])->map(fn (array $row) => ['row_key' => $row['row_key'], 'action' => 'ignore'])->all(),
+    );
+    expect($invoice->fresh()->total_cents)->toBe(144889)
+        ->and($invoice->transactions()->count())->toBe(4)
+        ->and(JournalEntry::query()->count())->toBe(4);
+});
+
 it('links a divergent expected installment for review without a new plan or journal entry', function () {
     ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
     $expense = ChartOfAccount::query()->where('wallet_id', $wallet->id)
@@ -346,6 +409,38 @@ it('confirms statement purchases as deduplicated drafts without moving a bank ac
     $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $purchase->journal_entry_id, 'chart_of_account_id' => $suspense->id, 'type' => 'debit', 'amount_cents' => 10001]);
     $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $purchase->journal_entry_id, 'chart_of_account_id' => $card->liability_account_id, 'type' => 'credit', 'amount_cents' => 10001]);
     expect(app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura_2026-06-08.csv')['summary']['already_imported'])->toBe(1);
+});
+
+it('does not deduplicate distinct card charges that share an external identifier', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $ofx = '<OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS><CURDEF>BRL<CCACCTFROM><ACCTID>1234</CCACCTFROM><BANKTRANLIST><DTSTART>20260601<DTEND>20260630'
+        .'<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260605<TRNAMT>-100.00<FITID>shared-id<NAME>Compra internacional</STMTTRN>'
+        .'<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260605<TRNAMT>-3.73<FITID>shared-id<NAME>IOF de compra internacional</STMTTRN>'
+        .'</BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>';
+    $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $ofx, 'fatura_2026-06-08.ofx');
+    expect($preview['summary']['new'])->toBe(2)->and($preview['summary']['total_cents'])->toBe(10373);
+
+    app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $preview, $ofx, 'fatura_2026-06-08.ofx', collect($preview['rows'])
+        ->map(fn (array $row) => ['row_key' => $row['row_key'], 'action' => 'create'])->all());
+
+    expect(CreditCardTransaction::query()->count())->toBe(2)
+        ->and(JournalEntry::query()->count())->toBe(2)
+        ->and(\App\Models\CreditCardInvoice::query()->value('total_cents'))->toBe(10373);
+});
+
+it('rolls back confirmation when its persisted total diverges from the preview', function () {
+    ['wallet' => $wallet, 'card' => $card] = creditCardImportContext();
+    $csv = "date,title,amount\n2026-06-05,Compra Sanitizada,100.01\n";
+    $preview = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $csv, 'fatura_2026-06-08.csv');
+    $preview['rows'][0]['amount_cents'] = 10002;
+
+    expect(fn () => app(ConfirmCreditCardStatement::class)->execute(
+        $wallet, $card, $preview, $csv, 'fatura_2026-06-08.csv',
+        [['row_key' => $preview['rows'][0]['row_key'], 'action' => 'create']],
+    ))->toThrow(\Illuminate\Validation\ValidationException::class, 'total confirmado diverge da prévia');
+    expect(CreditCardTransaction::query()->count())->toBe(0)
+        ->and(JournalEntry::query()->count())->toBe(0)
+        ->and(\App\Models\CreditCardInvoice::query()->count())->toBe(0);
 });
 
 it('classifies only the suspense debit and makes the credit card purchase ready for accounting', function () {
