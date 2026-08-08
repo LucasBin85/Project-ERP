@@ -187,7 +187,7 @@ class CreditCardController extends Controller
         $invoices = CreditCardInvoice::query()
             ->where('wallet_id', $wallet->id)
             ->where('credit_card_id', $creditCard->id)
-            ->withCount(['transactions', 'payments'])
+            ->withCount(['transactions', 'payments', 'installmentPlanItems'])
             ->orderByDesc('reference_year')
             ->orderByDesc('reference_month')
             ->limit(12)
@@ -244,6 +244,26 @@ class CreditCardController extends Controller
             ->whereHas('plan', fn ($query) => $query->where('wallet_id', $wallet->id)
                 ->where('main_credit_card_id', $creditCard->id)->whereIn('status', ['active', 'ambiguous']))
             ->whereIn('status', ['expected', 'adjusted'])->sum('amount_cents');
+        $generalTransactions = $transactions->filter(fn (CreditCardTransaction $transaction) => ! $transaction->installmentPlanItem)->values();
+        $cardEntries = $generalTransactions->map(fn (CreditCardTransaction $transaction) => [
+            'kind' => 'purchase', 'id' => $transaction->id, 'date' => $transaction->purchase_date,
+            'description' => $transaction->description, 'type' => 'Compra normal',
+            'classification_account_id' => $transaction->expense_account_id,
+            'classification_account' => $transaction->expenseAccount,
+            'journal_entry_id' => $transaction->journal_entry_id, 'journal_entry' => $transaction->journalEntry,
+            'amount_cents' => $transaction->amount_cents, 'classification_suggestion' => $transaction->classification_suggestion,
+        ])->concat($installmentPlans->map(fn (CreditCardInstallmentPlan $plan) => [
+            'kind' => 'installment_plan', 'id' => $plan->id, 'date' => $plan->recognition_date,
+            'description' => $plan->description_base, 'type' => 'Parcelado '.$plan->total_installments.'x',
+            'classification_account_id' => $plan->classification_account_id,
+            'classification_account' => $plan->classificationAccount,
+            'journal_entry_id' => $plan->recognition_journal_entry_id, 'journal_entry' => $plan->recognitionJournalEntry,
+            'amount_cents' => $plan->recognized_total_cents, 'total_installments' => $plan->total_installments,
+        ]))->sortByDesc('date')->values();
+        $pendingEntries = $cardEntries->filter(fn (array $entry) => ! $entry['classification_account_id']
+            || (int) $entry['classification_account_id'] === (int) $wallet->suspense_account_id);
+        $classifiedEntries = $cardEntries->reject(fn (array $entry) => ! $entry['classification_account_id']
+            || (int) $entry['classification_account_id'] === (int) $wallet->suspense_account_id);
 
         return Inertia::render('Financial/CreditCards/Show', [
             'wallet' => [
@@ -257,24 +277,53 @@ class CreditCardController extends Controller
             'summary' => [
                 'current_balance_cents' => $currentBalance,
                 'future_installments_cents' => $futureInstallments,
-                'used_limit_cents' => $currentBalance,
-                'available_limit_cents' => $creditCard->credit_limit_cents - $currentBalance,
+                'used_limit_cents' => $currentBalance + $futureInstallments,
+                'available_limit_cents' => $creditCard->credit_limit_cents - $currentBalance - $futureInstallments,
             ],
             'installmentPlans' => $installmentPlans,
             'purchaseClassificationSummary' => [
-                'total_count' => $transactions->count(),
-                'total_cents' => (int) $transactions->sum('amount_cents'),
-                'classified_count' => $classifiedTransactions->count(),
-                'classified_cents' => (int) $classifiedTransactions->sum('amount_cents'),
-                'pending_count' => $pendingTransactions->count(),
-                'pending_cents' => (int) $pendingTransactions->sum('amount_cents'),
+                'total_count' => $cardEntries->count(),
+                'total_cents' => (int) $cardEntries->sum('amount_cents'),
+                'classified_count' => $classifiedEntries->count(),
+                'classified_cents' => (int) $classifiedEntries->sum('amount_cents'),
+                'pending_count' => $pendingEntries->count(),
+                'pending_cents' => (int) $pendingEntries->sum('amount_cents'),
                 'high_confidence_count' => $pendingTransactions->filter(fn (CreditCardTransaction $transaction) => ($transaction->classification_suggestion['can_bulk_apply'] ?? false))->count(),
             ],
             'invoices' => $invoices,
             'transactions' => $transactions,
+            'cardEntries' => $cardEntries,
             'payments' => $payments,
             'expenseAccounts' => $this->expenseAccounts($wallet->id),
             'creditCardStatementPreview' => $request->session()->get('credit_card_statement_preview'),
+        ]);
+    }
+
+    public function showInvoice(Request $request, CreditCard $creditCard, CreditCardInvoice $invoice): Response
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $creditCard->wallet_id === (int) $wallet->id && ! $creditCard->parent_card_id
+            && (int) $invoice->wallet_id === (int) $wallet->id && (int) $invoice->credit_card_id === (int) $creditCard->id, 404);
+        $invoice->load([
+            'transactions' => fn ($query) => $query->with(['creditCard:id,name,last_four', 'expenseAccount:id,code,name', 'journalEntry:id,status'])->orderBy('purchase_date'),
+            'installmentPlanItems' => fn ($query) => $query->with(['plan:id,description_base,total_installments,recognition_journal_entry_id'])->orderBy('installment_number'),
+            'payments.bankAccount:id,name,bank_name', 'payments.journalEntry:id,status',
+        ]);
+
+        return Inertia::render('Financial/CreditCards/InvoiceShow', compact('creditCard', 'invoice'));
+    }
+
+    public function showInstallmentPlan(Request $request, CreditCard $creditCard, CreditCardInstallmentPlan $installmentPlan): Response
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless((int) $creditCard->wallet_id === (int) $wallet->id && ! $creditCard->parent_card_id
+            && (int) $installmentPlan->wallet_id === (int) $wallet->id
+            && (int) $installmentPlan->main_credit_card_id === (int) $creditCard->id, 404);
+        $installmentPlan->load(['classificationAccount:id,code,name', 'recognitionJournalEntry:id,status',
+            'items' => fn ($query) => $query->with('invoice:id,reference_year,reference_month,status')->orderBy('installment_number')]);
+
+        return Inertia::render('Financial/CreditCards/InstallmentPlanShow', [
+            'creditCard' => $creditCard, 'plan' => $installmentPlan,
         ]);
     }
 

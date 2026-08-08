@@ -13,7 +13,10 @@ use Illuminate\Validation\ValidationException;
 
 class ResolveCreditCardInstallmentPlan
 {
-    public function __construct(private readonly CreateJournalEntry $journalEntries) {}
+    public function __construct(
+        private readonly CreateJournalEntry $journalEntries,
+        private readonly ResolveCreditCardInvoice $invoices,
+    ) {}
 
     public function findMatches(
         Wallet $wallet,
@@ -150,17 +153,23 @@ class ResolveCreditCardInstallmentPlan
             $expected = $reference->addMonths($installment - $number);
             $previous = $installment < $number;
             $current = $installment === $number;
+            $targetInvoice = $previous
+                ? null
+                : ($current ? $invoice : $this->invoices->predictedForReference($wallet, $mainCard, $expected->year, $expected->month));
             $plan->items()->create([
                 'installment_number' => $installment,
                 'amount_cents' => $amount,
                 'expected_invoice_year' => $previous ? null : $expected->year,
                 'expected_invoice_month' => $previous ? null : $expected->month,
-                'credit_card_invoice_id' => $current ? $invoice->id : null,
+                'credit_card_invoice_id' => $targetInvoice?->id,
                 'credit_card_purchase_id' => $current ? $purchase->id : null,
                 'status' => $previous ? 'previous_before_erp' : ($current ? 'matched' : 'expected'),
                 'source' => $current ? ($decision['source'] ?? 'statement') : 'plan',
                 'matched_at' => $current ? now() : null,
             ]);
+            if ($targetInvoice?->is_projection) {
+                $this->invoices->refreshTotals($targetInvoice);
+            }
         }
         $purchase->update(['journal_entry_id' => $entry?->id ?? $purchase->journal_entry_id, 'expense_account_id' => $accountId ?? $wallet->suspense_account_id]);
 

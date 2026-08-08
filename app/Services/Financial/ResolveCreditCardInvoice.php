@@ -26,6 +26,28 @@ class ResolveCreditCardInvoice
         return $this->forDates($wallet, $mainCard, $this->cycles->forReference($mainCard, $year, $month, $nominalDueDate));
     }
 
+    public function predictedForReference(Wallet $wallet, CreditCard $card, int $year, int $month): CreditCardInvoice
+    {
+        $invoice = $this->forReference($wallet, $card, $year, $month);
+
+        if (! $invoice->imported_at && ! $invoice->transactions()->exists()) {
+            $invoice->update(['is_projection' => true, 'status' => 'predicted']);
+        }
+
+        return $invoice->fresh();
+    }
+
+    public function markImported(CreditCardInvoice $invoice): CreditCardInvoice
+    {
+        $invoice->update([
+            'is_projection' => false,
+            'imported_at' => $invoice->imported_at ?? now(),
+            'status' => 'open',
+        ]);
+
+        return $invoice->fresh();
+    }
+
     private function forDates(Wallet $wallet, CreditCard $mainCard, array $dates): CreditCardInvoice
     {
         $invoice = CreditCardInvoice::query()->firstOrCreate(
@@ -59,6 +81,22 @@ class ResolveCreditCardInvoice
 
     public function refreshTotals(CreditCardInvoice $invoice): CreditCardInvoice
     {
+        if ($invoice->is_projection) {
+            $total = (int) $invoice->installmentPlanItems()
+                ->whereIn('status', ['expected', 'adjusted', 'possible_match', 'divergent'])
+                ->sum('amount_cents');
+            $invoice->update([
+                'total_cents' => $total,
+                'paid_cents' => 0,
+                'balance_cents' => $total,
+                'status' => 'predicted',
+                'closed_at' => null,
+                'paid_at' => null,
+            ]);
+
+            return $invoice->fresh(['transactions', 'payments']);
+        }
+
         $total = (int) $invoice->transactions()
             ->whereIn('status', ['draft', 'posted'])
             ->sum('amount_cents');

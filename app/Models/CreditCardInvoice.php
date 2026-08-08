@@ -21,6 +21,8 @@ class CreditCardInvoice extends Model
         'paid_cents',
         'balance_cents',
         'status',
+        'is_projection',
+        'imported_at',
         'closed_at',
         'paid_at',
         'notes',
@@ -38,6 +40,8 @@ class CreditCardInvoice extends Model
         'balance_cents' => 'integer',
         'closed_at' => 'datetime',
         'paid_at' => 'datetime',
+        'is_projection' => 'boolean',
+        'imported_at' => 'datetime',
     ];
 
     public function wallet(): BelongsTo
@@ -58,5 +62,10 @@ class CreditCardInvoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(CreditCardPayment::class);
+    }
+
+    public function installmentPlanItems(): HasMany
+    {
+        return $this->hasMany(CreditCardInstallmentPlanItem::class);
     }
 }

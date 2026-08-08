@@ -45,6 +45,7 @@ export function formatStatus(status?: string | null): string {
     const statuses: Record<string, string> = {
         active: 'Ativo',
         open: 'Aberta',
+        predicted: 'Prevista',
         closed: 'Fechada',
         partial: 'Parcial',
         overdue: 'Vencida',

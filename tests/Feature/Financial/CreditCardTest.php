@@ -397,10 +397,12 @@ it('splits a credit card purchase into installments across monthly invoices', fu
         ->orderBy('reference_month')
         ->get();
 
-    expect($invoices)->toHaveCount(1)
-        ->and($invoices->pluck('reference_month')->all())->toBe([8])
-        ->and($invoices->pluck('total_cents')->all())->toBe([30000])
-        ->and($invoices->pluck('balance_cents')->all())->toBe([30000]);
+    expect($invoices)->toHaveCount(3)
+        ->and($invoices->pluck('reference_month')->all())->toBe([8, 9, 10])
+        ->and($invoices->pluck('total_cents')->all())->toBe([30000, 30000, 30000])
+        ->and($invoices->pluck('balance_cents')->all())->toBe([30000, 30000, 30000])
+        ->and($invoices->pluck('status')->all())->toBe(['closed', 'predicted', 'predicted'])
+        ->and($invoices->pluck('is_projection')->all())->toBe([false, true, true]);
 });
 
 it('creates a draft journal entry when paying a specific credit card invoice', function () {

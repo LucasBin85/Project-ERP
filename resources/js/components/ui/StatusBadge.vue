@@ -16,6 +16,7 @@ const classes: Record<string, string> = {
     paid: 'bg-green-950 text-green-300',
     received: 'bg-green-950 text-green-300',
     open: 'bg-blue-950 text-blue-300',
+    predicted: 'bg-cyan-950 text-cyan-300',
     closed: 'bg-yellow-950 text-yellow-300',
     partial: 'bg-purple-950 text-purple-300',
     overdue: 'bg-red-950 text-red-300',

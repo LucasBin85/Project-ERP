@@ -55,6 +55,7 @@ class ConfirmCreditCardStatement
                 ? ($detectedTarget['nominal_due_at'] ?? null)
                 : null;
             $invoice = $this->invoices->forReference($wallet, $mainCard, $targetYear, $targetMonth, $nominalDueDate);
+            $invoice = $this->invoices->markImported($invoice);
             $decisionMap = collect($decisions)->keyBy('row_key');
             $created = 0;
             $ignored = 0;

@@ -638,8 +638,8 @@ it('renders installment amounts as BRL fields inside a review modal instead of r
         ->toContain('Valor reconhecido:')
         ->toContain('Valor futuro:')
         ->toContain('Fatura vinculada')
-        ->toContain('Reconhecida no plano')
-        ->toContain('Classificar plano')
-        ->toContain('Plano a classificar')
-        ->toContain('Já faturado:');
+        ->toContain('Lançamentos do cartão')
+        ->toContain('Ver parcelas')
+        ->toContain('A classificar')
+        ->toContain("item.kind === 'installment_plan'");
 });

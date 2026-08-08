@@ -22,6 +22,7 @@ const props = defineProps<{
     purchaseClassificationSummary: Record<string, number>;
     invoices: Array<Record<string, any>>;
     transactions: Array<Record<string, any>>;
+    cardEntries: Array<Record<string, any>>;
     payments: Array<Record<string, any>>;
     installmentPlans: Array<Record<string, any>>;
     expenseAccounts: Array<Record<string, any>>;
@@ -32,8 +33,8 @@ const transaction = useCreditCardTransactionForm(props.creditCard.id);
 const classificationFilter = ref('all');
 const bulkForm = useForm({ transaction_ids: [] as number[] });
 const planClassifications = ref<Record<number, number | string>>({});
-const filteredTransactions = computed(() => props.transactions.filter((item) => {
-    const pending = Number(item.expense_account_id) === Number(props.wallet.suspense_account_id);
+const filteredTransactions = computed(() => props.cardEntries.filter((item) => {
+    const pending = !item.classification_account_id || Number(item.classification_account_id) === Number(props.wallet.suspense_account_id);
     if (classificationFilter.value === 'unclassified') return pending && item.journal_entry?.status === 'draft';
     if (classificationFilter.value === 'classified') return !pending;
     if (classificationFilter.value === 'ready') return !pending && item.journal_entry?.status === 'draft';
@@ -91,7 +92,7 @@ function classifyPlan(plan: Record<string, any>) {
 
             <CreditCardStatementImport :credit-card-id="creditCard.id" :preview="creditCardStatementPreview" :expense-accounts="expenseAccounts" />
 
-            <ReportSection>
+            <ReportSection v-if="false">
                 <template #header>
                     <div><h2 class="text-lg font-bold text-white">Parcelamentos do cartão</h2><p class="text-sm text-gray-400">Planos reconhecidos uma única vez na contabilidade e conciliados nas faturas.</p></div>
                 </template>
@@ -184,7 +185,7 @@ function classifyPlan(plan: Record<string, any>) {
                         </tr>
                     </template>
 
-                    <tr v-for="invoice in invoices" :key="invoice.id" class="hover:bg-gray-800/50">
+                    <tr v-for="invoice in invoices" :key="invoice.id" class="cursor-pointer hover:bg-gray-800/50" @click="router.visit(route('credit-cards.invoices.show', [creditCard.id, invoice.id]))">
                         <td class="whitespace-nowrap px-4 py-3 text-sm font-semibold text-white">{{ invoiceLabel(invoice) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(invoice.starts_at) }} até {{ formatDate(invoice.closes_at) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
@@ -196,7 +197,7 @@ function classifyPlan(plan: Record<string, any>) {
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">{{ formatCurrency(invoice.total_cents) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-green-300">{{ formatCurrency(invoice.paid_cents) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-yellow-300">{{ formatCurrency(invoice.balance_cents) }}</td>
-                        <td class="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-300">{{ invoice.transactions_count }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-300">{{ invoice.is_projection ? invoice.installment_plan_items_count : invoice.transactions_count }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-sm"><StatusBadge :status="invoice.status" /></td>
                     </tr>
                 </ReportTable>
@@ -288,8 +289,8 @@ function classifyPlan(plan: Record<string, any>) {
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">Lançamentos da fatura</h2>
-                        <p class="text-sm text-gray-400">Compras à vista e parcelas do cartão principal, adicionais e virtuais.</p>
+                        <h2 class="text-lg font-bold text-white">Lançamentos do cartão</h2>
+                        <p class="text-sm text-gray-400">Fatos gerais do cartão. Cada parcelamento aparece uma única vez pelo valor reconhecido.</p>
                     </div>
                 </template>
 
@@ -310,58 +311,32 @@ function classifyPlan(plan: Record<string, any>) {
                         Aplicar sugestões seguras ({{ highConfidenceIds.length }})
                     </button>
                 </div>
-                <ReportTable :empty="filteredTransactions.length === 0" empty-message="Nenhuma compra para este filtro." :empty-colspan="9">
+                <ReportTable :empty="filteredTransactions.length === 0" empty-message="Nenhum lançamento para este filtro." :empty-colspan="8">
                     <template #head>
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Data</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Fatura</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Cartão</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Estabelecimento</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Despesa</th>
-                            <th class="px-4 py-3 text-center text-xs font-bold uppercase text-gray-400">Parcela</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Tipo</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Classificação</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Parcelamento</th>
                             <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Valor</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Status</th>
                             <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Lançamento</th>
                         </tr>
                     </template>
 
                     <tr v-for="item in filteredTransactions" :key="item.id" class="hover:bg-gray-800/50">
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(item.purchase_date) }}</td>
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
-                            <span v-if="item.credit_card_invoice">
-                                {{ String(item.credit_card_invoice.reference_month).padStart(2, '0') }}/{{ item.credit_card_invoice.reference_year }}
-                            </span>
-                            <span v-else>-</span>
-                        </td>
-                        <td class="px-4 py-3 text-sm text-gray-300">
-                            {{ item.credit_card?.name ?? '-' }}
-                            <span v-if="item.credit_card?.last_four" class="text-xs text-gray-500">•••• {{ item.credit_card.last_four }}</span>
-                        </td>
-                        <td class="px-4 py-3 text-sm font-semibold text-white">{{ item.merchant_name }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">{{ formatDate(item.date) }}</td>
                         <td class="px-4 py-3 text-sm text-gray-300">{{ item.description }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300">{{ item.type }}</td>
                         <td class="px-4 py-3 text-sm text-gray-400">
-                            <div v-if="item.classification_suggestion?.status === 'suggested'" class="mb-2 rounded border border-indigo-500/30 bg-indigo-950/30 p-2 text-xs">
-                                <p class="font-semibold text-indigo-200">{{ item.classification_suggestion.target_label }}</p>
-                                <p class="text-gray-400">{{ item.classification_suggestion.history_count }} ocorrência(s) · confiança {{ item.classification_suggestion.confidence === 'high' ? 'alta' : 'média' }}</p>
-                                <button type="button" class="mt-1 font-semibold text-indigo-300 hover:text-indigo-200" @click="applySuggestion(item)">Aplicar sugestão</button>
-                            </div>
-                            <p v-else-if="item.classification_suggestion?.status === 'ambiguous'" class="mb-2 text-xs text-amber-300">Histórico divergente; escolha manualmente.</p>
-                            <div v-if="item.installment_plan_item?.status === 'matched' && item.installment_plan_item?.plan?.classification_account_id === wallet.suspense_account_id" class="space-y-2">
-                                <p class="text-xs font-semibold text-amber-300">Plano a classificar</p>
-                                <div class="flex flex-wrap gap-2">
-                                    <select v-model="planClassifications[item.installment_plan_item.plan.id]" class="min-w-48 rounded border border-gray-600 bg-black px-2 py-1.5 text-xs text-white">
-                                        <option value="">Selecione a conta</option>
-                                        <option v-for="account in expenseAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
-                                    </select>
-                                    <button type="button" class="rounded bg-indigo-600 px-2 py-1.5 text-xs font-semibold text-white" @click="classifyPlan(item.installment_plan_item.plan)">Classificar plano</button>
-                                </div>
-                            </div>
-                            <span v-else-if="item.installment_plan_item?.status === 'matched'">Reconhecida no plano</span>
-                            <InlineCreditCardClassification v-else-if="item.expense_account_id === wallet.suspense_account_id" :credit-card-id="creditCard.id" :transaction-id="item.id" :accounts="expenseAccounts" />
-                            <span v-else>{{ formatAccount(item.expense_account?.code, item.expense_account?.name) }}</span>
+                            <select v-if="item.kind === 'installment_plan' && item.journal_entry?.status === 'draft'" v-model="planClassifications[item.id]" class="min-w-48 rounded border border-gray-600 bg-black px-2 py-1.5 text-xs text-white" @change="classifyPlan(item)"><option value="">A classificar</option><option v-for="account in expenseAccounts" :key="account.id" :value="account.id">{{ account.label }}</option></select>
+                            <InlineCreditCardClassification v-else-if="item.kind === 'purchase' && item.classification_account_id === wallet.suspense_account_id && item.journal_entry?.status === 'draft'" :credit-card-id="creditCard.id" :transaction-id="item.id" :accounts="expenseAccounts" />
+                            <span v-else>{{ item.classification_account ? formatAccount(item.classification_account.code, item.classification_account.name) : 'A classificar' }}</span>
                         </td>
-                        <td class="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-300">{{ item.installment_number }}/{{ item.installments_total }}</td>
+                        <td class="px-4 py-3 text-sm"><Link v-if="item.kind === 'installment_plan'" :href="route('credit-cards.installment-plans.show', [creditCard.id, item.id])" class="font-semibold text-indigo-300">Ver parcelas</Link><span v-else>—</span></td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-red-300">{{ formatCurrency(item.amount_cents) }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300">{{ item.journal_entry?.status === 'posted' ? 'Contabilizado' : item.classification_account_id === wallet.suspense_account_id ? 'A classificar' : 'Draft' }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
                             <Link v-if="item.journal_entry_id" :href="route('journal-entries.show', [item.journal_entry_id])" class="inline-flex items-center rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-medium text-gray-200 transition hover:bg-gray-700">
                                 JE-{{ String(item.journal_entry_id).padStart(6, '0') }}
