@@ -36,18 +36,19 @@ class ClassifyCreditCardPurchase
             $account = $this->validateAccount->execute($wallet, $accountId);
             $mainCard = $transaction->creditCard()->with('parentCard')->firstOrFail();
             $liabilityAccountId = (int) ($mainCard->parentCard?->liability_account_id ?? $mainCard->liability_account_id);
-            $suspenseLine = $entry->lines->first(fn (JournalLine $line) => $line->type === 'debit'
-                && (int) $line->chart_of_account_id === (int) $wallet->suspense_account_id);
+            $debitLines = $entry->lines->filter(fn (JournalLine $line) => $line->type === 'debit');
+            $classificationLine = $debitLines->count() === 1 ? $debitLines->first() : null;
             $liabilityLine = $entry->lines->first(fn (JournalLine $line) => $line->type === 'credit'
                 && (int) $line->chart_of_account_id === $liabilityAccountId);
 
-            if (! $suspenseLine || ! $liabilityLine || (int) $suspenseLine->amount_cents !== (int) $liabilityLine->amount_cents) {
+            if (! $classificationLine || ! $liabilityLine
+                || (int) $classificationLine->amount_cents !== (int) $liabilityLine->amount_cents) {
                 throw ValidationException::withMessages([
                     'transaction' => 'O lançamento da compra não possui a estrutura contábil esperada para classificação.',
                 ]);
             }
 
-            $suspenseLine->update([
+            $classificationLine->update([
                 'chart_of_account_id' => $account->id,
                 'memo' => 'Classificação da compra no cartão',
             ]);

@@ -141,7 +141,6 @@ it('recognizes an in-progress installment plan once and keeps previous and futur
         $wallet, $card, $preview, $csv, 'fatura_2026-07-08.csv',
         [[
             'row_key' => $row['row_key'], 'action' => 'confirm_plan',
-            'classification_account_id' => $expense->id,
             'recognized_total_cents' => 7996,
             'installments' => collect(range(1, 5))->map(fn ($number) => [
                 'installment_number' => $number, 'amount_cents' => 1999,
@@ -158,7 +157,7 @@ it('recognizes an in-progress installment plan once and keeps previous and futur
         ->and($plan->items->firstWhere('installment_number', 2)->status)->toBe('matched')
         ->and($plan->items->firstWhere('installment_number', 3)->status)->toBe('expected')
         ->and(JournalEntry::query()->count())->toBe(1);
-    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $plan->recognition_journal_entry_id, 'chart_of_account_id' => $expense->id, 'type' => 'debit', 'amount_cents' => 7996]);
+    $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $plan->recognition_journal_entry_id, 'chart_of_account_id' => $wallet->suspense_account_id, 'type' => 'debit', 'amount_cents' => 7996]);
     $this->assertDatabaseHas('journal_lines', ['journal_entry_id' => $plan->recognition_journal_entry_id, 'chart_of_account_id' => $card->liability_account_id, 'type' => 'credit', 'amount_cents' => 7996]);
 });
 
@@ -204,8 +203,10 @@ it('matches the next invoice installment without a new plan or expense entry', f
     $first = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $firstCsv, 'fatura_2026-07-08.csv');
     app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $first, $firstCsv, 'fatura_2026-07-08.csv', [[
         'row_key' => $first['rows'][0]['row_key'], 'action' => 'confirm_plan',
-        'classification_account_id' => $expense->id, 'recognized_total_cents' => 7996,
+        'recognized_total_cents' => 7996,
     ]]);
+    $plan = CreditCardInstallmentPlan::query()->firstOrFail();
+    app(ClassifyCreditCardInstallmentPlan::class)->execute($wallet, $plan, $expense->id);
 
     $nextCsv = "date,title,amount\n2026-08-05,Havan Guaíba - Parcela 3/5,19.99\n";
     $next = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $nextCsv, 'fatura_2026-08-08.csv');
@@ -371,9 +372,10 @@ it('keeps posted installment recognition immutable while allowing the divergent 
     $first = app(PreviewCreditCardStatement::class)->execute($wallet, $card, $firstCsv, 'fatura_2026-07-08.csv');
     app(ConfirmCreditCardStatement::class)->execute($wallet, $card, $first, $firstCsv, 'fatura_2026-07-08.csv', [[
         'row_key' => $first['rows'][0]['row_key'], 'action' => 'confirm_plan',
-        'classification_account_id' => $expense->id, 'recognized_total_cents' => 4006,
+        'recognized_total_cents' => 4006,
     ]]);
     $plan = CreditCardInstallmentPlan::query()->firstOrFail();
+    app(ClassifyCreditCardInstallmentPlan::class)->execute($wallet, $plan, $expense->id);
     app(PostJournalEntry::class)->handle($plan->recognitionJournalEntry);
 
     $nextCsv = "date,title,amount\n2026-08-05,Loja Teste Parcela 3/3,19.99\n";
@@ -463,10 +465,14 @@ it('classifies only the suspense debit and makes the credit card purchase ready 
 
     app(ClassifyCreditCardPurchase::class)->execute($wallet, $purchase, $expense->id);
     $entry = $purchase->journalEntry()->with('lines.chartOfAccount.children')->firstOrFail();
+    $replacement = ChartOfAccount::query()->where('wallet_id', $wallet->id)
+        ->where('type', 'despesa')->where('allows_posting', true)->whereDoesntHave('children')
+        ->whereKeyNot($expense->id)->firstOrFail();
+    app(ClassifyCreditCardPurchase::class)->execute($wallet, $purchase, $replacement->id);
 
     $this->assertDatabaseHas('journal_lines', [
         'journal_entry_id' => $entry->id,
-        'chart_of_account_id' => $expense->id,
+        'chart_of_account_id' => $replacement->id,
         'type' => 'debit',
         'amount_cents' => 10001,
     ]);
@@ -476,7 +482,9 @@ it('classifies only the suspense debit and makes the credit card purchase ready 
         'type' => 'credit',
         'amount_cents' => 10001,
     ]);
-    expect(app(AssessJournalEntryPostingReadiness::class)->handle($wallet, $entry)->ready)->toBeTrue();
+    expect($purchase->fresh()->journal_entry_id)->toBe($entry->id)
+        ->and(JournalEntry::query()->count())->toBe(1)
+        ->and(app(AssessJournalEntryPostingReadiness::class)->handle($wallet, $entry->fresh())->ready)->toBeTrue();
 });
 
 it('suggests a high confidence classification after two consistent historical purchases', function () {
@@ -632,6 +640,8 @@ it('renders installment amounts as BRL fields inside a review modal instead of r
         ->toContain('Valor total estimado da compra')
         ->toContain('Parte deste parcelamento é anterior ao início do ERP.')
         ->toContain('A soma das parcelas precisa ser igual ao valor reconhecido.')
+        ->toContain('poderá ser classificado depois nos Lançamentos do cartão')
+        ->not->toContain('Classificação contábil')
         ->toContain(':disabled="installmentDifference !== 0"')
         ->not->toContain('Valor a reconhecer (centavos)')
         ->and($plans)
@@ -641,5 +651,8 @@ it('renders installment amounts as BRL fields inside a review modal instead of r
         ->toContain('Lançamentos do cartão')
         ->toContain('Ver parcelas')
         ->toContain('A classificar')
-        ->toContain("item.kind === 'installment_plan'");
+        ->toContain("item.kind === 'installment_plan'")
+        ->toContain('<InlineCreditCardClassification v-if="item.journal_entry?.status === \'draft\'"')
+        ->not->toContain('Plano a classificar')
+        ->not->toContain('Classificar plano');
 });

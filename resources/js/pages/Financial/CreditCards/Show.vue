@@ -32,7 +32,6 @@ const props = defineProps<{
 const transaction = useCreditCardTransactionForm(props.creditCard.id);
 const classificationFilter = ref('all');
 const bulkForm = useForm({ transaction_ids: [] as number[] });
-const planClassifications = ref<Record<number, number | string>>({});
 const filteredTransactions = computed(() => props.cardEntries.filter((item) => {
     const pending = !item.classification_account_id || Number(item.classification_account_id) === Number(props.wallet.suspense_account_id);
     if (classificationFilter.value === 'unclassified') return pending && item.journal_entry?.status === 'draft';
@@ -72,14 +71,6 @@ function applyBulkSuggestions() {
     bulkForm.post(route('credit-cards.classification-suggestions.apply', props.creditCard.id), { preserveScroll: true });
 }
 
-function classifyPlan(plan: Record<string, any>) {
-    const accountId = Number(planClassifications.value[plan.id] || 0);
-    if (!accountId) return;
-    router.post(route('credit-cards.installment-plans.classify', [props.creditCard.id, plan.id]), {
-        classification_account_id: accountId,
-    }, { preserveScroll: true });
-}
-
 </script>
 
 <template>
@@ -90,7 +81,7 @@ function classifyPlan(plan: Record<string, any>) {
                 <Link :href="route('credit-cards.create')" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Adicionar virtual/adicional</Link>
             </div>
 
-            <CreditCardStatementImport :credit-card-id="creditCard.id" :preview="creditCardStatementPreview" :expense-accounts="expenseAccounts" />
+            <CreditCardStatementImport :credit-card-id="creditCard.id" :preview="creditCardStatementPreview" />
 
             <ReportSection v-if="false">
                 <template #header>
@@ -107,11 +98,6 @@ function classifyPlan(plan: Record<string, any>) {
                             <p class="sm:col-span-2">Classificação: {{ plan.classification_account ? formatAccount(plan.classification_account.code, plan.classification_account.name) : 'Pendente' }}</p>
                             <p>{{ plan.items.filter((item) => item.status === 'matched').length }} conciliada(s) · {{ plan.items.filter((item) => ['expected', 'adjusted', 'possible_match', 'divergent'].includes(item.status)).length }} prevista(s)</p>
                             <p v-if="plan.started_before_erp">Começou antes do ERP</p>
-                        </div>
-                        <div v-if="Number(plan.classification_account_id) === Number(wallet.suspense_account_id)" class="mt-3 flex flex-wrap gap-2 rounded border border-amber-700/60 p-3">
-                            <span class="w-full text-xs font-semibold text-amber-200">Plano a classificar</span>
-                            <select v-model="planClassifications[plan.id]" class="min-w-56 flex-1 rounded border border-gray-600 bg-black px-3 py-2 text-xs text-white"><option value="">Selecione a conta</option><option v-for="account in expenseAccounts" :key="account.id" :value="account.id">{{ account.label }}</option></select>
-                            <button type="button" class="rounded bg-indigo-600 px-3 py-2 text-xs font-semibold text-white" @click="classifyPlan(plan)">Classificar plano</button>
                         </div>
                         <div class="mt-3 overflow-x-auto rounded border border-gray-700"><table class="w-full min-w-[680px] text-xs"><thead class="bg-gray-950 text-gray-400"><tr><th class="p-2 text-left">Parcela</th><th class="p-2 text-left">Status</th><th class="p-2 text-left">Fatura prevista</th><th class="p-2 text-left">Fatura vinculada</th><th class="p-2 text-right">Valor</th><th class="p-2 text-left">Observação</th></tr></thead><tbody class="divide-y divide-gray-800"><tr v-for="item in plan.items" :key="item.id"><td class="p-2">{{ item.installment_number }}/{{ plan.total_installments }}</td><td class="p-2">{{ item.status === 'previous_before_erp' ? 'Anterior ao ERP' : item.status === 'matched' ? 'Conciliada' : item.status === 'divergent' ? 'Divergente' : item.status === 'possible_match' ? 'Possível vínculo' : 'Prevista' }}</td><td class="p-2">{{ item.expected_invoice_month ? String(item.expected_invoice_month).padStart(2, '0') + '/' + item.expected_invoice_year : '—' }}</td><td class="p-2">{{ item.invoice ? String(item.invoice.reference_month).padStart(2, '0') + '/' + item.invoice.reference_year : '—' }}</td><td class="p-2 text-right">{{ formatCurrency(item.amount_cents) }}</td><td class="p-2">{{ item.status === 'previous_before_erp' ? 'Não gera contabilidade' : item.status === 'matched' ? 'Fatura conciliada' : item.status === 'divergent' ? 'Revisar valor importado' : item.status === 'possible_match' ? 'Aguardando confirmação do plano' : 'Aguardando fatura' }}</td></tr></tbody></table></div>
                     </article>
@@ -330,8 +316,7 @@ function classifyPlan(plan: Record<string, any>) {
                         <td class="px-4 py-3 text-sm text-gray-300">{{ item.description }}</td>
                         <td class="px-4 py-3 text-sm text-gray-300">{{ item.type }}</td>
                         <td class="px-4 py-3 text-sm text-gray-400">
-                            <select v-if="item.kind === 'installment_plan' && item.journal_entry?.status === 'draft'" v-model="planClassifications[item.id]" class="min-w-48 rounded border border-gray-600 bg-black px-2 py-1.5 text-xs text-white" @change="classifyPlan(item)"><option value="">A classificar</option><option v-for="account in expenseAccounts" :key="account.id" :value="account.id">{{ account.label }}</option></select>
-                            <InlineCreditCardClassification v-else-if="item.kind === 'purchase' && item.classification_account_id === wallet.suspense_account_id && item.journal_entry?.status === 'draft'" :credit-card-id="creditCard.id" :transaction-id="item.id" :accounts="expenseAccounts" />
+                            <InlineCreditCardClassification v-if="item.journal_entry?.status === 'draft'" :credit-card-id="creditCard.id" :item-id="item.id" :kind="item.kind" :current-account-id="item.classification_account_id" :suspense-account-id="wallet.suspense_account_id" :accounts="expenseAccounts" />
                             <span v-else>{{ item.classification_account ? formatAccount(item.classification_account.code, item.classification_account.name) : 'A classificar' }}</span>
                         </td>
                         <td class="px-4 py-3 text-sm"><Link v-if="item.kind === 'installment_plan'" :href="route('credit-cards.installment-plans.show', [creditCard.id, item.id])" class="font-semibold text-indigo-300">Ver parcelas</Link><span v-else>—</span></td>

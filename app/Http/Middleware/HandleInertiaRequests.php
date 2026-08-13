@@ -38,6 +38,12 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
+        $user = $request->user();
+        $wallets = $user?->wallets()->get(['id', 'name', 'currency']);
+        $activeWalletId = $user
+            ? $wallets?->firstWhere('id', (int) $request->session()->get('active_wallet'))?->id
+                ?? $wallets?->first()?->id
+            : null;
 
         return [
             ...parent::share($request),
@@ -48,14 +54,8 @@ class HandleInertiaRequests extends Middleware
                     ? array_merge(
                         $request->user()->toArray(),
                         [
-                            'wallets' => $request->user()
-                                ->wallets()
-                                ->get(['id', 'name', 'currency'])
-                                ->toArray(),
-                            'active_wallet' => $request->session()->get(
-                                'active_wallet',
-                                optional($request->user()->wallets()->first())->id
-                            ),
+                            'wallets' => $wallets?->toArray() ?? [],
+                            'active_wallet' => $activeWalletId,
                         ]
                     )
                     : null,

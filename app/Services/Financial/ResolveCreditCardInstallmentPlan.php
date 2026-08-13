@@ -105,15 +105,8 @@ class ResolveCreditCardInstallmentPlan
             ]);
         }
 
-        $accountId = isset($decision['classification_account_id']) ? (int) $decision['classification_account_id'] : null;
         $pending = ($decision['action'] ?? null) === 'pending_plan';
-        $accountId ??= $pending ? null : (int) $wallet->suspense_account_id;
-        if ($accountId && $accountId !== (int) $wallet->suspense_account_id
-            && (! $wallet->chartOfAccounts()->whereKey($accountId)->whereIn('type', ['despesa', 'ativo'])
-                ->where('allows_posting', true)->whereDoesntHave('children')->exists()
-            || $accountId === (int) $mainCard->liability_account_id)) {
-            throw ValidationException::withMessages(['classification_account_id' => 'A classificação do parcelamento é inválida.']);
-        }
+        $accountId = $pending ? null : (int) $wallet->suspense_account_id;
         $recognitionDate = $decision['recognition_date'] ?? $purchase->purchase_date->toDateString();
         $entry = $accountId ? $this->journalEntries->execute([
             'wallet_id' => $wallet->id,

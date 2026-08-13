@@ -3,14 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\Wallet;
-use Illuminate\Http\Request;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Validation\Rule;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class WalletController extends Controller
 {
     use AuthorizesRequests;
+
     /**
      * Display a listing of the resource.
      */
@@ -33,23 +35,21 @@ class WalletController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'name'     => [
-                'required','string','max:255',
+            'name' => [
+                'required', 'string', 'max:255',
                 // unique por usuário:
                 Rule::unique('wallets')
-                    ->where(fn($query) => $query->where('user_id', $request->user()->id))
+                    ->where(fn ($query) => $query->where('user_id', $request->user()->id)),
             ],
-            //'type'     => 'required|in:pf,pj,investimento',
-            //'currency' => 'required|string|size:3',
+            // 'type'     => 'required|in:pf,pj,investimento',
+            // 'currency' => 'required|string|size:3',
         ]);
 
-        $wallet = $request->user()->wallets()->create($data);
+        $wallet = DB::transaction(fn () => $request->user()->wallets()->create($data));
+        $request->session()->put('active_wallet', $wallet->id);
 
-        // Define como carteira ativa
-        session(['active_wallet' => $wallet->id]);
-
-        //return redirect()->route('dashboard')->with('success', 'Carteira criada e ativada!');
-        return back()->with('success', 'Carteira criada com sucesso!');
+        return redirect()->route('dashboard', status: 303)
+            ->with('success', 'Carteira criada e ativada!');
     }
 
     /**
@@ -73,21 +73,20 @@ class WalletController extends Controller
      */
     public function update(Request $request, Wallet $wallet): RedirectResponse
     {
-        //
-        //$this->authorize('update', $wallet);
+        abort_unless((int) $wallet->user_id === (int) $request->user()->id, 404);
 
         $data = $request->validate([
             'name' => [
-                'required','string','max:255',
+                'required', 'string', 'max:255',
                 Rule::unique('wallets')
                     ->ignore($wallet->id)
-                    ->where(fn($query) => $query->where('user_id', $request->user()->id)),
+                    ->where(fn ($query) => $query->where('user_id', $request->user()->id)),
             ],
         ]);
 
-    $wallet->update($data);
+        $wallet->update($data);
 
-    return back()->with('success', 'Carteira atualizada com sucesso!');
+        return back()->with('success', 'Carteira atualizada com sucesso!');
     }
 
     /**
@@ -95,9 +94,8 @@ class WalletController extends Controller
      */
     public function destroy(Wallet $wallet): RedirectResponse
     {
-        //
-        //$this->authorize('delete', $wallet);
-        $user   = auth()->user();
+        $user = auth()->user();
+        abort_unless((int) $wallet->user_id === (int) $user->id, 404);
         $active = session('active_wallet', null);
 
         $wallet->delete();
@@ -119,9 +117,7 @@ class WalletController extends Controller
      */
     public function setActive(Request $request)
     {
-        $request->validate([
-            'wallet_id' => 'required|integer|exists:wallets,id',
-        ]);
+        $request->validate(['wallet_id' => ['required', 'integer']]);
 
         // garante que pertence ao usuário
         $wallet = $request->user()->wallets()->findOrFail($request->wallet_id);
@@ -129,7 +125,7 @@ class WalletController extends Controller
         // guarda na sessão
         session(['active_wallet' => $wallet->id]);
 
-        // opcional: retornar json ou redirect simples
-        return back(303);
+        return redirect()->route('dashboard', status: 303)
+            ->with('success', 'Carteira ativa alterada!');
     }
 }

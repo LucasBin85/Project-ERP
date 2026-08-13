@@ -4,7 +4,7 @@ import { useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
 
-const props = defineProps<{ creditCardId: number; preview?: Record<string, any> | null; expenseAccounts: Array<Record<string, any>> }>();
+const props = defineProps<{ creditCardId: number; preview?: Record<string, any> | null }>();
 const file = ref<File | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const showPreview = ref(Boolean(props.preview));
@@ -34,7 +34,6 @@ function makeDecisions() {
         recognized_total_cents: row.installment_plan_matches?.[0]?.recognized_total_cents ?? row.recognized_total_cents,
         original_total_cents: row.installment_plan_matches?.[0]?.original_total_cents ?? Number(row.amount_cents) * Number(row.installments_total),
         expected_amount_cents: row.installment_plan_matches?.[0]?.expected_amount_cents ?? Number(row.amount_cents),
-        classification_account_id: null,
         recognition_date: row.date,
         notes: '',
         installments: row.installment_plan_matches?.[0]?.installments ?? Array.from({ length: Number(row.installments_total ?? 1) }, (_, index) => ({
@@ -240,12 +239,6 @@ function situation(row: any) {
                     </label>
                     <p v-if="Number(reviewingDecision.original_total_cents) !== Number(reviewingDecision.recognized_total_cents)" class="rounded border border-amber-700 p-3 text-xs text-amber-200 md:col-span-3">Parte deste parcelamento é anterior ao início do ERP. Apenas o saldo reconhecido será lançado contabilmente.</p>
                     <label class="text-xs text-gray-300">Competência<input v-model="reviewingDecision.recognition_date" type="date" class="field"></label>
-                    <label class="text-xs text-gray-300 md:col-span-2">Classificação contábil
-                        <select v-model="reviewingDecision.classification_account_id" class="field">
-                            <option :value="null">A classificar</option>
-                            <option v-for="account in expenseAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
-                        </select>
-                    </label>
                     <label class="text-xs text-gray-300">Observações<input v-model="reviewingDecision.notes" class="field"></label>
                 </div>
                 <p class="mt-2 text-sm" :class="installmentDifference === 0 ? 'text-green-300' : 'text-amber-300'">{{ installmentDifference === 0 ? 'Parcelas fecham com o valor reconhecido.' : 'A soma das parcelas precisa ser igual ao valor reconhecido.' }}</p>
@@ -280,7 +273,7 @@ function situation(row: any) {
                     </table>
                 </div>
 
-                <p v-if="!reviewingDecision.classification_account_id" class="mt-3 text-sm text-amber-300">O plano será reconhecido em “A classificar” e poderá ser classificado depois enquanto o JE estiver em rascunho.</p>
+                <p class="mt-3 text-sm text-amber-300">O parcelamento será reconhecido em “A classificar” e poderá ser classificado depois nos Lançamentos do cartão.</p>
                 <div class="mt-5 flex flex-wrap justify-between gap-3">
                     <div class="flex gap-2">
                         <button type="button" class="rounded border border-gray-600 px-3 py-2 text-sm" @click="reviewingDecision.action = 'normal'; reviewingIndex = null">Marcar como compra normal</button>

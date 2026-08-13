@@ -168,8 +168,8 @@ function deleteWallet(id: number) {
 
 function selectWallet(id: number) {
   router.post(route('wallets.active'), { wallet_id: id }, {
-    preserveScroll: true,
-    preserveState: true,
+    preserveScroll: false,
+    preserveState: false,
     onSuccess: () => {
       walletStore.setActive(page.props.auth.user.active_wallet)
       toast.success('Carteira ativa alterada!')
