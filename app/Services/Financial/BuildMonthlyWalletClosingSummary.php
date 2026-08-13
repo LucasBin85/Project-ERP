@@ -49,8 +49,9 @@ class BuildMonthlyWalletClosingSummary
             })->values();
 
         $accounting = $this->accounting($wallet, $start, $end);
+        $recurring = $this->recurringExpectations($wallet, $start);
         $bankHasIncomplete = $banks->contains(fn (array $bank) => in_array($bank['status'], ['incomplete', 'partially_posted'], true));
-        $hasIncomplete = $bankHasIncomplete || $accounting['draft_incomplete'] > 0;
+        $hasIncomplete = $bankHasIncomplete || $accounting['draft_incomplete'] > 0 || $recurring['missing_count'] > 0;
         $hasReady = $accounting['draft_ready'] > 0 || $banks->contains(fn (array $bank) => $bank['status'] === 'ready_for_accounting');
         $hasPosted = $accounting['posted'] > 0 || $banks->contains(fn (array $bank) => in_array($bank['status'], ['partially_posted', 'closed'], true));
         $hasActivity = $hasIncomplete || $hasReady || $hasPosted;
@@ -70,7 +71,6 @@ class BuildMonthlyWalletClosingSummary
         $formal = \App\Models\MonthlyWalletClosing::query()->where('wallet_id', $wallet->id)->where('year', $year)->where('month', $month)
             ->with(['closedBy:id,name', 'reopenedBy:id,name'])->first();
         $cards = $this->cards($wallet, $year, $month);
-        $recurring = $this->recurringExpectations($wallet, $start);
         $blockers = ManageMonthlyWalletClosing::blockers([
             'banks' => $banks->all(),
             'accounting' => $accounting,
