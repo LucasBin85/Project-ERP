@@ -30,7 +30,8 @@ class ManageMonthlyWalletClosing
             $closing->fill(['period_start' => $summary['period']['start_date'], 'period_end' => $summary['period']['end_date'],
                 'status' => 'closed', 'closed_at' => now(), 'closed_by' => $user->id, 'close_note' => $note,
                 'snapshot_json' => ['period' => $summary['period'], 'summary' => $summary['summary'], 'banks' => $summary['banks'],
-                    'payables' => $summary['payables'], 'receivables' => $summary['receivables'], 'accounting' => $summary['accounting']]]);
+                    'payables' => $summary['payables'], 'receivables' => $summary['receivables'],
+                    'recurring' => $summary['recurring'] ?? null, 'accounting' => $summary['accounting']]]);
             $closing->save();
 
             return $closing;
@@ -77,6 +78,9 @@ class ManageMonthlyWalletClosing
         }
         if ($summary['accounting']['unbalanced']) {
             $reasons[] = 'Existem lançamentos desbalanceados.';
+        }
+        if (($summary['recurring']['missing_count'] ?? 0) > 0) {
+            $reasons[] = 'Existem contas recorrentes esperadas ainda não confirmadas ou justificadas.';
         }
 
         if (collect($summary['cards'] ?? [])->contains(
