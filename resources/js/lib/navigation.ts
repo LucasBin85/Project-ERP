@@ -3,6 +3,7 @@ import {
     BookOpen,
     Building2,
     CalendarCheck,
+    CalendarClock,
     ChartColumn,
     CircleDollarSign,
     CreditCard,
@@ -102,6 +103,11 @@ export const mainNavItems: NavItem[] = [
                 title: 'Contas a Receber',
                 href: route('accounts-receivable.index'),
                 icon: FileText,
+            },
+            {
+                title: 'Contas Recorrentes',
+                href: route('recurring-expectations.index'),
+                icon: CalendarClock,
             },
             {
                 title: 'Cartões de Crédito',
