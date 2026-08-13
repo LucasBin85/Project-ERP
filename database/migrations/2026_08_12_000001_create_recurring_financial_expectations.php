@@ -11,19 +11,19 @@ return new class extends Migration
         Schema::create('recurring_financial_expectations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('wallet_id')->constrained()->cascadeOnDelete();
-            $table->string('type', 20);
+            $table->enum('type', ['payable', 'receivable']);
             $table->foreignId('supplier_id')->nullable()->constrained()->restrictOnDelete();
             $table->foreignId('customer_id')->nullable()->constrained()->restrictOnDelete();
             $table->string('description');
-            $table->string('frequency', 20)->default('monthly');
+            $table->enum('frequency', ['monthly', 'quarterly', 'semiannual', 'annual'])->default('monthly');
             $table->unsignedSmallInteger('interval_months')->default(1);
             $table->unsignedTinyInteger('due_day');
-            $table->string('amount_mode', 20)->default('variable');
+            $table->enum('amount_mode', ['fixed', 'variable'])->default('variable');
             $table->unsignedBigInteger('expected_amount_cents')->nullable();
             $table->foreignId('default_account_id')->constrained('chart_of_accounts')->restrictOnDelete();
             $table->date('starts_on');
             $table->date('ends_on')->nullable();
-            $table->string('status', 20)->default('active');
+            $table->enum('status', ['active', 'inactive'])->default('active');
             $table->text('notes')->nullable();
             $table->timestamps();
 
@@ -42,7 +42,7 @@ return new class extends Migration
             $table->date('due_date');
             $table->unsignedBigInteger('expected_amount_cents')->nullable();
             $table->unsignedBigInteger('actual_amount_cents')->nullable();
-            $table->string('status', 20);
+            $table->enum('status', ['confirmed', 'skipped']);
             $table->foreignId('account_payable_id')->nullable()->constrained('accounts_payable')->nullOnDelete();
             $table->foreignId('account_receivable_id')->nullable()->constrained('accounts_receivable')->nullOnDelete();
             $table->timestamp('confirmed_at')->nullable();
