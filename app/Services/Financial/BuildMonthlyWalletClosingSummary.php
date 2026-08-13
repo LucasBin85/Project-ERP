@@ -10,6 +10,8 @@ use App\Models\CreditCardInstallmentPlan;
 use App\Models\CreditCardInvoice;
 use App\Models\CreditCardTransaction;
 use App\Models\JournalEntry;
+use App\Models\RecurringFinancialExpectation;
+use App\Models\RecurringFinancialOccurrence;
 use App\Models\Wallet;
 use App\Services\Accounting\AssessJournalEntryPostingReadiness;
 use Carbon\CarbonImmutable;
@@ -68,7 +70,13 @@ class BuildMonthlyWalletClosingSummary
         $formal = \App\Models\MonthlyWalletClosing::query()->where('wallet_id', $wallet->id)->where('year', $year)->where('month', $month)
             ->with(['closedBy:id,name', 'reopenedBy:id,name'])->first();
         $cards = $this->cards($wallet, $year, $month);
-        $blockers = ManageMonthlyWalletClosing::blockers(['banks' => $banks->all(), 'accounting' => $accounting, 'cards' => $cards]);
+        $recurring = $this->recurringExpectations($wallet, $start);
+        $blockers = ManageMonthlyWalletClosing::blockers([
+            'banks' => $banks->all(),
+            'accounting' => $accounting,
+            'cards' => $cards,
+            'recurring' => $recurring,
+        ]);
 
         return [
             'period' => ['year' => $year, 'month' => $month, 'start_date' => $start->toDateString(), 'end_date' => $end->toDateString(), 'label' => $start->locale('pt_BR')->translatedFormat('F/Y')],
@@ -89,9 +97,11 @@ class BuildMonthlyWalletClosingSummary
                 'opening_operational_cents' => $opening, 'closing_operational_cents' => $closing,
                 'posted_accounting_cents' => $postedBalance, 'difference_cents' => $closing - $postedBalance,
                 'accounting_pending_count' => $accounting['draft_ready'] + $accounting['draft_incomplete'],
+                'recurring_missing_count' => $recurring['missing_count'],
             ],
             'banks' => $banks->all(),
             'cards' => $cards,
+            'recurring' => $recurring,
             'payables' => $this->payables($wallet, $start, $end),
             'receivables' => $this->receivables($wallet, $start, $end),
             'accounting' => $accounting,
@@ -154,6 +164,34 @@ class BuildMonthlyWalletClosingSummary
             })->values()->all();
     }
 
+    private function recurringExpectations(Wallet $wallet, CarbonImmutable $period): array
+    {
+        $expectations = RecurringFinancialExpectation::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('status', 'active')
+            ->get()
+            ->filter(fn (RecurringFinancialExpectation $expectation) => $expectation->isApplicableTo($period))
+            ->values();
+
+        $occurrences = RecurringFinancialOccurrence::query()
+            ->where('wallet_id', $wallet->id)
+            ->whereDate('period_date', $period->toDateString())
+            ->whereIn('recurring_financial_expectation_id', $expectations->pluck('id'))
+            ->get(['recurring_financial_expectation_id', 'status']);
+
+        $resolvedIds = $occurrences->pluck('recurring_financial_expectation_id')->map(fn ($id) => (int) $id)->all();
+        $missing = $expectations->reject(fn (RecurringFinancialExpectation $expectation) => in_array($expectation->id, $resolvedIds, true));
+
+        return [
+            'expected_count' => $expectations->count(),
+            'confirmed_count' => $occurrences->where('status', 'confirmed')->count(),
+            'skipped_count' => $occurrences->where('status', 'skipped')->count(),
+            'missing_count' => $missing->count(),
+            'missing_expected_amount_cents' => (int) $missing->sum('expected_amount_cents'),
+            'url' => route('recurring-expectations.index', ['year' => $period->year, 'month' => $period->month]),
+        ];
+    }
+
     private function payables(Wallet $wallet, CarbonImmutable $start, CarbonImmutable $end): array
     {
         $due = AccountPayable::query()->where('wallet_id', $wallet->id)->whereBetween('due_date', [$start, $end])->get();
@@ -186,7 +224,8 @@ class BuildMonthlyWalletClosingSummary
         return ['pending' => route('accounting.pending-entries.index'), 'journal' => route('general-journal.index', $dates),
             'ledger' => route('ledger.index', $dates), 'trial_balance' => route('trial-balance.index', $dates),
             'income_statement' => route('income-statement.index', $dates), 'balance_sheet' => route('balance-sheet.index', $dates),
-            'financial_position' => route('financial-position.index', $dates)];
+            'financial_position' => route('financial-position.index', $dates),
+            'recurring_expectations' => route('recurring-expectations.index', ['year' => $start->year, 'month' => $start->month])];
     }
 
     private function statusLabel(string $status): string
