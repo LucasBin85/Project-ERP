@@ -22,12 +22,11 @@ condomínio, assinaturas ou mensalidades.
 
 ### Contas recorrentes esperadas
 
-Uma recorrência futura representará uma obrigação ou receita esperada
-periodicamente. Ela poderá ter valor fixo ou variável e funcionará como
-controle operacional para identificar se a conta esperada de cada período foi
-cadastrada.
+Uma recorrência representa uma obrigação ou receita esperada periodicamente.
+Ela pode ter valor fixo ou variável e funciona como controle operacional para
+identificar se a conta esperada de cada período já foi tratada.
 
-O cadastro deverá considerar:
+O cadastro considera:
 
 - tipo: pagar ou receber;
 - fornecedor ou cliente;
@@ -37,22 +36,24 @@ O cadastro deverá considerar:
 - valor fixo ou variável;
 - valor previsto opcional;
 - conta padrão de despesa ou receita;
+- início e fim opcional de vigência;
 - status ativo ou inativo.
 
-Mensalmente, o módulo deverá verificar e apresentar se:
+Mensalmente, o módulo apresenta se a expectativa:
 
-- o título do mês já foi cadastrado;
-- o título está pendente;
-- o título está vencido;
-- o título foi pago ou recebido.
+- ainda precisa ser confirmada;
+- já originou um título financeiro;
+- foi explicitamente ignorada naquele período;
+- está vencida sem confirmação;
+- está fora da periodicidade ou inativa.
 
 ### Confirmação e contabilidade
 
-O cadastro de uma conta recorrente esperada não deverá criar automaticamente
-um título financeiro, uma provisão ou qualquer outro lançamento contábil.
+O cadastro de uma conta recorrente esperada não cria automaticamente um título
+financeiro, uma provisão ou qualquer outro lançamento contábil.
 
-A contabilidade nascerá somente quando o usuário criar ou confirmar o título
-mensal. A partir dessa confirmação, o fluxo será o fluxo normal do produto:
+A contabilidade nasce somente quando o usuário confirma o título mensal. A
+partir dessa confirmação, o fluxo reutiliza o comportamento normal do produto:
 
 1. criação de uma Conta a Pagar ou Conta a Receber;
 2. criação da provisão contábil em `draft`;
@@ -61,21 +62,35 @@ mensal. A partir dessa confirmação, o fluxo será o fluxo normal do produto:
 Isso permite que valores variáveis sejam confirmados antes do reconhecimento e
 evita títulos e lançamentos automáticos sem validação do usuário.
 
-### Integrações futuras
+### Integrações do V1
 
-O futuro módulo de contas recorrentes esperadas deverá aparecer em:
+O V1 de contas recorrentes esperadas está integrado a:
 
-- Dashboard, destacando contas esperadas ainda não cadastradas;
-- Fechamento Mensal, como pendência operacional do período;
-- Contas a Pagar e Contas a Receber, no fluxo de criação ou confirmação mensal;
-- alertas de pendências, incluindo contas não cadastradas, pendentes e vencidas.
+- Dashboard, destacando expectativas do período ainda não resolvidas;
+- Fechamento Mensal, tratando expectativas não confirmadas ou justificadas como
+  pendência operacional;
+- Contas a Pagar e Contas a Receber, reutilizando os serviços existentes na
+  confirmação mensal;
+- navegação do módulo Financeiro, com workspace mensal próprio.
 
-### Escopo atual
+### Escopo implementado no V1
 
-Recorrências não fazem parte do escopo atual. Até que o módulo seja
-especificado e implementado:
+O V1 mantém deliberadamente as seguintes regras:
 
-- não gerar recorrências infinitas;
+- não gerar recorrências infinitas nem materializar meses futuros;
 - não criar títulos mensais automaticamente;
-- não criar provisões contábeis automaticamente;
+- não criar provisões contábeis automaticamente no cadastro da recorrência;
+- permitir confirmar ou ignorar explicitamente cada ocorrência mensal;
+- impedir mais de uma ocorrência para a mesma recorrência e período;
 - não alterar o comportamento do parcelamento financeiro existente.
+
+### Evoluções posteriores
+
+Podem ser avaliadas depois do uso do V1:
+
+- edição completa da regra recorrente preservando o histórico já confirmado;
+- filtros e visão anual das ocorrências;
+- atalhos de confirmação a partir de Contas a Pagar e Contas a Receber;
+- sugestões de vínculo entre uma expectativa recorrente e um lançamento de
+  extrato antes da criação manual do título;
+- regras adicionais para periodicidades não mensais e exceções de calendário.
