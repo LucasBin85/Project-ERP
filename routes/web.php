@@ -24,6 +24,7 @@ use App\Http\Controllers\Financial\CustomerController;
 use App\Http\Controllers\Financial\InvestmentAccountController;
 use App\Http\Controllers\Financial\MonthlyWalletClosingController;
 use App\Http\Controllers\Financial\OfxImportController;
+use App\Http\Controllers\Financial\RecurringFinancialExpectationController;
 use App\Http\Controllers\Financial\SupplierController;
 use App\Http\Controllers\FinancialPositionController;
 use App\Http\Controllers\WalletController;
@@ -180,6 +181,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::resource('accounts-receivable', AccountReceivableController::class)
             ->only(['index', 'create', 'store', 'show']);
+
+        Route::get('recurring-expectations', [RecurringFinancialExpectationController::class, 'index'])
+            ->name('recurring-expectations.index');
+        Route::post('recurring-expectations', [RecurringFinancialExpectationController::class, 'store'])
+            ->name('recurring-expectations.store');
+        Route::post('recurring-expectations/{recurringExpectation}/confirm', [RecurringFinancialExpectationController::class, 'confirm'])
+            ->name('recurring-expectations.confirm');
+        Route::post('recurring-expectations/{recurringExpectation}/skip', [RecurringFinancialExpectationController::class, 'skip'])
+            ->name('recurring-expectations.skip');
+        Route::patch('recurring-expectations/{recurringExpectation}/status', [RecurringFinancialExpectationController::class, 'toggleStatus'])
+            ->name('recurring-expectations.status');
 
         Route::post('suppliers/quick-store', [SupplierController::class, 'quickStore'])->name('suppliers.quick-store');
         Route::post('customers/quick-store', [CustomerController::class, 'quickStore'])->name('customers.quick-store');
