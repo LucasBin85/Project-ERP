@@ -128,6 +128,7 @@ class BuildManagerialFinancialDashboard
             ['label' => 'Vínculos AP/AR pendentes', 'count' => (int) $bankCounts->sum('pending_links'), 'url' => route('bank-accounts.index')],
             ['label' => 'Transferências aguardando contraparte', 'count' => (int) $bankCounts->sum('pending_transfers'), 'url' => route('bank-transfers.index')],
             ['label' => 'Drafts prontos para postar', 'count' => $closing['accounting']['draft_ready'], 'url' => $closing['links']['pending']],
+            ['label' => 'Contas recorrentes não confirmadas', 'count' => (int) ($closing['recurring']['missing_count'] ?? 0), 'url' => $closing['recurring']['url'] ?? route('recurring-expectations.index')],
             ['label' => 'Compras de cartão a classificar', 'count' => (int) collect($closing['cards'])->sum('unclassified_count'), 'url' => collect($closing['cards'])->firstWhere('unclassified_count', '>', 0)['url'] ?? route('credit-cards.index')],
             ['label' => 'Mês não fechado formalmente', 'count' => $closing['formal_closing']['status'] === 'closed' ? 0 : 1, 'url' => route('monthly-closing.show', ['year' => $closing['period']['year'], 'month' => $closing['period']['month']])],
         ];
