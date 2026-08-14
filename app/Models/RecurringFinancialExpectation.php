@@ -10,6 +10,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RecurringFinancialExpectation extends Model
 {
+    public const FREQUENCY_INTERVALS = [
+        'monthly' => 1,
+        'quarterly' => 3,
+        'semiannual' => 6,
+        'annual' => 12,
+    ];
+
     protected $fillable = [
         'wallet_id',
         'type',
@@ -64,6 +71,11 @@ class RecurringFinancialExpectation extends Model
     public function isActive(): bool
     {
         return $this->status === 'active';
+    }
+
+    public static function intervalMonthsFor(string $frequency): ?int
+    {
+        return self::FREQUENCY_INTERVALS[$frequency] ?? null;
     }
 
     public function isApplicableTo(CarbonInterface $period): bool
