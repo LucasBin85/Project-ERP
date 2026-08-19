@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Financial;
 
 use App\DTOs\Financial\AccountReceivableDTO;
 use App\DTOs\Financial\ReceiveAccountReceivableDTO;
+use App\DTOs\Financial\RecurringFinancialExpectationDTO;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
 use App\Models\AccountReceivable;
@@ -11,7 +12,9 @@ use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Services\Financial\CreateAccountReceivable;
+use App\Services\Financial\CreateRecurringAccountReceivable;
 use App\Services\Financial\ReceiveAccountReceivable;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -92,7 +95,7 @@ class AccountReceivableController extends Controller
         ]);
     }
 
-    public function store(Request $request, CreateAccountReceivable $service): RedirectResponse
+    public function store(Request $request, CreateAccountReceivable $service, CreateRecurringAccountReceivable $recurringService): RedirectResponse
     {
         $wallet = $this->resolveActiveWallet($request);
 
@@ -103,13 +106,19 @@ class AccountReceivableController extends Controller
             'description' => ['required', 'string', 'max:255'],
             'due_date' => ['required', 'date'],
             'amount_cents' => ['required', 'integer', 'min:1'],
-            'mode' => ['nullable', Rule::in(['single', 'installment'])],
+            'mode' => ['nullable', Rule::in(['single', 'installment', 'recurring'])],
             'installment_count' => ['required_if:mode,installment', 'integer', 'min:2', 'max:360'],
             'interval_months' => ['required_if:mode,installment', 'integer', 'min:1', 'max:120'],
-            'competence_date' => ['required_if:mode,installment', 'nullable', 'date'],
+            'competence_date' => ['required_if:mode,installment,recurring', 'nullable', 'date'],
             'installments' => ['required_if:mode,installment', 'array'],
             'installments.*.due_date' => ['required', 'date'],
             'installments.*.amount_cents' => ['required', 'integer', 'min:1'],
+            'recurring_frequency' => ['required_if:mode,recurring', 'nullable', Rule::in(['monthly', 'quarterly', 'semiannual', 'annual'])],
+            'recurring_amount_mode' => ['required_if:mode,recurring', 'nullable', Rule::in(['fixed', 'variable'])],
+            'recurring_due_day' => ['required_if:mode,recurring', 'nullable', 'integer', 'min:1', 'max:31'],
+            'recurring_default_account_id' => ['required_if:mode,recurring', 'nullable', 'integer'],
+            'recurring_expected_amount_cents' => ['nullable', 'integer', 'min:1'],
+            'recurring_ends_on' => ['nullable', 'date', 'after_or_equal:competence_date'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
         if (($data['mode'] ?? 'single') === 'installment') {
@@ -125,7 +134,22 @@ class AccountReceivableController extends Controller
             }
         }
 
-        $service->execute($wallet, AccountReceivableDTO::fromArray($data));
+        if (($data['mode'] ?? 'single') === 'recurring') {
+            $recurringService->execute(
+                $wallet,
+                new RecurringFinancialExpectationDTO(
+                    type: 'receivable', description: $data['description'], frequency: $data['recurring_frequency'],
+                    dueDay: (int) $data['recurring_due_day'], amountMode: $data['recurring_amount_mode'],
+                    expectedAmountCents: $data['recurring_amount_mode'] === 'fixed' ? (int) $data['amount_cents'] : ($data['recurring_expected_amount_cents'] ?? null),
+                    defaultAccountId: (int) $data['recurring_default_account_id'], startsOn: CarbonImmutable::parse($data['competence_date'])->startOfMonth()->toDateString(),
+                    endsOn: $data['recurring_ends_on'] ?? null, customerId: (int) $data['customer_id'], notes: $data['notes'] ?? null,
+                ),
+                CarbonImmutable::parse($data['competence_date']), (int) $data['amount_cents'],
+                CarbonImmutable::parse($data['due_date']), $data['notes'] ?? null,
+            );
+        } else {
+            $service->execute($wallet, AccountReceivableDTO::fromArray($data));
+        }
 
         return redirect()
             ->route('accounts-receivable.index')
