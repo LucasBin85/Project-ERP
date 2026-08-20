@@ -135,6 +135,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/create-link-payable', [BankStatementSettlementController::class, 'createAndLinkPayable'])
             ->name('bank-accounts.statement.create-link-payable');
+        Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/confirm-link-recurring-payable', [BankStatementSettlementController::class, 'confirmAndLinkRecurringPayable'])
+            ->name('bank-accounts.statement.confirm-link-recurring-payable');
 
         Route::get('bank-accounts/{bankAccount}/statement/{journalEntry}/receivable-candidates', [BankStatementSettlementController::class, 'receivableCandidates'])
             ->name('bank-accounts.statement.receivable-candidates');
@@ -144,6 +146,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/create-link-receivable', [BankStatementSettlementController::class, 'createAndLinkReceivable'])
             ->name('bank-accounts.statement.create-link-receivable');
+        Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/confirm-link-recurring-receivable', [BankStatementSettlementController::class, 'confirmAndLinkRecurringReceivable'])
+            ->name('bank-accounts.statement.confirm-link-recurring-receivable');
 
         Route::post('bank-accounts/ofx-preview', [BankAccountController::class, 'previewOfx'])
             ->name('bank-accounts.ofx-preview');

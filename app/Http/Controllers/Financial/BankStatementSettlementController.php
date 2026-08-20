@@ -10,12 +10,18 @@ use App\Models\AccountPayable;
 use App\Models\AccountReceivable;
 use App\Models\BankAccount;
 use App\Models\JournalEntry;
-use App\Services\Financial\FindBankStatementPayableCandidates;
-use App\Services\Financial\FindBankStatementReceivableCandidates;
-use App\Services\Financial\LinkAccountPayableFromBankStatement;
-use App\Services\Financial\LinkAccountReceivableFromBankStatement;
+use App\Models\RecurringFinancialExpectation;
+use App\Services\Financial\ConfirmAndLinkRecurringPayableFromBankStatement;
+use App\Services\Financial\ConfirmAndLinkRecurringReceivableFromBankStatement;
 use App\Services\Financial\CreateAndLinkAccountPayableFromBankStatement;
 use App\Services\Financial\CreateAndLinkAccountReceivableFromBankStatement;
+use App\Services\Financial\FindBankStatementPayableCandidates;
+use App\Services\Financial\FindBankStatementReceivableCandidates;
+use App\Services\Financial\FindBankStatementRecurringPayableCandidates;
+use App\Services\Financial\FindBankStatementRecurringReceivableCandidates;
+use App\Services\Financial\LinkAccountPayableFromBankStatement;
+use App\Services\Financial\LinkAccountReceivableFromBankStatement;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,6 +44,7 @@ class BankStatementSettlementController extends Controller
             amountCents: (int) $journalEntry->lines()->where('chart_of_account_id', $bankAccount->chart_of_account_id)->value('amount_cents'),
             notes: $data['notes'] ?? null, supplierId: (int) $data['supplier_id'],
         ));
+
         return back()->with('success', 'Conta a pagar criada e vinculada. Os lançamentos estão prontos para a contabilidade.');
     }
 
@@ -54,10 +61,11 @@ class BankStatementSettlementController extends Controller
             amountCents: (int) $journalEntry->lines()->where('chart_of_account_id', $bankAccount->chart_of_account_id)->value('amount_cents'),
             notes: $data['notes'] ?? null, customerId: (int) $data['customer_id'],
         ));
+
         return back()->with('success', 'Conta a receber criada e vinculada. Os lançamentos estão prontos para a contabilidade.');
     }
 
-    public function receivableCandidates(Request $request, BankAccount $bankAccount, JournalEntry $journalEntry, FindBankStatementReceivableCandidates $service): JsonResponse
+    public function receivableCandidates(Request $request, BankAccount $bankAccount, JournalEntry $journalEntry, FindBankStatementReceivableCandidates $service, FindBankStatementRecurringReceivableCandidates $recurring): JsonResponse
     {
         $wallet = $this->resolveActiveWallet($request);
         abort_unless((int) $bankAccount->wallet_id === (int) $wallet->id && (int) $journalEntry->wallet_id === (int) $wallet->id, 404);
@@ -80,6 +88,7 @@ class BankStatementSettlementController extends Controller
                 ],
                 'show_url' => route('accounts-receivable.show', $receivable),
             ])->values(),
+            'recurring_candidates' => $recurring->execute($wallet, $bankAccount, $journalEntry),
         ]);
     }
 
@@ -116,6 +125,7 @@ class BankStatementSettlementController extends Controller
         BankAccount $bankAccount,
         JournalEntry $journalEntry,
         FindBankStatementPayableCandidates $service,
+        FindBankStatementRecurringPayableCandidates $recurring,
     ): JsonResponse {
         $wallet = $this->resolveActiveWallet($request);
 
@@ -147,7 +157,38 @@ class BankStatementSettlementController extends Controller
                 ],
                 'show_url' => route('accounts-payable.show', $payable),
             ])->values(),
+            'recurring_candidates' => $recurring->execute($wallet, $bankAccount, $journalEntry),
         ]);
+    }
+
+    public function confirmAndLinkRecurringPayable(Request $request, BankAccount $bankAccount, JournalEntry $journalEntry, ConfirmAndLinkRecurringPayableFromBankStatement $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($bankAccount->wallet_id === $wallet->id && $journalEntry->wallet_id === $wallet->id, 404);
+        $data = $request->validate([
+            'recurring_financial_expectation_id' => ['required', 'integer'],
+            'period_date' => ['required', 'date'], 'due_date' => ['required', 'date'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $expectation = RecurringFinancialExpectation::query()->where('wallet_id', $wallet->id)->where('type', 'payable')->findOrFail($data['recurring_financial_expectation_id']);
+        $service->execute($wallet, $bankAccount, $journalEntry, $expectation, CarbonImmutable::parse($data['period_date']), CarbonImmutable::parse($data['due_date']), $data['notes'] ?? null);
+
+        return back()->with('success', 'Recorrência confirmada, conta a pagar criada e movimento bancário vinculado.');
+    }
+
+    public function confirmAndLinkRecurringReceivable(Request $request, BankAccount $bankAccount, JournalEntry $journalEntry, ConfirmAndLinkRecurringReceivableFromBankStatement $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($bankAccount->wallet_id === $wallet->id && $journalEntry->wallet_id === $wallet->id, 404);
+        $data = $request->validate([
+            'recurring_financial_expectation_id' => ['required', 'integer'],
+            'period_date' => ['required', 'date'], 'due_date' => ['required', 'date'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $expectation = RecurringFinancialExpectation::query()->where('wallet_id', $wallet->id)->where('type', 'receivable')->findOrFail($data['recurring_financial_expectation_id']);
+        $service->execute($wallet, $bankAccount, $journalEntry, $expectation, CarbonImmutable::parse($data['period_date']), CarbonImmutable::parse($data['due_date']), $data['notes'] ?? null);
+
+        return back()->with('success', 'Recorrência confirmada, conta a receber criada e movimento bancário vinculado.');
     }
 
     public function linkPayable(
