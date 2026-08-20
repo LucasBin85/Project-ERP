@@ -11,9 +11,13 @@ use App\Models\AccountReceivable;
 use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\Customer;
+use App\Models\RecurringFinancialExpectation;
+use App\Services\Financial\ConfirmRecurringFinancialExpectation;
 use App\Services\Financial\CreateAccountReceivable;
 use App\Services\Financial\CreateRecurringAccountReceivable;
+use App\Services\Financial\ListRecurringFinancialExpectationsForRange;
 use App\Services\Financial\ReceiveAccountReceivable;
+use App\Services\Financial\SkipRecurringFinancialExpectation;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,7 +29,7 @@ class AccountReceivableController extends Controller
 {
     use ResolvesActiveWallet;
 
-    public function index(Request $request): Response
+    public function index(Request $request, ListRecurringFinancialExpectationsForRange $recurringExpectations): Response
     {
         $wallet = $this->resolveActiveWallet($request);
 
@@ -74,7 +78,35 @@ class AccountReceivableController extends Controller
             ],
             'filters' => $validated,
             'accountsReceivable' => $accountsReceivable,
+            'recurringExpectedReceivables' => $recurringExpectations->execute(
+                $wallet, 'receivable', CarbonImmutable::parse($validated['start_date']), CarbonImmutable::parse($validated['end_date'])
+            ),
         ]);
+    }
+
+    public function confirmRecurring(Request $request, RecurringFinancialExpectation $expectation, ConfirmRecurringFinancialExpectation $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($expectation->wallet_id === $wallet->id && $expectation->type === 'receivable', 404);
+        $data = $request->validate([
+            'period_date' => ['required', 'date'],
+            'actual_amount_cents' => ['required', 'integer', 'min:1'],
+            'due_date' => ['required', 'date'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $service->execute($wallet, $expectation, CarbonImmutable::parse($data['period_date']), (int) $data['actual_amount_cents'], CarbonImmutable::parse($data['due_date']), $data['notes'] ?? null);
+
+        return back()->with('success', 'Competência recorrente confirmada e conta a receber criada.');
+    }
+
+    public function skipRecurring(Request $request, RecurringFinancialExpectation $expectation, SkipRecurringFinancialExpectation $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($expectation->wallet_id === $wallet->id && $expectation->type === 'receivable', 404);
+        $data = $request->validate(['period_date' => ['required', 'date'], 'notes' => ['nullable', 'string', 'max:2000']]);
+        $service->execute($wallet, $expectation, CarbonImmutable::parse($data['period_date']), $data['notes'] ?? null);
+
+        return back()->with('success', 'Competência recorrente ignorada.');
     }
 
     public function create(Request $request): Response

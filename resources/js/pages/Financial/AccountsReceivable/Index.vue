@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DateRangeFilter from '@/components/filters/DateRangeFilter.vue';
+import RecurringExpectedItemsSection from '@/components/financial/RecurringExpectedItemsSection.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import ReportTable from '@/components/reports/ReportTable.vue';
@@ -14,6 +15,7 @@ const props = defineProps<{
     wallet: Record<string, any>;
     filters: Record<string, string>;
     accountsReceivable: Record<string, any>;
+    recurringExpectedReceivables: any[];
 }>();
 
 const accountsReceivableIndex = useAccountsReceivableIndex(props.filters);
@@ -64,6 +66,8 @@ function formatPaginationLabel(label: string): string {
                     </div>
                 </div>
             </ReportSection>
+
+            <RecurringExpectedItemsSection :items="recurringExpectedReceivables" counterparty-label="Cliente" account-label="Receita" confirm-route="accounts-receivable.recurring.confirm" skip-route="accounts-receivable.recurring.skip" />
 
             <ReportSection>
                 <template #header>

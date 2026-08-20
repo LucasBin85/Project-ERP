@@ -172,11 +172,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('accounts-payable/{accountPayable}/pay', [AccountPayableController::class, 'pay'])
             ->name('accounts-payable.pay');
 
+        Route::post('accounts-payable/recurring/{expectation}/confirm', [AccountPayableController::class, 'confirmRecurring'])
+            ->name('accounts-payable.recurring.confirm');
+        Route::post('accounts-payable/recurring/{expectation}/skip', [AccountPayableController::class, 'skipRecurring'])
+            ->name('accounts-payable.recurring.skip');
+
         Route::resource('accounts-payable', AccountPayableController::class)
             ->only(['index', 'create', 'store', 'show']);
 
         Route::post('accounts-receivable/{accountReceivable}/receive', [AccountReceivableController::class, 'receive'])
             ->name('accounts-receivable.receive');
+
+        Route::post('accounts-receivable/recurring/{expectation}/confirm', [AccountReceivableController::class, 'confirmRecurring'])
+            ->name('accounts-receivable.recurring.confirm');
+        Route::post('accounts-receivable/recurring/{expectation}/skip', [AccountReceivableController::class, 'skipRecurring'])
+            ->name('accounts-receivable.recurring.skip');
 
         Route::resource('accounts-receivable', AccountReceivableController::class)
             ->only(['index', 'create', 'store', 'show']);
