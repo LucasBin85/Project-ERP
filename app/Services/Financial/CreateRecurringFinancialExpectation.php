@@ -50,6 +50,7 @@ class CreateRecurringFinancialExpectation
 
         return RecurringFinancialExpectation::query()->create([
             'wallet_id' => $wallet->id,
+            'replaces_expectation_id' => $dto->replacesExpectationId,
             'type' => $dto->type,
             'supplier_id' => $dto->type === 'payable' ? $dto->supplierId : null,
             'customer_id' => $dto->type === 'receivable' ? $dto->customerId : null,
@@ -61,6 +62,7 @@ class CreateRecurringFinancialExpectation
             'expected_amount_cents' => $dto->expectedAmountCents,
             'default_account_id' => $dto->defaultAccountId,
             'starts_on' => $startsOn,
+            'schedule_anchor_date' => $dto->scheduleAnchorDate ? CarbonImmutable::parse($dto->scheduleAnchorDate)->startOfMonth() : $startsOn->startOfMonth(),
             'ends_on' => $endsOn,
             'status' => 'active',
             'notes' => $dto->notes,

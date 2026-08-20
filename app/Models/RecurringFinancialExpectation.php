@@ -7,6 +7,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RecurringFinancialExpectation extends Model
 {
@@ -19,6 +20,7 @@ class RecurringFinancialExpectation extends Model
 
     protected $fillable = [
         'wallet_id',
+        'replaces_expectation_id',
         'type',
         'supplier_id',
         'customer_id',
@@ -30,6 +32,7 @@ class RecurringFinancialExpectation extends Model
         'expected_amount_cents',
         'default_account_id',
         'starts_on',
+        'schedule_anchor_date',
         'ends_on',
         'status',
         'notes',
@@ -40,6 +43,7 @@ class RecurringFinancialExpectation extends Model
         'due_day' => 'integer',
         'expected_amount_cents' => 'integer',
         'starts_on' => 'date',
+        'schedule_anchor_date' => 'date',
         'ends_on' => 'date',
     ];
 
@@ -68,6 +72,21 @@ class RecurringFinancialExpectation extends Model
         return $this->hasMany(RecurringFinancialOccurrence::class);
     }
 
+    public function predecessor(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'replaces_expectation_id');
+    }
+
+    public function successor(): HasOne
+    {
+        return $this->hasOne(self::class, 'replaces_expectation_id');
+    }
+
+    public function scheduleAnchorDate(): CarbonImmutable
+    {
+        return CarbonImmutable::instance($this->schedule_anchor_date ?? $this->starts_on)->startOfMonth();
+    }
+
     public function isActive(): bool
     {
         return $this->status === 'active';
@@ -94,7 +113,7 @@ class RecurringFinancialExpectation extends Model
             return false;
         }
 
-        return $startMonth->diffInMonths($periodMonth) % max(1, $this->interval_months) === 0;
+        return $this->scheduleAnchorDate()->diffInMonths($periodMonth, true) % max(1, $this->interval_months) === 0;
     }
 
     public function dueDateForPeriod(CarbonInterface $period): CarbonImmutable

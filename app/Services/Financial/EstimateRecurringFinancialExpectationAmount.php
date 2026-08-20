@@ -22,7 +22,15 @@ class EstimateRecurringFinancialExpectationAmount
         }
 
         $periodMonth = CarbonImmutable::instance($period)->startOfMonth();
-        $amounts = $expectation->occurrences()->where('status', 'confirmed')
+        $expectationIds = [];
+        $current = $expectation;
+        while ($current && ! in_array($current->id, $expectationIds, true)) {
+            $expectationIds[] = $current->id;
+            $current = $current->predecessor()->first();
+        }
+
+        $amounts = \App\Models\RecurringFinancialOccurrence::query()
+            ->whereIn('recurring_financial_expectation_id', $expectationIds)->where('status', 'confirmed')
             ->whereNotNull('actual_amount_cents')->where('period_date', '<', $periodMonth->toDateString())
             ->orderByDesc('period_date')->limit(3)->pluck('actual_amount_cents');
 

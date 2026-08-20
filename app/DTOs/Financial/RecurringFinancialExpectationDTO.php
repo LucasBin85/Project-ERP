@@ -17,5 +17,7 @@ final readonly class RecurringFinancialExpectationDTO
         public ?int $supplierId = null,
         public ?int $customerId = null,
         public ?string $notes = null,
+        public ?int $replacesExpectationId = null,
+        public ?string $scheduleAnchorDate = null,
     ) {}
 }

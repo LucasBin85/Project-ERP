@@ -176,6 +176,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('accounts-payable.recurring.confirm');
         Route::post('accounts-payable/recurring/{expectation}/skip', [AccountPayableController::class, 'skipRecurring'])
             ->name('accounts-payable.recurring.skip');
+        Route::put('accounts-payable/recurring/{expectation}', [AccountPayableController::class, 'reviseRecurring'])->name('accounts-payable.recurring.revise');
+        Route::patch('accounts-payable/recurring/{expectation}/deactivate', [AccountPayableController::class, 'deactivateRecurring'])->name('accounts-payable.recurring.deactivate');
 
         Route::resource('accounts-payable', AccountPayableController::class)
             ->only(['index', 'create', 'store', 'show']);
@@ -187,6 +189,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('accounts-receivable.recurring.confirm');
         Route::post('accounts-receivable/recurring/{expectation}/skip', [AccountReceivableController::class, 'skipRecurring'])
             ->name('accounts-receivable.recurring.skip');
+        Route::put('accounts-receivable/recurring/{expectation}', [AccountReceivableController::class, 'reviseRecurring'])->name('accounts-receivable.recurring.revise');
+        Route::patch('accounts-receivable/recurring/{expectation}/deactivate', [AccountReceivableController::class, 'deactivateRecurring'])->name('accounts-receivable.recurring.deactivate');
 
         Route::resource('accounts-receivable', AccountReceivableController::class)
             ->only(['index', 'create', 'store', 'show']);

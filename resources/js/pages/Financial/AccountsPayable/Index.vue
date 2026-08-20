@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DateRangeFilter from '@/components/filters/DateRangeFilter.vue';
 import RecurringExpectedItemsSection from '@/components/financial/RecurringExpectedItemsSection.vue';
+import RecurringRulesManager from '@/components/financial/RecurringRulesManager.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import ReportTable from '@/components/reports/ReportTable.vue';
@@ -16,6 +17,9 @@ const props = defineProps<{
     filters: Record<string, string>;
     accountsPayable: Record<string, any>;
     recurringExpectedPayables: any[];
+    recurringRules: any[];
+    recurringSuppliers: any[];
+    recurringAccounts: any[];
 }>();
 
 const accountsPayableIndex = useAccountsPayableIndex(props.filters);
@@ -31,7 +35,8 @@ function formatPaginationLabel(label: string): string {
 <template>
     <AppLayout title="Contas a Pagar">
         <ReportPage title="Contas a Pagar" :subtitle="wallet.name">
-            <div class="flex justify-end">
+            <div class="flex justify-end gap-2">
+                <RecurringRulesManager :rules="recurringRules" :counterparties="recurringSuppliers" :accounts="recurringAccounts" type="payable" />
                 <Link
                     :href="route('accounts-payable.create')"
                     class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"

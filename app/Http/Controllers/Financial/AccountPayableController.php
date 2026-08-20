@@ -12,11 +12,14 @@ use App\Models\BankAccount;
 use App\Models\ChartOfAccount;
 use App\Models\RecurringFinancialExpectation;
 use App\Models\Supplier;
+use App\Services\Financial\BuildRecurringFinancialRulesOverview;
 use App\Services\Financial\ConfirmRecurringFinancialExpectation;
 use App\Services\Financial\CreateAccountPayable;
 use App\Services\Financial\CreateRecurringAccountPayable;
+use App\Services\Financial\DeactivateRecurringFinancialExpectation;
 use App\Services\Financial\ListRecurringFinancialExpectationsForRange;
 use App\Services\Financial\PayAccountPayable;
+use App\Services\Financial\ReviseRecurringFinancialExpectation;
 use App\Services\Financial\SkipRecurringFinancialExpectation;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -29,7 +32,7 @@ class AccountPayableController extends Controller
 {
     use ResolvesActiveWallet;
 
-    public function index(Request $request, ListRecurringFinancialExpectationsForRange $recurringExpectations): Response
+    public function index(Request $request, ListRecurringFinancialExpectationsForRange $recurringExpectations, BuildRecurringFinancialRulesOverview $rules): Response
     {
         $wallet = $this->resolveActiveWallet($request);
 
@@ -81,6 +84,46 @@ class AccountPayableController extends Controller
             'recurringExpectedPayables' => $recurringExpectations->execute(
                 $wallet, 'payable', CarbonImmutable::parse($validated['start_date']), CarbonImmutable::parse($validated['end_date'])
             ),
+            'recurringRules' => $rules->execute($wallet, 'payable', now()),
+            'recurringSuppliers' => Supplier::query()->validForPayables($wallet->id)->orderBy('name')->get(['id', 'name']),
+            'recurringAccounts' => $this->expenseAccounts($wallet->id),
+        ]);
+    }
+
+    public function reviseRecurring(Request $request, RecurringFinancialExpectation $expectation, ReviseRecurringFinancialExpectation $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($expectation->wallet_id === $wallet->id && $expectation->type === 'payable' && ! $expectation->successor()->exists(), 404);
+        $data = $this->validateRecurringRevision($request, 'supplier_id');
+        $service->execute($wallet, $expectation, CarbonImmutable::parse($data['effective_from']), new RecurringFinancialExpectationDTO(
+            type: 'payable', description: $data['description'], frequency: $data['frequency'], dueDay: (int) $data['due_day'],
+            amountMode: $data['amount_mode'], expectedAmountCents: isset($data['expected_amount_cents']) ? (int) $data['expected_amount_cents'] : null,
+            defaultAccountId: (int) $data['default_account_id'], startsOn: $data['effective_from'], endsOn: $data['ends_on'] ?? null,
+            supplierId: (int) $data['supplier_id'], notes: $data['notes'] ?? null,
+        ));
+
+        return back()->with('success', 'Recorrência revisada para as competências futuras.');
+    }
+
+    public function deactivateRecurring(Request $request, RecurringFinancialExpectation $expectation, DeactivateRecurringFinancialExpectation $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($expectation->wallet_id === $wallet->id && $expectation->type === 'payable' && ! $expectation->successor()->exists(), 404);
+        $data = $request->validate(['effective_from' => ['required', 'date']]);
+        $service->execute($wallet, $expectation, CarbonImmutable::parse($data['effective_from']));
+
+        return back()->with('success', 'Recorrência encerrada para as competências futuras.');
+    }
+
+    private function validateRecurringRevision(Request $request, string $counterparty): array
+    {
+        return $request->validate([
+            'effective_from' => ['required', 'date'], 'description' => ['required', 'string', 'max:255'],
+            $counterparty => ['required', 'integer'], 'frequency' => ['required', Rule::in(array_keys(RecurringFinancialExpectation::FREQUENCY_INTERVALS))],
+            'amount_mode' => ['required', Rule::in(['fixed', 'variable'])],
+            'expected_amount_cents' => ['nullable', 'integer', 'min:1', Rule::requiredIf(fn () => $request->input('amount_mode') === 'fixed')],
+            'due_day' => ['required', 'integer', 'between:1,31'], 'default_account_id' => ['required', 'integer'],
+            'ends_on' => ['nullable', 'date', 'after_or_equal:effective_from'], 'notes' => ['nullable', 'string', 'max:2000'],
         ]);
     }
 
@@ -256,6 +299,7 @@ class AccountPayableController extends Controller
             ->where('wallet_id', $walletId)
             ->where('type', 'despesa')
             ->where('allows_posting', true)
+            ->whereDoesntHave('children')
             ->orderBy('code')
             ->get(['id', 'code', 'name'])
             ->map(fn (ChartOfAccount $account) => [
