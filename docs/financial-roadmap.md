@@ -20,9 +20,9 @@ O parcelamento atual de Contas a Pagar e Contas a Receber segue esse conceito e
 não deve ser usado para representar energia elétrica, internet, aluguel,
 condomínio, assinaturas ou mensalidades.
 
-### Contas recorrentes esperadas
+### Contas recorrentes esperadas — implementado
 
-Uma recorrência futura representará uma obrigação ou receita esperada
+Uma recorrência representa uma obrigação ou receita esperada
 periodicamente. Ela poderá ter valor fixo ou variável e funcionará como
 controle operacional para identificar se a conta esperada de cada período foi
 cadastrada.
@@ -61,21 +61,21 @@ mensal. A partir dessa confirmação, o fluxo será o fluxo normal do produto:
 Isso permite que valores variáveis sejam confirmados antes do reconhecimento e
 evita títulos e lançamentos automáticos sem validação do usuário.
 
-### Integrações futuras
+### Integrações atuais
 
-O futuro módulo de contas recorrentes esperadas deverá aparecer em:
+O módulo está integrado a:
 
 - Dashboard, destacando contas esperadas ainda não cadastradas;
-- Fechamento Mensal, como pendência operacional do período;
+- Fechamento Mensal, como revisão gerencial informativa e não bloqueante;
 - Contas a Pagar e Contas a Receber, no fluxo de criação ou confirmação mensal;
 - alertas de pendências, incluindo contas não cadastradas, pendentes e vencidas.
 
-### Escopo atual
+### Invariantes atuais
 
-Recorrências não fazem parte do escopo atual. Até que o módulo seja
-especificado e implementado:
-
-- não gerar recorrências infinitas;
+- não gerar ou materializar recorrências infinitas;
 - não criar títulos mensais automaticamente;
 - não criar provisões contábeis automaticamente;
 - não alterar o comportamento do parcelamento financeiro existente.
+
+Versionamento, previsão configurável, integração com extrato, performance e
+backtest estão documentados em [Recorrências financeiras](recurring-financial-expectations.md).

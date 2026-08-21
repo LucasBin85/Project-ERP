@@ -22,9 +22,15 @@ class BuildRecurringFinancialRulesOverview
         return RecurringFinancialExpectation::query()->where('wallet_id', $wallet->id)->where('type', $type)
             ->where('status', 'active')->whereDoesntHave('successor')
             ->where(fn ($q) => $q->whereNull('ends_on')->orWhereDate('ends_on', '>=', $reference))
-            ->with(['supplier:id,name', 'customer:id,name', 'defaultAccount:id,code,name'])
+            ->with([
+                'supplier:id,name',
+                'customer:id,name',
+                'defaultAccount:id,code,name',
+                'occurrences:id,recurring_financial_expectation_id,period_date',
+            ])
             ->orderBy('description')->get()->map(function (RecurringFinancialExpectation $rule) use ($wallet, $reference) {
-                $lastResolved = $rule->occurrences()->max('period_date');
+                $resolvedPeriods = $rule->occurrences->keyBy(fn ($occurrence) => $occurrence->period_date->toDateString());
+                $lastResolved = $rule->occurrences->max('period_date');
                 $minimum = collect([
                     $reference,
                     CarbonImmutable::instance($rule->starts_on)->startOfMonth(),
@@ -32,7 +38,7 @@ class BuildRecurringFinancialRulesOverview
                 ])->filter()->max();
                 $period = $reference;
                 for ($i = 0; $i < 240; $i++, $period = $period->addMonth()) {
-                    if ($rule->isApplicableTo($period) && ! $rule->occurrences()->whereDate('period_date', $period)->exists()) {
+                    if ($rule->isApplicableTo($period) && ! $resolvedPeriods->has($period->toDateString())) {
                         break;
                     }
                 }
