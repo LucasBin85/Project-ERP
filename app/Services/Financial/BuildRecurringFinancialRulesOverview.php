@@ -42,6 +42,7 @@ class BuildRecurringFinancialRulesOverview
                     'id' => $rule->id, 'description' => $rule->description,
                     'counterparty' => $rule->type === 'payable' ? $rule->supplier : $rule->customer,
                     'frequency' => $rule->frequency, 'amount_mode' => $rule->amount_mode,
+                    'forecast_strategy' => $rule->effectiveForecastStrategy(), 'forecast_strategy_label' => $rule->forecastStrategyLabel(),
                     'expected_amount_cents' => $rule->expected_amount_cents, 'default_account' => $rule->defaultAccount,
                     'starts_on' => $rule->starts_on->toDateString(), 'ends_on' => $rule->ends_on?->toDateString(),
                     'due_day' => $rule->due_day, 'notes' => $rule->notes,

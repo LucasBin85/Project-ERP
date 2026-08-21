@@ -12,12 +12,6 @@ class BuildRecurringFinancialForecastBacktest
 {
     private const SAMPLE_SIZE = 12;
 
-    private const STRATEGIES = [
-        'mean_last_3' => 'Média das últimas 3',
-        'last_actual' => 'Último realizado',
-        'median_last_3' => 'Mediana das últimas 3',
-    ];
-
     public function execute(Wallet $wallet, RecurringFinancialExpectation $terminalRule): array
     {
         $chain = $this->chain($wallet, $terminalRule);
@@ -38,16 +32,19 @@ class BuildRecurringFinancialForecastBacktest
 
         $targetCount = max(0, $actuals->count() - 3);
         if ($targetCount === 0) {
-            return $this->emptyResult(true, 'insufficient_history', $actuals->count());
+            return array_merge($this->emptyResult(true, 'insufficient_history', $actuals->count()), [
+                'current_strategy' => $terminalRule->effectiveForecastStrategy(),
+                'current_strategy_label' => $terminalRule->forecastStrategyLabel(),
+            ]);
         }
 
-        $periodsByStrategy = collect(array_keys(self::STRATEGIES))->mapWithKeys(fn (string $code) => [$code => collect()]);
+        $periodsByStrategy = collect(array_keys(RecurringFinancialExpectation::FORECAST_STRATEGIES))->mapWithKeys(fn (string $code) => [$code => collect()]);
         $history = [];
 
         foreach ($actuals as $actual) {
             if (count($history) >= 3) {
                 $lastThree = array_slice($history, -3);
-                foreach (array_keys(self::STRATEGIES) as $code) {
+                foreach (array_keys(RecurringFinancialExpectation::FORECAST_STRATEGIES) as $code) {
                     $forecast = $this->forecast($code, $lastThree);
                     $periodsByStrategy[$code]->push($this->period($actual, $forecast));
                 }
@@ -56,7 +53,7 @@ class BuildRecurringFinancialForecastBacktest
             $history[] = $actual->actual_amount_cents;
         }
 
-        $strategies = collect(self::STRATEGIES)->map(function (string $label, string $code) use ($periodsByStrategy) {
+        $strategies = collect(RecurringFinancialExpectation::FORECAST_STRATEGIES)->map(function (string $label, string $code) use ($periodsByStrategy) {
             $periods = $periodsByStrategy[$code]->take(-self::SAMPLE_SIZE)->values();
             $percentagePeriods = $periods->whereNotNull('variance_bps');
 
@@ -70,7 +67,8 @@ class BuildRecurringFinancialForecastBacktest
                 'periods' => $periods->all(),
             ];
         })->values();
-        $recommended = $strategies->sort(fn (array $left, array $right) => $this->compare($left, $right))->first();
+        $currentStrategy = $terminalRule->effectiveForecastStrategy();
+        $recommended = $strategies->sort(fn (array $left, array $right) => $this->compare($left, $right, $currentStrategy))->first();
 
         return [
             'applicable' => true,
@@ -79,6 +77,8 @@ class BuildRecurringFinancialForecastBacktest
             'total_eligible_actual_count' => $actuals->count(),
             'backtest_target_count' => $targetCount,
             'sample_target_count' => min(self::SAMPLE_SIZE, $targetCount),
+            'current_strategy' => $currentStrategy,
+            'current_strategy_label' => $terminalRule->forecastStrategyLabel(),
             'strategies' => $strategies->all(),
             'recommended_strategy' => $recommended['code'],
             'recommended_strategy_label' => $recommended['label'],
@@ -139,7 +139,7 @@ class BuildRecurringFinancialForecastBacktest
         ];
     }
 
-    private function compare(array $left, array $right): int
+    private function compare(array $left, array $right, string $currentStrategy): int
     {
         $comparison = $left['mean_absolute_variance_cents'] <=> $right['mean_absolute_variance_cents'];
         if ($comparison !== 0) {
@@ -153,12 +153,12 @@ class BuildRecurringFinancialForecastBacktest
         }
         $comparison = abs($left['mean_signed_variance_cents']) <=> abs($right['mean_signed_variance_cents']);
 
-        return $comparison !== 0 ? $comparison : $this->priority($left['code']) <=> $this->priority($right['code']);
+        return $comparison !== 0 ? $comparison : $this->priority($left['code'], $currentStrategy) <=> $this->priority($right['code'], $currentStrategy);
     }
 
-    private function priority(string $code): int
+    private function priority(string $code, string $currentStrategy): int
     {
-        return $code === 'mean_last_3' ? 0 : array_search($code, array_keys(self::STRATEGIES), true);
+        return $code === $currentStrategy ? 0 : array_search($code, array_keys(RecurringFinancialExpectation::FORECAST_STRATEGIES), true) + 1;
     }
 
     private function mean(Collection $values): ?int
@@ -180,6 +180,8 @@ class BuildRecurringFinancialForecastBacktest
             'total_eligible_actual_count' => $eligibleCount,
             'backtest_target_count' => 0,
             'sample_target_count' => 0,
+            'current_strategy' => null,
+            'current_strategy_label' => null,
             'strategies' => [],
             'recommended_strategy' => null,
             'recommended_strategy_label' => null,

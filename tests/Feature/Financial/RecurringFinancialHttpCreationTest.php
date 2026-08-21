@@ -118,3 +118,23 @@ it('rejects an invalid counterparty before creating recurring records', function
 
     expect(RecurringFinancialExpectation::count())->toBe(0)->and(RecurringFinancialOccurrence::count())->toBe(0)->and(AccountReceivable::count())->toBe(0);
 });
+
+it('creates payable and receivable variable rules with an explicit forecast strategy', function (string $type) {
+    $context = recurringHttpContext();
+    postRecurring($context, $type, [
+        'recurring_amount_mode' => 'variable',
+        'recurring_forecast_strategy' => 'median_last_3',
+    ])->assertRedirect(route($type === 'payable' ? 'accounts-payable.index' : 'accounts-receivable.index'));
+
+    expect(RecurringFinancialExpectation::query()->sole()->forecast_strategy)->toBe('median_last_3');
+})->with(['payable', 'receivable']);
+
+it('rejects invalid and fixed-only HTTP strategy combinations', function (array $overrides) {
+    $context = recurringHttpContext();
+    postRecurring($context, 'payable', $overrides)->assertSessionHasErrors('recurring_forecast_strategy');
+
+    expect(RecurringFinancialExpectation::count())->toBe(0);
+})->with([
+    [['recurring_amount_mode' => 'variable', 'recurring_forecast_strategy' => 'weighted']],
+    [['recurring_amount_mode' => 'fixed', 'recurring_forecast_strategy' => 'median_last_3']],
+]);

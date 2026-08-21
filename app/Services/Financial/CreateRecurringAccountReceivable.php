@@ -47,6 +47,7 @@ class CreateRecurringAccountReceivable
             expectedAmountCents: $dto->amountMode === 'fixed' ? $actualAmountCents : $dto->expectedAmountCents,
             defaultAccountId: $dto->defaultAccountId, startsOn: $dto->startsOn, endsOn: $dto->endsOn,
             supplierId: $dto->supplierId, customerId: $dto->customerId, notes: $dto->notes,
+            forecastStrategy: $dto->forecastStrategy,
         );
     }
 }

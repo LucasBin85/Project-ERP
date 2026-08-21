@@ -38,6 +38,20 @@ class EstimateRecurringFinancialExpectationAmount
             return $expectation->expected_amount_cents;
         }
 
-        return (int) round($amounts->sum() / $amounts->count(), 0, PHP_ROUND_HALF_UP);
+        return match ($expectation->effectiveForecastStrategy()) {
+            'last_actual' => $amounts->first(),
+            'median_last_3' => $this->median($amounts->all()),
+            default => (int) round($amounts->sum() / $amounts->count(), 0, PHP_ROUND_HALF_UP),
+        };
+    }
+
+    private function median(array $amounts): int
+    {
+        sort($amounts, SORT_NUMERIC);
+        $count = count($amounts);
+
+        return $count % 2 === 1
+            ? $amounts[intdiv($count, 2)]
+            : (int) round(($amounts[0] + $amounts[1]) / 2, 0, PHP_ROUND_HALF_UP);
     }
 }

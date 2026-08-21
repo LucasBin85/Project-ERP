@@ -97,6 +97,7 @@ class AccountReceivableController extends Controller
         $data = $request->validate([
             'effective_from' => ['required', 'date'], 'description' => ['required', 'string', 'max:255'], 'customer_id' => ['required', 'integer'],
             'frequency' => ['required', Rule::in(array_keys(RecurringFinancialExpectation::FREQUENCY_INTERVALS))], 'amount_mode' => ['required', Rule::in(['fixed', 'variable'])],
+            'forecast_strategy' => ['nullable', Rule::prohibitedIf(fn () => $request->input('amount_mode') === 'fixed'), Rule::in(array_keys(RecurringFinancialExpectation::FORECAST_STRATEGIES))],
             'expected_amount_cents' => ['nullable', 'integer', 'min:1', Rule::requiredIf(fn () => $request->input('amount_mode') === 'fixed')],
             'due_day' => ['required', 'integer', 'between:1,31'], 'default_account_id' => ['required', 'integer'],
             'ends_on' => ['nullable', 'date', 'after_or_equal:effective_from'], 'notes' => ['nullable', 'string', 'max:2000'],
@@ -104,6 +105,7 @@ class AccountReceivableController extends Controller
         $service->execute($wallet, $expectation, CarbonImmutable::parse($data['effective_from']), new RecurringFinancialExpectationDTO(
             type: 'receivable', description: $data['description'], frequency: $data['frequency'], dueDay: (int) $data['due_day'],
             amountMode: $data['amount_mode'], expectedAmountCents: isset($data['expected_amount_cents']) ? (int) $data['expected_amount_cents'] : null,
+            forecastStrategy: $data['forecast_strategy'] ?? null,
             defaultAccountId: (int) $data['default_account_id'], startsOn: $data['effective_from'], endsOn: $data['ends_on'] ?? null,
             customerId: (int) $data['customer_id'], notes: $data['notes'] ?? null,
         ));
@@ -184,6 +186,7 @@ class AccountReceivableController extends Controller
             'installments.*.amount_cents' => ['required', 'integer', 'min:1'],
             'recurring_frequency' => ['required_if:mode,recurring', 'nullable', Rule::in(['monthly', 'quarterly', 'semiannual', 'annual'])],
             'recurring_amount_mode' => ['required_if:mode,recurring', 'nullable', Rule::in(['fixed', 'variable'])],
+            'recurring_forecast_strategy' => ['nullable', Rule::prohibitedIf(fn () => $request->input('recurring_amount_mode') === 'fixed'), Rule::in(array_keys(RecurringFinancialExpectation::FORECAST_STRATEGIES))],
             'recurring_due_day' => ['required_if:mode,recurring', 'nullable', 'integer', 'min:1', 'max:31'],
             'recurring_default_account_id' => ['required_if:mode,recurring', 'nullable', 'integer'],
             'recurring_expected_amount_cents' => ['nullable', 'integer', 'min:1'],
@@ -212,6 +215,7 @@ class AccountReceivableController extends Controller
                     expectedAmountCents: $data['recurring_amount_mode'] === 'fixed' ? (int) $data['amount_cents'] : ($data['recurring_expected_amount_cents'] ?? null),
                     defaultAccountId: (int) $data['recurring_default_account_id'], startsOn: CarbonImmutable::parse($data['competence_date'])->startOfMonth()->toDateString(),
                     endsOn: $data['recurring_ends_on'] ?? null, customerId: (int) $data['customer_id'], notes: $data['notes'] ?? null,
+                    forecastStrategy: $data['recurring_forecast_strategy'] ?? null,
                 ),
                 CarbonImmutable::parse($data['competence_date']), (int) $data['amount_cents'],
                 CarbonImmutable::parse($data['due_date']), $data['notes'] ?? null,

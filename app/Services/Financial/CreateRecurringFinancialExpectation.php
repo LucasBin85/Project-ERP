@@ -26,6 +26,9 @@ class CreateRecurringFinancialExpectation
         if (! in_array($dto->amountMode, ['fixed', 'variable'], true)) {
             throw ValidationException::withMessages(['amount_mode' => 'Modo de valor inválido.']);
         }
+        if ($dto->amountMode === 'variable' && $dto->forecastStrategy !== null && ! array_key_exists($dto->forecastStrategy, RecurringFinancialExpectation::FORECAST_STRATEGIES)) {
+            throw ValidationException::withMessages(['forecast_strategy' => 'Método de previsão inválido.']);
+        }
         if ($dto->dueDay < 1 || $dto->dueDay > 31) {
             throw ValidationException::withMessages(['due_day' => 'O dia de vencimento deve estar entre 1 e 31.']);
         }
@@ -59,6 +62,7 @@ class CreateRecurringFinancialExpectation
             'interval_months' => $intervalMonths,
             'due_day' => $dto->dueDay,
             'amount_mode' => $dto->amountMode,
+            'forecast_strategy' => $dto->amountMode === 'variable' ? ($dto->forecastStrategy ?? 'mean_last_3') : null,
             'expected_amount_cents' => $dto->expectedAmountCents,
             'default_account_id' => $dto->defaultAccountId,
             'starts_on' => $startsOn,

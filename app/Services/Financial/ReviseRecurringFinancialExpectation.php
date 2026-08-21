@@ -36,6 +36,7 @@ class ReviseRecurringFinancialExpectation
                 supplierId: $current->type === 'payable' ? $data->supplierId : null,
                 customerId: $current->type === 'receivable' ? $data->customerId : null, notes: $data->notes,
                 replacesExpectationId: $current->id, scheduleAnchorDate: $anchor->toDateString(),
+                forecastStrategy: $data->forecastStrategy,
             ));
         });
     }

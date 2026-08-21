@@ -22,6 +22,7 @@ export function useAccountReceivableCreate() {
         installments: [] as Array<{ due_date: string; amount_cents: number; amount: string }>,
         recurring_frequency: 'monthly',
         recurring_amount_mode: 'fixed',
+        recurring_forecast_strategy: null as string | null,
         recurring_due_day: Number(todayLocal().slice(-2)),
         recurring_default_account_id: '',
         recurring_expected_amount: '',
@@ -40,7 +41,7 @@ export function useAccountReceivableCreate() {
                 (form.mode === 'single' ||
                     (form.mode === 'installment' && form.installment_count >= 2 && Boolean(form.competence_date) && difference.value === 0) ||
                     (form.mode === 'recurring' && Boolean(form.competence_date) && Boolean(form.recurring_frequency) &&
-                        Boolean(form.recurring_amount_mode) && form.recurring_due_day >= 1 && form.recurring_due_day <= 31 &&
+                        Boolean(form.recurring_amount_mode) && (form.recurring_amount_mode === 'fixed' || Boolean(form.recurring_forecast_strategy)) && form.recurring_due_day >= 1 && form.recurring_due_day <= 31 &&
                         Boolean(form.recurring_default_account_id))),
         );
     });
@@ -81,6 +82,10 @@ export function useAccountReceivableCreate() {
     }
     watch(() => [form.amount_cents, form.due_date, form.installment_count, form.interval_months, form.mode], () => {
         if (form.mode === 'installment') recalculateInstallments();
+    });
+
+    watch(() => form.recurring_amount_mode, (mode) => {
+        form.recurring_forecast_strategy = mode === 'variable' ? (form.recurring_forecast_strategy ?? 'mean_last_3') : null;
     });
 
     let initializedRecurringDueDay = false;

@@ -11,6 +11,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RecurringFinancialExpectation extends Model
 {
+    public const FORECAST_STRATEGIES = [
+        'mean_last_3' => 'Média das últimas 3',
+        'last_actual' => 'Último realizado',
+        'median_last_3' => 'Mediana das últimas 3',
+    ];
+
     public const FREQUENCY_INTERVALS = [
         'monthly' => 1,
         'quarterly' => 3,
@@ -29,6 +35,7 @@ class RecurringFinancialExpectation extends Model
         'interval_months',
         'due_day',
         'amount_mode',
+        'forecast_strategy',
         'expected_amount_cents',
         'default_account_id',
         'starts_on',
@@ -128,5 +135,23 @@ class RecurringFinancialExpectation extends Model
         return $this->type === 'payable'
             ? $this->supplier?->name
             : $this->customer?->name;
+    }
+
+    public function effectiveForecastStrategy(): ?string
+    {
+        if ($this->amount_mode !== 'variable') {
+            return null;
+        }
+
+        return array_key_exists((string) $this->forecast_strategy, self::FORECAST_STRATEGIES)
+            ? $this->forecast_strategy
+            : 'mean_last_3';
+    }
+
+    public function forecastStrategyLabel(): ?string
+    {
+        $strategy = $this->effectiveForecastStrategy();
+
+        return $strategy === null ? null : self::FORECAST_STRATEGIES[$strategy];
     }
 }
