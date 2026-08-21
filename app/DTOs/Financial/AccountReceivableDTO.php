@@ -18,6 +18,7 @@ final readonly class AccountReceivableDTO
         public int $intervalMonths = 1,
         public ?string $competenceDate = null,
         public array $installments = [],
+        public bool $preferExplicitRevenueAccount = false,
     ) {}
 
     public static function fromArray(array $data): self

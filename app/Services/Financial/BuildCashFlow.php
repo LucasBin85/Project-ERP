@@ -9,10 +9,15 @@ use App\Models\BankAccount;
 use App\Models\CreditCardInvoice;
 use App\Models\JournalLine;
 use App\Models\Wallet;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
 class BuildCashFlow
 {
+    public function __construct(
+        private readonly ListRecurringFinancialExpectationsForRange $listRecurringExpectations,
+    ) {}
+
     public function handle(Wallet $wallet, CashFlowFiltersDTO $filters): array
     {
         $bankAccountIds = BankAccount::query()
@@ -27,7 +32,9 @@ class BuildCashFlow
         $items = collect()
             ->merge($this->realizedItems($wallet, $bankAccountIds, $filters))
             ->merge($this->receivableItems($wallet, $filters))
+            ->merge($this->recurringItems($wallet, $filters, 'receivable'))
             ->merge($this->payableItems($wallet, $filters))
+            ->merge($this->recurringItems($wallet, $filters, 'payable'))
             ->merge($this->creditCardInvoiceItems($wallet, $filters))
             ->when($filters->mode !== 'all', fn (Collection $items) => $items->where('bucket', $filters->mode))
             ->when($filters->search !== '', fn (Collection $items) => $items->filter(function (array $item) use ($filters) {
@@ -46,25 +53,34 @@ class BuildCashFlow
 
         $runningRealized = $openingBalance;
         $runningProjected = $openingBalance;
+        $runningProjectedComplete = true;
 
-        $items = $items->map(function (array $item) use (&$runningRealized, &$runningProjected) {
+        $items = $items->map(function (array $item) use (&$runningRealized, &$runningProjected, &$runningProjectedComplete) {
+            $item['has_estimated_amount'] = $item['amount_cents'] !== null;
+
             if ($item['bucket'] === 'realized') {
                 $runningRealized += $item['amount_cents'];
                 $runningProjected += $item['amount_cents'];
-            } else {
+            } elseif ($item['amount_cents'] !== null) {
                 $runningProjected += $item['amount_cents'];
+            } else {
+                $runningProjectedComplete = false;
             }
 
             $item['running_realized_balance_cents'] = $runningRealized;
             $item['running_projected_balance_cents'] = $runningProjected;
+            $item['running_projected_balance_complete'] = $runningProjectedComplete;
 
             return $item;
         });
 
         $realizedInflows = $items->where('bucket', 'realized')->where('direction', 'inflow')->sum('amount_cents');
         $realizedOutflows = abs($items->where('bucket', 'realized')->where('direction', 'outflow')->sum('amount_cents'));
-        $projectedInflows = $items->where('bucket', 'projected')->where('direction', 'inflow')->sum('amount_cents');
-        $projectedOutflows = abs($items->where('bucket', 'projected')->where('direction', 'outflow')->sum('amount_cents'));
+        $projectedItems = $items->where('bucket', 'projected');
+        $projectedInflows = $projectedItems->where('direction', 'inflow')->whereNotNull('amount_cents')->sum('amount_cents');
+        $projectedOutflows = abs($projectedItems->where('direction', 'outflow')->whereNotNull('amount_cents')->sum('amount_cents'));
+        $unestimatedInflows = $projectedItems->where('direction', 'inflow')->whereNull('amount_cents')->count();
+        $unestimatedOutflows = $projectedItems->where('direction', 'outflow')->whereNull('amount_cents')->count();
 
         return [
             'filters' => $filters->toArray(),
@@ -78,6 +94,9 @@ class BuildCashFlow
                 'projected_net_cents' => (int) $projectedInflows - (int) $projectedOutflows,
                 'realized_closing_balance_cents' => $runningRealized,
                 'projected_closing_balance_cents' => $runningProjected,
+                'unestimated_projected_inflows_count' => $unestimatedInflows,
+                'unestimated_projected_outflows_count' => $unestimatedOutflows,
+                'unestimated_projected_items_count' => $unestimatedInflows + $unestimatedOutflows,
             ],
             'items' => $items->values()->all(),
         ];
@@ -131,7 +150,7 @@ class BuildCashFlow
                 $signed = $line->type === 'debit' ? $amount : -$amount;
 
                 return [
-                    'id' => 'realized-' . $line->id,
+                    'id' => 'realized-'.$line->id,
                     'date' => $entry?->entry_date,
                     'bucket' => 'realized',
                     'source' => 'bank_movement',
@@ -158,7 +177,7 @@ class BuildCashFlow
             ->orderBy('due_date')
             ->get()
             ->map(fn (AccountReceivable $item) => [
-                'id' => 'receivable-' . $item->id,
+                'id' => 'receivable-'.$item->id,
                 'date' => $item->due_date,
                 'bucket' => 'projected',
                 'source' => 'accounts_receivable',
@@ -184,7 +203,7 @@ class BuildCashFlow
             ->orderBy('due_date')
             ->get()
             ->map(fn (AccountPayable $item) => [
-                'id' => 'payable-' . $item->id,
+                'id' => 'payable-'.$item->id,
                 'date' => $item->due_date,
                 'bucket' => 'projected',
                 'source' => 'accounts_payable',
@@ -212,7 +231,7 @@ class BuildCashFlow
             ->orderBy('due_at')
             ->get()
             ->map(fn (CreditCardInvoice $invoice) => [
-                'id' => 'credit-card-invoice-' . $invoice->id,
+                'id' => 'credit-card-invoice-'.$invoice->id,
                 'date' => $invoice->due_at,
                 'bucket' => 'projected',
                 'source' => 'credit_card_invoice',
@@ -231,5 +250,39 @@ class BuildCashFlow
                 'url' => route('credit-cards.show', $invoice->credit_card_id),
                 'sort_order' => 40,
             ]);
+    }
+
+    private function recurringItems(Wallet $wallet, CashFlowFiltersDTO $filters, string $type): Collection
+    {
+        $items = $this->listRecurringExpectations->execute(
+            $wallet,
+            $type,
+            CarbonImmutable::parse($filters->startDate),
+            CarbonImmutable::parse($filters->endDate),
+        );
+        $isReceivable = $type === 'receivable';
+
+        return collect($items)->map(function (array $item) use ($isReceivable) {
+            $amount = $item['expected_amount_cents'];
+
+            return [
+                'id' => sprintf('recurring-%s-%d-%s', $isReceivable ? 'receivable' : 'payable', $item['expectation_id'], $item['period_date']),
+                'date' => $item['due_date'],
+                'bucket' => 'projected',
+                'source' => $isReceivable ? 'recurring_receivable' : 'recurring_payable',
+                'source_label' => $isReceivable ? 'Recebimento recorrente previsto' : 'Pagamento recorrente previsto',
+                'direction' => $isReceivable ? 'inflow' : 'outflow',
+                'description' => $item['description'],
+                'counterparty' => $item['counterparty']['name'] ?? null,
+                'status' => 'predicted',
+                'amount_cents' => $amount === null ? null : ($isReceivable ? (int) $amount : -((int) $amount)),
+                'recurring_expectation_id' => $item['expectation_id'],
+                'period_date' => $item['period_date'],
+                'amount_mode' => $item['amount_mode'],
+                'journal_entry_id' => null,
+                'url' => null,
+                'sort_order' => $isReceivable ? 25 : 35,
+            ];
+        });
     }
 }

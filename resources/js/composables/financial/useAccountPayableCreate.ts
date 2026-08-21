@@ -25,6 +25,14 @@ export function useAccountPayableCreate() {
         interval_months: 1,
         competence_date: todayLocal(),
         installments: [] as Array<{ due_date: string; amount_cents: number; amount: string }>,
+        recurring_frequency: 'monthly',
+        recurring_amount_mode: 'fixed',
+        recurring_forecast_strategy: null as string | null,
+        recurring_due_day: Number(todayLocal().slice(-2)),
+        recurring_default_account_id: '',
+        recurring_expected_amount: '',
+        recurring_expected_amount_cents: null as number | null,
+        recurring_ends_on: '',
     });
 
     const installmentTotal = computed(() => form.installments.reduce((sum, item) => sum + item.amount_cents, 0));
@@ -35,7 +43,11 @@ export function useAccountPayableCreate() {
                 form.description.trim() &&
                 form.due_date &&
                 form.amount_cents > 0 &&
-                (form.mode === 'single' || (form.installment_count >= 2 && Boolean(form.competence_date) && difference.value === 0)),
+                (form.mode === 'single' ||
+                    (form.mode === 'installment' && form.installment_count >= 2 && Boolean(form.competence_date) && difference.value === 0) ||
+                    (form.mode === 'recurring' && Boolean(form.competence_date) && Boolean(form.recurring_frequency) &&
+                        Boolean(form.recurring_amount_mode) && (form.recurring_amount_mode === 'fixed' || Boolean(form.recurring_forecast_strategy)) && form.recurring_due_day >= 1 && form.recurring_due_day <= 31 &&
+                        Boolean(form.recurring_default_account_id))),
         );
     });
 
@@ -72,8 +84,27 @@ export function useAccountPayableCreate() {
         form.amount = formatMoneyInput(target.value);
     }
 
+    function updateRecurringExpectedAmount(event: Event) {
+        const target = event.target as HTMLInputElement;
+        const cents = moneyToCents(target.value);
+        form.recurring_expected_amount_cents = cents > 0 ? cents : null;
+        form.recurring_expected_amount = formatMoneyInput(target.value);
+    }
+
+    let initializedRecurringDueDay = false;
+    watch(() => form.mode, (mode) => {
+        if (mode === 'recurring' && !initializedRecurringDueDay) {
+            form.recurring_due_day = Number(form.due_date.slice(-2));
+            initializedRecurringDueDay = true;
+        }
+    });
+
     watch(() => [form.amount_cents, form.due_date, form.installment_count, form.interval_months, form.mode], () => {
         if (form.mode === 'installment') recalculateInstallments();
+    });
+
+    watch(() => form.recurring_amount_mode, (mode) => {
+        form.recurring_forecast_strategy = mode === 'variable' ? (form.recurring_forecast_strategy ?? 'mean_last_3') : null;
     });
 
     return {
@@ -85,5 +116,6 @@ export function useAccountPayableCreate() {
         recalculateInstallments,
         updateInstallmentAmount,
         adjustLastInstallment,
+        updateRecurringExpectedAmount,
     };
 }

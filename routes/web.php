@@ -135,6 +135,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/create-link-payable', [BankStatementSettlementController::class, 'createAndLinkPayable'])
             ->name('bank-accounts.statement.create-link-payable');
+        Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/confirm-link-recurring-payable', [BankStatementSettlementController::class, 'confirmAndLinkRecurringPayable'])
+            ->name('bank-accounts.statement.confirm-link-recurring-payable');
 
         Route::get('bank-accounts/{bankAccount}/statement/{journalEntry}/receivable-candidates', [BankStatementSettlementController::class, 'receivableCandidates'])
             ->name('bank-accounts.statement.receivable-candidates');
@@ -144,6 +146,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/create-link-receivable', [BankStatementSettlementController::class, 'createAndLinkReceivable'])
             ->name('bank-accounts.statement.create-link-receivable');
+        Route::post('bank-accounts/{bankAccount}/statement/{journalEntry}/confirm-link-recurring-receivable', [BankStatementSettlementController::class, 'confirmAndLinkRecurringReceivable'])
+            ->name('bank-accounts.statement.confirm-link-recurring-receivable');
 
         Route::post('bank-accounts/ofx-preview', [BankAccountController::class, 'previewOfx'])
             ->name('bank-accounts.ofx-preview');
@@ -172,11 +176,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('accounts-payable/{accountPayable}/pay', [AccountPayableController::class, 'pay'])
             ->name('accounts-payable.pay');
 
+        Route::post('accounts-payable/recurring/{expectation}/confirm', [AccountPayableController::class, 'confirmRecurring'])
+            ->name('accounts-payable.recurring.confirm');
+        Route::post('accounts-payable/recurring/{expectation}/skip', [AccountPayableController::class, 'skipRecurring'])
+            ->name('accounts-payable.recurring.skip');
+        Route::put('accounts-payable/recurring/{expectation}', [AccountPayableController::class, 'reviseRecurring'])->name('accounts-payable.recurring.revise');
+        Route::patch('accounts-payable/recurring/{expectation}/deactivate', [AccountPayableController::class, 'deactivateRecurring'])->name('accounts-payable.recurring.deactivate');
+
         Route::resource('accounts-payable', AccountPayableController::class)
             ->only(['index', 'create', 'store', 'show']);
 
         Route::post('accounts-receivable/{accountReceivable}/receive', [AccountReceivableController::class, 'receive'])
             ->name('accounts-receivable.receive');
+
+        Route::post('accounts-receivable/recurring/{expectation}/confirm', [AccountReceivableController::class, 'confirmRecurring'])
+            ->name('accounts-receivable.recurring.confirm');
+        Route::post('accounts-receivable/recurring/{expectation}/skip', [AccountReceivableController::class, 'skipRecurring'])
+            ->name('accounts-receivable.recurring.skip');
+        Route::put('accounts-receivable/recurring/{expectation}', [AccountReceivableController::class, 'reviseRecurring'])->name('accounts-receivable.recurring.revise');
+        Route::patch('accounts-receivable/recurring/{expectation}/deactivate', [AccountReceivableController::class, 'deactivateRecurring'])->name('accounts-receivable.recurring.deactivate');
 
         Route::resource('accounts-receivable', AccountReceivableController::class)
             ->only(['index', 'create', 'store', 'show']);

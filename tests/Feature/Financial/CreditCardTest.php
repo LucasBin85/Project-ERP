@@ -337,6 +337,8 @@ it('creates a draft journal entry and monthly invoice when registering a credit 
 });
 
 it('splits a credit card purchase into installments across monthly invoices', function () {
+    $this->travelTo('2026-08-10');
+
     $wallet = createTestWalletWithCardGroup();
 
     $expenseAccount = AccountingTestHelper::account($wallet, '5.9.91', 'Despesa Administrativa', 'despesa', 'debit');

@@ -2,6 +2,7 @@
 
 namespace App\Services\Financial;
 
+use App\DTOs\Financial\CashFlowFiltersDTO;
 use App\Models\ChartOfAccount;
 use App\Models\CreditCardInstallmentPlan;
 use App\Models\CreditCardInstallmentPlanItem;
@@ -13,12 +14,22 @@ use App\Models\Wallet;
 
 class BuildManagerialFinancialDashboard
 {
-    public function __construct(private readonly BuildMonthlyWalletClosingSummary $monthlyClosing) {}
+    public function __construct(
+        private readonly BuildMonthlyWalletClosingSummary $monthlyClosing,
+        private readonly BuildCashFlow $cashFlow,
+    ) {}
 
     public function execute(Wallet $wallet, int $year, int $month): array
     {
         $closing = $this->monthlyClosing->execute($wallet, $year, $month);
         $end = $closing['period']['end_date'];
+        $cashFlow = $this->cashFlow->handle($wallet, new CashFlowFiltersDTO(
+            startDate: $closing['period']['start_date'],
+            endDate: $end,
+            mode: 'all',
+            search: '',
+        ));
+        $cashSummary = $cashFlow['summary'];
         $investmentAccountIds = ChartOfAccount::query()->where('wallet_id', $wallet->id)
             ->where('financial_group', 'investments')->where('allows_posting', true)->pluck('id');
         $investments = $this->balanceUntil($wallet, $investmentAccountIds->all(), $end);
@@ -62,6 +73,24 @@ class BuildManagerialFinancialDashboard
                 'credit_card_installment_plans_pending_count' => $pendingInstallmentPlans,
                 'credit_card_installment_plans_started_before_erp_count' => $startedBeforeErpPlans,
                 'credit_card_installments_future_cents' => $futureInstallments,
+            ],
+            'cash_projection' => [
+                'opening_balance_cents' => $cashSummary['opening_balance_cents'],
+                'realized_inflows_cents' => $cashSummary['realized_inflows_cents'],
+                'realized_outflows_cents' => $cashSummary['realized_outflows_cents'],
+                'projected_inflows_cents' => $cashSummary['projected_inflows_cents'],
+                'projected_outflows_cents' => $cashSummary['projected_outflows_cents'],
+                'projected_net_cents' => $cashSummary['projected_net_cents'],
+                'projected_closing_balance_cents' => $cashSummary['projected_closing_balance_cents'],
+                'unestimated_projected_inflows_count' => $cashSummary['unestimated_projected_inflows_count'],
+                'unestimated_projected_outflows_count' => $cashSummary['unestimated_projected_outflows_count'],
+                'unestimated_projected_items_count' => $cashSummary['unestimated_projected_items_count'],
+                'is_complete' => $cashSummary['unestimated_projected_items_count'] === 0,
+                'url' => route('cash-flow.index', [
+                    'start_date' => $closing['period']['start_date'],
+                    'end_date' => $end,
+                    'mode' => 'all',
+                ]),
             ],
             'closing' => [
                 'status' => $formalClosed ? 'formally_closed' : $closing['status'],
