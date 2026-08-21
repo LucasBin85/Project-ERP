@@ -9,6 +9,7 @@ const props = defineProps<{ rules: any[]; counterparties: any[]; accounts: any[]
 const open = ref(false);
 const editing = ref<number | null>(null);
 const deactivating = ref<number | null>(null);
+const performanceOpen = ref<number | null>(null);
 const form = useForm<any>({});
 const labels: Record<string, string> = { monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', fixed: 'Fixo', variable: 'Variável' };
 const prefix = () => props.type === 'payable' ? 'accounts-payable' : 'accounts-receivable';
@@ -26,6 +27,18 @@ function deactivate(rule: any) {
     editing.value = null; deactivating.value = rule.id; form.defaults({ effective_from: rule.minimum_revision_period }); form.reset(); form.clearErrors();
 }
 function confirmDeactivate(rule: any) { form.patch(route(`${prefix()}.recurring.deactivate`, [rule.id]), { preserveScroll: true, onSuccess: () => deactivating.value = null }); }
+function formatPercentBps(value: number | null): string { return value === null ? '-' : `${(value / 100).toFixed(2).replace('.', ',')}%`; }
+function formatPeriod(value: string): string { const [year, month] = value.split('-'); return `${month}/${year}`; }
+function signedCurrency(value: number): string { return `${value > 0 ? '+ ' : value < 0 ? '- ' : ''}${formatCurrency(Math.abs(value))}`; }
+function biasTone(value: number): string {
+    if (value === 0) return 'text-gray-300';
+    const favorable = props.type === 'payable' ? value < 0 : value > 0;
+    return favorable ? 'text-green-300' : 'text-red-300';
+}
+function biasText(value: number): string {
+    if (value === 0) return 'Em média, realizado igual à previsão';
+    return `Em média ${formatCurrency(Math.abs(value))} ${value > 0 ? 'acima' : 'abaixo'} da previsão`;
+}
 </script>
 
 <template>
@@ -36,7 +49,21 @@ function confirmDeactivate(rule: any) { form.patch(route(`${prefix()}.recurring.
         <div v-for="rule in rules" :key="rule.id" class="border-t border-gray-700 p-6 first:border-t-0">
             <div class="flex flex-wrap justify-between gap-4">
                 <div><h3 class="font-semibold text-white">{{ rule.description }}</h3><p class="text-sm text-gray-400">{{ labels[rule.frequency] }} · {{ labels[rule.amount_mode] }} · {{ rule.counterparty?.name }}</p><p class="text-sm text-gray-400">{{ type === 'payable' ? 'Despesa' : 'Receita' }}: {{ formatAccount(rule.default_account?.code, rule.default_account?.name) }}</p><p class="mt-1 text-sm text-gray-300">Próxima: {{ rule.next_due_date ? formatDate(rule.next_due_date) : '-' }} · Previsão: {{ rule.next_expected_amount_cents ? formatCurrency(rule.next_expected_amount_cents) : '-' }}</p></div>
-                <div class="flex gap-2"><button class="text-sm text-indigo-300" @click="edit(rule)">Editar</button><button class="text-sm text-red-300" @click="deactivate(rule)">Desativar</button></div>
+                <div class="flex gap-2"><button class="text-sm text-cyan-300" @click="performanceOpen = performanceOpen === rule.id ? null : rule.id">Previsão x realizado</button><button class="text-sm text-indigo-300" @click="edit(rule)">Editar</button><button class="text-sm text-red-300" @click="deactivate(rule)">Desativar</button></div>
+            </div>
+            <div v-if="performanceOpen === rule.id" class="mt-5 rounded-lg border border-gray-700 bg-gray-950 p-4">
+                <h4 class="font-semibold text-white">Previsão x realizado</h4>
+                <p v-if="rule.performance.total_confirmed_count === 0" class="mt-2 text-sm text-gray-400">Ainda não há competências confirmadas para comparar.</p>
+                <template v-else>
+                    <p class="mt-1 text-sm text-gray-400">Últimas {{ rule.performance.sample_confirmed_count }} de {{ rule.performance.total_confirmed_count }} competências confirmadas · {{ rule.performance.estimated_confirmed_count }} com previsão · {{ rule.performance.unestimated_confirmed_count }} sem previsão</p>
+                    <div v-if="rule.performance.estimated_confirmed_count" class="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div class="rounded border border-gray-700 p-3"><span class="text-xs text-gray-400">Erro médio</span><b class="block text-white">{{ formatCurrency(rule.performance.mean_absolute_variance_cents) }}</b></div>
+                        <div class="rounded border border-gray-700 p-3"><span class="text-xs text-gray-400">Erro percentual médio</span><b class="block text-white">{{ formatPercentBps(rule.performance.mean_absolute_percentage_error_bps) }}</b></div>
+                        <div class="rounded border border-gray-700 p-3"><span class="text-xs text-gray-400">Viés médio</span><b class="block" :class="biasTone(rule.performance.mean_signed_variance_cents)">{{ signedCurrency(rule.performance.mean_signed_variance_cents) }}</b><small :class="biasTone(rule.performance.mean_signed_variance_cents)">{{ biasText(rule.performance.mean_signed_variance_cents) }}</small></div>
+                    </div>
+                    <p v-else class="mt-3 text-sm text-amber-300">Ainda não há competências com previsão registrada suficiente para calcular os erros.</p>
+                    <div class="mt-4 overflow-x-auto"><table class="w-full text-sm"><thead class="text-gray-400"><tr><th class="py-2 text-left">Competência</th><th class="py-2 text-right">Previsto</th><th class="py-2 text-right">Realizado</th><th class="py-2 text-right">Variação</th></tr></thead><tbody class="divide-y divide-gray-800"><tr v-for="period in rule.performance.periods" :key="period.occurrence_id"><td class="py-2"><a v-if="period.title_url" :href="period.title_url" class="text-indigo-300">{{ formatPeriod(period.period_date) }}</a><span v-else>{{ formatPeriod(period.period_date) }}</span></td><td class="py-2 text-right">{{ period.has_estimate ? formatCurrency(period.expected_amount_cents) : 'Sem estimativa' }}</td><td class="py-2 text-right">{{ period.actual_amount_cents === null ? '-' : formatCurrency(period.actual_amount_cents) }}</td><td class="py-2 text-right" :class="period.variance_cents === null ? 'text-gray-500' : biasTone(period.variance_cents)">{{ period.variance_cents === null ? '—' : signedCurrency(period.variance_cents) }}</td></tr></tbody></table></div>
+                </template>
             </div>
             <form v-if="editing === rule.id" class="mt-5 grid gap-4 rounded-lg bg-gray-900 p-4 md:grid-cols-2" @submit.prevent="save(rule)">
                 <p class="md:col-span-2 text-sm text-gray-400">As alterações serão aplicadas somente às competências futuras. Títulos e lançamentos já confirmados não serão modificados.</p>

@@ -9,7 +9,10 @@ use Carbon\CarbonInterface;
 
 class BuildRecurringFinancialRulesOverview
 {
-    public function __construct(private readonly EstimateRecurringFinancialExpectationAmount $estimate) {}
+    public function __construct(
+        private readonly EstimateRecurringFinancialExpectationAmount $estimate,
+        private readonly BuildRecurringFinancialRulePerformance $performance,
+    ) {}
 
     public function execute(Wallet $wallet, string $type, CarbonInterface $referenceDate): array
     {
@@ -19,7 +22,7 @@ class BuildRecurringFinancialRulesOverview
             ->where('status', 'active')->whereDoesntHave('successor')
             ->where(fn ($q) => $q->whereNull('ends_on')->orWhereDate('ends_on', '>=', $reference))
             ->with(['supplier:id,name', 'customer:id,name', 'defaultAccount:id,code,name'])
-            ->orderBy('description')->get()->map(function (RecurringFinancialExpectation $rule) use ($reference) {
+            ->orderBy('description')->get()->map(function (RecurringFinancialExpectation $rule) use ($wallet, $reference) {
                 $lastResolved = $rule->occurrences()->max('period_date');
                 $minimum = collect([
                     $reference,
@@ -45,6 +48,7 @@ class BuildRecurringFinancialRulesOverview
                     'next_due_date' => $hasNext ? $rule->dueDateForPeriod($period)->toDateString() : null,
                     'next_expected_amount_cents' => $hasNext ? $this->estimate->execute($rule, $period) : null,
                     'minimum_revision_period' => $minimum->toDateString(), 'state' => 'active',
+                    'performance' => $this->performance->execute($wallet, $rule),
                 ];
             })->values()->all();
     }
