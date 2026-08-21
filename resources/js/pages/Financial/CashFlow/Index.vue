@@ -22,7 +22,9 @@ function sourceClass(source: string): string {
     const classes: Record<string, string> = {
         bank_movement: 'bg-green-950 text-green-300',
         accounts_receivable: 'bg-blue-950 text-blue-300',
+        recurring_receivable: 'bg-cyan-950 text-cyan-300',
         accounts_payable: 'bg-red-950 text-red-300',
+        recurring_payable: 'bg-orange-950 text-orange-300',
         credit_card_invoice: 'bg-purple-950 text-purple-300',
     };
 
@@ -87,12 +89,16 @@ function sourceClass(source: string): string {
                 <ReportSummaryCard label="Saídas previstas" :value="formatCurrency(summary.projected_outflows_cents)" tone="yellow" />
             </div>
 
+            <div v-if="summary.unestimated_projected_items_count > 0" class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+                Há {{ summary.unestimated_projected_items_count }} recorrência(s) projetada(s) sem estimativa de valor. Os saldos projetados não incluem esses itens.
+            </div>
+
             <ReportSection>
                 <template #header>
                     <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                         <div>
                             <h2 class="text-lg font-bold text-white">Movimentos do fluxo</h2>
-                            <p class="text-sm text-gray-400">Realizado vem do extrato bancário; projetado vem de contas a pagar, contas a receber e faturas de cartão.</p>
+                            <p class="text-sm text-gray-400">Realizado vem do extrato bancário; projetado vem de contas a pagar, contas a receber, faturas de cartão e recorrências esperadas.</p>
                         </div>
 
                         <div class="text-sm text-gray-400">{{ items.length }} item(ns)</div>
@@ -129,14 +135,17 @@ function sourceClass(source: string): string {
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-400">{{ item.counterparty ?? '-' }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-green-300">
-                            {{ item.amount_cents > 0 ? formatCurrency(item.amount_cents) : '-' }}
+                            <template v-if="item.direction === 'inflow' && item.amount_cents === null">Sem estimativa</template>
+                            <template v-else>{{ item.amount_cents > 0 ? `${item.amount_mode === 'variable' ? '~ ' : ''}${formatCurrency(item.amount_cents)}` : '-' }}</template>
                         </td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-red-300">
-                            {{ item.amount_cents < 0 ? formatCurrency(Math.abs(item.amount_cents)) : '-' }}
+                            <template v-if="item.direction === 'outflow' && item.amount_cents === null">Sem estimativa</template>
+                            <template v-else>{{ item.amount_cents < 0 ? `${item.amount_mode === 'variable' ? '~ ' : ''}${formatCurrency(Math.abs(item.amount_cents))}` : '-' }}</template>
                         </td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-300">{{ formatCurrency(item.running_realized_balance_cents) }}</td>
                         <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold" :class="item.running_projected_balance_cents >= 0 ? 'text-green-300' : 'text-red-300'">
                             {{ formatCurrency(item.running_projected_balance_cents) }}
+                            <span v-if="item.running_projected_balance_complete === false" class="ml-1 text-xs font-normal text-amber-300" title="Existem projeções anteriores sem estimativa de valor.">Parcial</span>
                         </td>
                         <td class="whitespace-nowrap px-4 py-3 text-sm"><StatusBadge :status="item.status" /></td>
                     </tr>
