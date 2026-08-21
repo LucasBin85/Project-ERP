@@ -10,6 +10,7 @@ const open = ref(false);
 const editing = ref<number | null>(null);
 const deactivating = ref<number | null>(null);
 const performanceOpen = ref<number | null>(null);
+const backtestOpen = ref<number | null>(null);
 const form = useForm<any>({});
 const labels: Record<string, string> = { monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', fixed: 'Fixo', variable: 'Variável' };
 const prefix = () => props.type === 'payable' ? 'accounts-payable' : 'accounts-receivable';
@@ -64,6 +65,26 @@ function biasText(value: number): string {
                     <p v-else class="mt-3 text-sm text-amber-300">Ainda não há competências com previsão registrada suficiente para calcular os erros.</p>
                     <div class="mt-4 overflow-x-auto"><table class="w-full text-sm"><thead class="text-gray-400"><tr><th class="py-2 text-left">Competência</th><th class="py-2 text-right">Previsto</th><th class="py-2 text-right">Realizado</th><th class="py-2 text-right">Variação</th></tr></thead><tbody class="divide-y divide-gray-800"><tr v-for="period in rule.performance.periods" :key="period.occurrence_id"><td class="py-2"><a v-if="period.title_url" :href="period.title_url" class="text-indigo-300">{{ formatPeriod(period.period_date) }}</a><span v-else>{{ formatPeriod(period.period_date) }}</span></td><td class="py-2 text-right">{{ period.has_estimate ? formatCurrency(period.expected_amount_cents) : 'Sem estimativa' }}</td><td class="py-2 text-right">{{ period.actual_amount_cents === null ? '-' : formatCurrency(period.actual_amount_cents) }}</td><td class="py-2 text-right" :class="period.variance_cents === null ? 'text-gray-500' : biasTone(period.variance_cents)">{{ period.variance_cents === null ? '—' : signedCurrency(period.variance_cents) }}</td></tr></tbody></table></div>
                 </template>
+                <div class="mt-5 border-t border-gray-700 pt-4">
+                    <button type="button" class="text-sm font-semibold text-cyan-300" @click="backtestOpen = backtestOpen === rule.id ? null : rule.id">Comparar métodos de previsão</button>
+                    <div v-if="backtestOpen === rule.id" class="mt-3">
+                        <p v-if="!rule.backtest.applicable" class="text-sm text-gray-400">Esta recorrência utiliza valor fixo; comparação de métodos variáveis não se aplica.</p>
+                        <div v-else-if="!rule.backtest.has_sufficient_history" class="text-sm text-amber-300">
+                            <p>Histórico insuficiente para comparar métodos de previsão.</p>
+                            <p class="mt-1 text-gray-400">São necessárias pelo menos 4 competências realizadas.</p>
+                        </div>
+                        <template v-else>
+                            <p class="text-sm font-semibold text-white">Melhor resultado histórico: {{ rule.backtest.recommended_strategy_label }}<span v-if="rule.backtest.recommended_strategy === 'mean_last_3'"> (método atual)</span></p>
+                            <p class="mt-1 text-sm text-gray-400">Comparação baseada em {{ rule.backtest.sample_target_count }} competências anteriores. A estratégia usada atualmente não foi alterada.</p>
+                            <div class="mt-3 overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="text-gray-400"><tr><th class="py-2 text-left">Método</th><th class="py-2 text-right">Períodos</th><th class="py-2 text-right">Erro médio</th><th class="py-2 text-right">Erro percentual médio</th><th class="py-2 text-right">Viés</th></tr></thead>
+                                    <tbody class="divide-y divide-gray-800"><tr v-for="strategy in rule.backtest.strategies" :key="strategy.code"><td class="py-2">{{ strategy.label }}<span v-if="strategy.code === 'mean_last_3'" class="text-gray-500"> · atual</span></td><td class="py-2 text-right">{{ strategy.sample_count }}</td><td class="py-2 text-right">{{ formatCurrency(strategy.mean_absolute_variance_cents) }}</td><td class="py-2 text-right">{{ formatPercentBps(strategy.mean_absolute_percentage_error_bps) }}</td><td class="py-2 text-right" :class="biasTone(strategy.mean_signed_variance_cents)">{{ signedCurrency(strategy.mean_signed_variance_cents) }}</td></tr></tbody>
+                                </table>
+                            </div>
+                        </template>
+                    </div>
+                </div>
             </div>
             <form v-if="editing === rule.id" class="mt-5 grid gap-4 rounded-lg bg-gray-900 p-4 md:grid-cols-2" @submit.prevent="save(rule)">
                 <p class="md:col-span-2 text-sm text-gray-400">As alterações serão aplicadas somente às competências futuras. Títulos e lançamentos já confirmados não serão modificados.</p>

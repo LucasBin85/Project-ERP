@@ -12,6 +12,7 @@ class BuildRecurringFinancialRulesOverview
     public function __construct(
         private readonly EstimateRecurringFinancialExpectationAmount $estimate,
         private readonly BuildRecurringFinancialRulePerformance $performance,
+        private readonly BuildRecurringFinancialForecastBacktest $backtest,
     ) {}
 
     public function execute(Wallet $wallet, string $type, CarbonInterface $referenceDate): array
@@ -49,6 +50,7 @@ class BuildRecurringFinancialRulesOverview
                     'next_expected_amount_cents' => $hasNext ? $this->estimate->execute($rule, $period) : null,
                     'minimum_revision_period' => $minimum->toDateString(), 'state' => 'active',
                     'performance' => $this->performance->execute($wallet, $rule),
+                    'backtest' => $this->backtest->execute($wallet, $rule),
                 ];
             })->values()->all();
     }
