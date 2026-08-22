@@ -11,35 +11,103 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.3'
 
-      - name: Install Dependencies
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install PHP Dependencies
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Determine Diff Base
+        id: diff-base
+        shell: bash
         run: |
-          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
-          npm install
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+          fi
 
-      - name: Run Pint
-        run: vendor/bin/pint
+          if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]] || ! git cat-file -e "$base_sha^{commit}"; then
+            base_sha="$(git rev-list --max-parents=0 HEAD)"
+          fi
 
-      - name: Format Frontend
-        run: npm run format
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          git diff --name-only --diff-filter=ACMR -z "$base_sha" HEAD > "$RUNNER_TEMP/changed-files.zlist"
+
+      - name: Check PHP Formatting
+        shell: bash
+        run: |
+          mapfile -d '' changed_files < "$RUNNER_TEMP/changed-files.zlist"
+          php_files=()
+
+          for file in "${changed_files[@]}"; do
+            [[ "$file" == *.php ]] && php_files+=("$file")
+          done
+
+          if ((${#php_files[@]})); then
+            vendor/bin/pint --test "${php_files[@]}"
+          else
+            echo "No changed PHP files."
+          fi
+
+      - name: Check Frontend Formatting
+        shell: bash
+        run: |
+          mapfile -d '' changed_files < "$RUNNER_TEMP/changed-files.zlist"
+          frontend_files=()
+
+          for file in "${changed_files[@]}"; do
+            case "$file" in
+              resources/*.vue|resources/*.ts|resources/*.js|resources/*.css|resources/**/*.vue|resources/**/*.ts|resources/**/*.js|resources/**/*.css)
+                frontend_files+=("$file")
+                ;;
+            esac
+          done
+
+          if ((${#frontend_files[@]})); then
+            npx prettier --check "${frontend_files[@]}"
+          else
+            echo "No changed frontend files."
+          fi
 
       - name: Lint Frontend
-        run: npm run lint
-        
-      # - name: Commit Changes
-      #   uses: stefanzweifel/git-auto-commit-action@v5
-      #   with:
-      #     commit_message: fix code style
-      #     commit_options: '--no-verify'
+        shell: bash
+        run: |
+          mapfile -d '' changed_files < "$RUNNER_TEMP/changed-files.zlist"
+          lint_files=()
+
+          for file in "${changed_files[@]}"; do
+            case "$file" in
+              *.vue|*.ts|*.js)
+                lint_files+=("$file")
+                ;;
+            esac
+          done
+
+          if ((${#lint_files[@]})); then
+            npx eslint "${lint_files[@]}"
+          else
+            echo "No changed frontend lint files."
+          fi

@@ -14,9 +14,12 @@ const filters = reactive({ year: props.dashboard.period.year, month: props.dashb
 const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const years = Array.from({ length: 11 }, (_, index) => new Date().getFullYear() - 5 + index);
 const cards = [
-    ['Saldo operacional em bancos', 'bank_operational_cents', 'neutral'], ['Entradas do mês', 'inflows_cents', 'green'],
-    ['Saídas do mês', 'outflows_cents', 'red'], ['Resultado líquido do mês', 'net_result_cents', 'blue'],
-    ['Contas a pagar em aberto', 'payables_open_cents', 'yellow'], ['Contas a receber em aberto', 'receivables_open_cents', 'green'],
+    ['Saldo operacional em bancos', 'bank_operational_cents', 'neutral'],
+    ['Entradas do mês', 'inflows_cents', 'green'],
+    ['Saídas do mês', 'outflows_cents', 'red'],
+    ['Resultado líquido do mês', 'net_result_cents', 'blue'],
+    ['Contas a pagar em aberto', 'payables_open_cents', 'yellow'],
+    ['Contas a receber em aberto', 'receivables_open_cents', 'green'],
     ['Investimentos', 'investments_cents', 'blue'],
     ['Faturas em aberto', 'credit_card_open_cents', 'yellow'],
     ['Faturas vencidas', 'credit_card_overdue_cents', 'red'],
@@ -24,30 +27,220 @@ const cards = [
     ['Pagamentos de fatura', 'credit_card_payments_cents', 'green'],
     ['Compras de cartão a classificar', 'credit_card_unclassified_cents', 'yellow'],
 ];
-function refresh() { router.get(route('dashboard'), filters, { preserveState: true }); }
+function refresh() {
+    router.get(route('dashboard'), filters, { preserveState: true });
+}
 </script>
 
 <template>
-    <AppLayout title="Dashboard Gerencial"><ReportPage title="Dashboard Gerencial" :subtitle="`${dashboard.period.label} · ${wallet.name}`">
-        <div class="flex flex-wrap items-end gap-3 rounded-xl border border-gray-700 bg-gray-950 p-4"><label class="text-sm text-gray-300">Mês<select v-model="filters.month" class="mt-1 block rounded border border-gray-700 bg-black p-2"><option v-for="(name, index) in months" :key="name" :value="index + 1">{{ name }}</option></select></label><label class="text-sm text-gray-300">Ano<select v-model="filters.year" class="mt-1 block rounded border border-gray-700 bg-black p-2"><option v-for="year in years" :key="year" :value="year">{{ year }}</option></select></label><button class="rounded bg-indigo-600 px-4 py-2 font-semibold text-white" @click="refresh">Atualizar mês</button></div>
-        <h2 class="text-lg font-bold text-white">Resumo do mês</h2>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"><ReportSummaryCard v-for="card in cards" :key="card[1]" :label="card[0]" :value="formatCurrency(dashboard.cards[card[1]])" :tone="card[2]" /><ReportSummaryCard label="Pendências contábeis" :value="String(dashboard.cards.accounting_pending_count)" tone="yellow" /><Link :href="dashboard.closing.url"><ReportSummaryCard label="Fechamento do mês" :value="dashboard.closing.status_label" :tone="dashboard.closing.status === 'formally_closed' ? 'green' : 'yellow'" /></Link></div>
-        <ReportSection>
-            <template #header><div class="flex items-center justify-between gap-4"><div><h2 class="font-bold text-white">Projeção de caixa do mês</h2><p class="text-sm text-gray-400">Realizado e valores ainda previstos no período selecionado.</p></div><Link :href="dashboard.cash_projection.url" class="whitespace-nowrap text-sm font-semibold text-indigo-300 hover:text-indigo-200">Ver fluxo de caixa</Link></div></template>
-            <div class="p-5">
-                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div class="rounded-lg border border-gray-700 bg-gray-950 p-4"><span class="text-xs text-gray-400">{{ dashboard.cash_projection.is_complete ? 'Saldo projetado no fim do mês' : 'Saldo projetado parcial' }}</span><b class="mt-1 block text-2xl" :class="dashboard.cash_projection.projected_closing_balance_cents >= 0 ? 'text-green-300' : 'text-red-300'">{{ formatCurrency(dashboard.cash_projection.projected_closing_balance_cents) }}</b></div>
-                    <div class="rounded-lg border border-gray-700 p-4"><span class="text-xs text-gray-400">Entradas ainda previstas</span><b class="mt-1 block text-lg text-green-300">{{ formatCurrency(dashboard.cash_projection.projected_inflows_cents) }}</b></div>
-                    <div class="rounded-lg border border-gray-700 p-4"><span class="text-xs text-gray-400">Saídas ainda previstas</span><b class="mt-1 block text-lg text-red-300">{{ formatCurrency(dashboard.cash_projection.projected_outflows_cents) }}</b></div>
-                    <div class="rounded-lg border border-gray-700 p-4"><span class="text-xs text-gray-400">Resultado projetado</span><b class="mt-1 block text-lg" :class="dashboard.cash_projection.projected_net_cents >= 0 ? 'text-green-300' : 'text-red-300'">{{ formatCurrency(dashboard.cash_projection.projected_net_cents) }}</b></div>
-                </div>
-                <p v-if="!dashboard.cash_projection.is_complete" class="mt-4 rounded-lg border border-amber-800/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">Há {{ dashboard.cash_projection.unestimated_projected_items_count }} recorrência(s) prevista(s) sem estimativa de valor. O saldo projetado considera apenas valores conhecidos.<span class="mt-1 block text-xs text-amber-300/80">{{ dashboard.cash_projection.unestimated_projected_inflows_count }} entrada(s) e {{ dashboard.cash_projection.unestimated_projected_outflows_count }} saída(s) sem estimativa.</span></p>
+    <AppLayout title="Dashboard Gerencial"
+        ><ReportPage title="Dashboard Gerencial" :subtitle="`${dashboard.period.label} · ${wallet.name}`">
+            <div class="flex flex-wrap items-end gap-3 rounded-xl border border-gray-700 bg-gray-950 p-4">
+                <label class="text-sm text-gray-300"
+                    >Mês<select v-model="filters.month" class="mt-1 block rounded border border-gray-700 bg-black p-2">
+                        <option v-for="(name, index) in months" :key="name" :value="index + 1">{{ name }}</option>
+                    </select></label
+                ><label class="text-sm text-gray-300"
+                    >Ano<select v-model="filters.year" class="mt-1 block rounded border border-gray-700 bg-black p-2">
+                        <option v-for="year in years" :key="year" :value="year">{{ year }}</option>
+                    </select></label
+                ><button class="rounded bg-indigo-600 px-4 py-2 font-semibold text-white" @click="refresh">Atualizar mês</button>
             </div>
-        </ReportSection>
-        <ReportSection><template #header><h2 class="font-bold text-white">Bancos</h2></template><div v-if="!dashboard.banks.length" class="p-5 text-gray-400">Nenhuma conta bancária ativa.</div><div v-else class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-950 text-gray-400"><tr><th class="p-3 text-left">Banco / conta</th><th>Saldo operacional</th><th>Saldo contábil</th><th>Diferença</th><th></th></tr></thead><tbody class="divide-y divide-gray-800"><tr v-for="bank in dashboard.banks" :key="bank.id"><td class="p-3"><b class="block text-white">{{ bank.name }}</b><span>{{ bank.bank_name }}</span></td><td class="p-3 text-right">{{ formatCurrency(bank.operational_cents) }}</td><td class="p-3 text-right">{{ formatCurrency(bank.accounting_cents) }}</td><td class="p-3 text-right" :class="bank.difference_cents ? 'text-amber-300' : 'text-green-300'">{{ formatCurrency(bank.difference_cents) }}</td><td class="p-3 whitespace-nowrap"><Link :href="bank.statement_url" class="text-indigo-300">Extrato</Link><span class="mx-2 text-gray-600">·</span><Link :href="bank.closing_url" class="text-indigo-300">Fechamento</Link></td></tr></tbody></table></div></ReportSection>
-        <div class="grid gap-4 lg:grid-cols-2"><ReportSection><template #header><div class="flex justify-between"><h2 class="font-bold text-white">A pagar</h2><Link :href="dashboard.payables.url" class="text-sm text-indigo-300">Abrir contas</Link></div></template><div class="grid grid-cols-3 gap-2 p-4"><div v-for="(item, label) in { 'Vencidas': dashboard.payables.overdue, 'A vencer': dashboard.payables.upcoming, 'Pagas no mês': dashboard.payables.paid }" :key="label" class="rounded border border-gray-700 p-3"><span class="text-xs text-gray-400">{{ label }} ({{ item.count }})</span><b class="block text-white">{{ formatCurrency(item.amount_cents) }}</b></div></div></ReportSection><ReportSection><template #header><div class="flex justify-between"><h2 class="font-bold text-white">A receber</h2><Link :href="dashboard.receivables.url" class="text-sm text-indigo-300">Abrir contas</Link></div></template><div class="grid grid-cols-3 gap-2 p-4"><div v-for="(item, label) in { 'Vencidas': dashboard.receivables.overdue, 'Previstas': dashboard.receivables.expected, 'Recebidas no mês': dashboard.receivables.received }" :key="label" class="rounded border border-gray-700 p-3"><span class="text-xs text-gray-400">{{ label }} ({{ item.count }})</span><b class="block text-white">{{ formatCurrency(item.amount_cents) }}</b></div></div></ReportSection></div>
-        <div class="grid gap-4 lg:grid-cols-2"><ReportSection v-for="(ranking, type) in dashboard.rankings" :key="type"><template #header><h2 class="font-bold text-white">Maiores {{ type === 'expenses' ? 'despesas' : 'receitas' }} do mês</h2></template><div v-if="!ranking.length" class="p-5 text-gray-400">Nenhum lançamento postado.</div><ol v-else class="divide-y divide-gray-800"><li v-for="(item, index) in ranking" :key="item.id" class="flex justify-between p-3"><span class="text-gray-300">{{ index + 1 }}. {{ item.name }}</span><b :class="type === 'expenses' ? 'text-red-300' : 'text-green-300'">{{ formatCurrency(item.amount_cents) }}</b></li></ol></ReportSection></div>
-        <div class="grid gap-4 lg:grid-cols-[1fr_2fr]"><ReportSection><template #header><h2 class="font-bold text-white">Investimentos</h2></template><div class="p-5"><p class="text-sm text-gray-400">Saldo contábil consolidado · {{ dashboard.investments.accounts_count }} contas</p><b class="mt-2 block text-2xl text-white">{{ formatCurrency(dashboard.investments.balance_cents) }}</b><Link :href="dashboard.investments.url" class="mt-3 inline-block text-sm text-indigo-300">Abrir posição financeira</Link></div></ReportSection><ReportSection><template #header><h2 class="font-bold text-white">O que precisa de atenção</h2></template><div class="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3"><Link v-for="item in dashboard.attention" :key="item.label" :href="item.url" class="rounded border p-3" :class="item.count ? 'border-amber-500/40 bg-amber-950/20' : 'border-gray-700'"><span class="block text-xs text-gray-400">{{ item.label }}</span><b class="text-2xl text-white">{{ item.count }}</b></Link></div></ReportSection></div>
-        <ReportSection><template #header><h2 class="font-bold text-white">Fechamento do mês</h2></template><Link :href="dashboard.closing.url" class="flex items-center justify-between p-5"><div><b class="text-white">{{ dashboard.closing.status_label }}</b><p class="text-sm text-gray-400">Confira pendências e o status formal do período.</p></div><StatusBadge :status="dashboard.closing.status" /></Link></ReportSection>
-    </ReportPage></AppLayout>
+            <h2 class="text-lg font-bold text-white">Resumo do mês</h2>
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <ReportSummaryCard
+                    v-for="card in cards"
+                    :key="card[1]"
+                    :label="card[0]"
+                    :value="formatCurrency(dashboard.cards[card[1]])"
+                    :tone="card[2]"
+                /><ReportSummaryCard label="Pendências contábeis" :value="String(dashboard.cards.accounting_pending_count)" tone="yellow" /><Link
+                    :href="dashboard.closing.url"
+                    ><ReportSummaryCard
+                        label="Fechamento do mês"
+                        :value="dashboard.closing.status_label"
+                        :tone="dashboard.closing.status === 'formally_closed' ? 'green' : 'yellow'"
+                /></Link>
+            </div>
+            <ReportSection>
+                <template #header
+                    ><div class="flex items-center justify-between gap-4">
+                        <div>
+                            <h2 class="font-bold text-white">Projeção de caixa do mês</h2>
+                            <p class="text-sm text-gray-400">Realizado e valores ainda previstos no período selecionado.</p>
+                        </div>
+                        <Link
+                            :href="dashboard.cash_projection.url"
+                            class="text-sm font-semibold whitespace-nowrap text-indigo-300 hover:text-indigo-200"
+                            >Ver fluxo de caixa</Link
+                        >
+                    </div></template
+                >
+                <div class="p-5">
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div class="rounded-lg border border-gray-700 bg-gray-950 p-4">
+                            <span class="text-xs text-gray-400">{{
+                                dashboard.cash_projection.is_complete ? 'Saldo projetado no fim do mês' : 'Saldo projetado parcial'
+                            }}</span
+                            ><b
+                                class="mt-1 block text-2xl"
+                                :class="dashboard.cash_projection.projected_closing_balance_cents >= 0 ? 'text-green-300' : 'text-red-300'"
+                                >{{ formatCurrency(dashboard.cash_projection.projected_closing_balance_cents) }}</b
+                            >
+                        </div>
+                        <div class="rounded-lg border border-gray-700 p-4">
+                            <span class="text-xs text-gray-400">Entradas ainda previstas</span
+                            ><b class="mt-1 block text-lg text-green-300">{{ formatCurrency(dashboard.cash_projection.projected_inflows_cents) }}</b>
+                        </div>
+                        <div class="rounded-lg border border-gray-700 p-4">
+                            <span class="text-xs text-gray-400">Saídas ainda previstas</span
+                            ><b class="mt-1 block text-lg text-red-300">{{ formatCurrency(dashboard.cash_projection.projected_outflows_cents) }}</b>
+                        </div>
+                        <div class="rounded-lg border border-gray-700 p-4">
+                            <span class="text-xs text-gray-400">Resultado projetado</span
+                            ><b
+                                class="mt-1 block text-lg"
+                                :class="dashboard.cash_projection.projected_net_cents >= 0 ? 'text-green-300' : 'text-red-300'"
+                                >{{ formatCurrency(dashboard.cash_projection.projected_net_cents) }}</b
+                            >
+                        </div>
+                    </div>
+                    <p
+                        v-if="!dashboard.cash_projection.is_complete"
+                        class="mt-4 rounded-lg border border-amber-800/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-200"
+                    >
+                        Há {{ dashboard.cash_projection.unestimated_projected_items_count }} recorrência(s) prevista(s) sem estimativa de valor. O
+                        saldo projetado considera apenas valores conhecidos.<span class="mt-1 block text-xs text-amber-300/80"
+                            >{{ dashboard.cash_projection.unestimated_projected_inflows_count }} entrada(s) e
+                            {{ dashboard.cash_projection.unestimated_projected_outflows_count }} saída(s) sem estimativa.</span
+                        >
+                    </p>
+                </div>
+            </ReportSection>
+            <ReportSection
+                ><template #header><h2 class="font-bold text-white">Bancos</h2></template>
+                <div v-if="!dashboard.banks.length" class="p-5 text-gray-400">Nenhuma conta bancária ativa.</div>
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-950 text-gray-400">
+                            <tr>
+                                <th class="p-3 text-left">Banco / conta</th>
+                                <th>Saldo operacional</th>
+                                <th>Saldo contábil</th>
+                                <th>Diferença</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-800">
+                            <tr v-for="bank in dashboard.banks" :key="bank.id">
+                                <td class="p-3">
+                                    <b class="block text-white">{{ bank.name }}</b
+                                    ><span>{{ bank.bank_name }}</span>
+                                </td>
+                                <td class="p-3 text-right">{{ formatCurrency(bank.operational_cents) }}</td>
+                                <td class="p-3 text-right">{{ formatCurrency(bank.accounting_cents) }}</td>
+                                <td class="p-3 text-right" :class="bank.difference_cents ? 'text-amber-300' : 'text-green-300'">
+                                    {{ formatCurrency(bank.difference_cents) }}
+                                </td>
+                                <td class="p-3 whitespace-nowrap">
+                                    <Link :href="bank.statement_url" class="text-indigo-300">Extrato</Link><span class="mx-2 text-gray-600">·</span
+                                    ><Link :href="bank.closing_url" class="text-indigo-300">Fechamento</Link>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div></ReportSection
+            >
+            <div class="grid gap-4 lg:grid-cols-2">
+                <ReportSection
+                    ><template #header
+                        ><div class="flex justify-between">
+                            <h2 class="font-bold text-white">A pagar</h2>
+                            <Link :href="dashboard.payables.url" class="text-sm text-indigo-300">Abrir contas</Link>
+                        </div></template
+                    >
+                    <div class="grid grid-cols-3 gap-2 p-4">
+                        <div
+                            v-for="(item, label) in {
+                                Vencidas: dashboard.payables.overdue,
+                                'A vencer': dashboard.payables.upcoming,
+                                'Pagas no mês': dashboard.payables.paid,
+                            }"
+                            :key="label"
+                            class="rounded border border-gray-700 p-3"
+                        >
+                            <span class="text-xs text-gray-400">{{ label }} ({{ item.count }})</span
+                            ><b class="block text-white">{{ formatCurrency(item.amount_cents) }}</b>
+                        </div>
+                    </div></ReportSection
+                ><ReportSection
+                    ><template #header
+                        ><div class="flex justify-between">
+                            <h2 class="font-bold text-white">A receber</h2>
+                            <Link :href="dashboard.receivables.url" class="text-sm text-indigo-300">Abrir contas</Link>
+                        </div></template
+                    >
+                    <div class="grid grid-cols-3 gap-2 p-4">
+                        <div
+                            v-for="(item, label) in {
+                                Vencidas: dashboard.receivables.overdue,
+                                Previstas: dashboard.receivables.expected,
+                                'Recebidas no mês': dashboard.receivables.received,
+                            }"
+                            :key="label"
+                            class="rounded border border-gray-700 p-3"
+                        >
+                            <span class="text-xs text-gray-400">{{ label }} ({{ item.count }})</span
+                            ><b class="block text-white">{{ formatCurrency(item.amount_cents) }}</b>
+                        </div>
+                    </div></ReportSection
+                >
+            </div>
+            <div class="grid gap-4 lg:grid-cols-2">
+                <ReportSection v-for="(ranking, type) in dashboard.rankings" :key="type"
+                    ><template #header
+                        ><h2 class="font-bold text-white">Maiores {{ type === 'expenses' ? 'despesas' : 'receitas' }} do mês</h2></template
+                    >
+                    <div v-if="!ranking.length" class="p-5 text-gray-400">Nenhum lançamento postado.</div>
+                    <ol v-else class="divide-y divide-gray-800">
+                        <li v-for="(item, index) in ranking" :key="item.id" class="flex justify-between p-3">
+                            <span class="text-gray-300">{{ index + 1 }}. {{ item.name }}</span
+                            ><b :class="type === 'expenses' ? 'text-red-300' : 'text-green-300'">{{ formatCurrency(item.amount_cents) }}</b>
+                        </li>
+                    </ol></ReportSection
+                >
+            </div>
+            <div class="grid gap-4 lg:grid-cols-[1fr_2fr]">
+                <ReportSection
+                    ><template #header><h2 class="font-bold text-white">Investimentos</h2></template>
+                    <div class="p-5">
+                        <p class="text-sm text-gray-400">Saldo contábil consolidado · {{ dashboard.investments.accounts_count }} contas</p>
+                        <b class="mt-2 block text-2xl text-white">{{ formatCurrency(dashboard.investments.balance_cents) }}</b
+                        ><Link :href="dashboard.investments.url" class="mt-3 inline-block text-sm text-indigo-300">Abrir posição financeira</Link>
+                    </div></ReportSection
+                ><ReportSection
+                    ><template #header><h2 class="font-bold text-white">O que precisa de atenção</h2></template>
+                    <div class="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <Link
+                            v-for="item in dashboard.attention"
+                            :key="item.label"
+                            :href="item.url"
+                            class="rounded border p-3"
+                            :class="item.count ? 'border-amber-500/40 bg-amber-950/20' : 'border-gray-700'"
+                            ><span class="block text-xs text-gray-400">{{ item.label }}</span
+                            ><b class="text-2xl text-white">{{ item.count }}</b></Link
+                        >
+                    </div></ReportSection
+                >
+            </div>
+            <ReportSection
+                ><template #header><h2 class="font-bold text-white">Fechamento do mês</h2></template
+                ><Link :href="dashboard.closing.url" class="flex items-center justify-between p-5"
+                    ><div>
+                        <b class="text-white">{{ dashboard.closing.status_label }}</b>
+                        <p class="text-sm text-gray-400">Confira pendências e o status formal do período.</p>
+                    </div>
+                    <StatusBadge :status="dashboard.closing.status" /></Link
+            ></ReportSection> </ReportPage
+    ></AppLayout>
 </template>

@@ -36,8 +36,9 @@ const actionError = computed(() => {
 });
 
 const keyFor = (item: ExpectedItem) => `${item.expectation_id}:${item.period_date}`;
-const frequencyLabel = (frequency: string) => ({ monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual' }[frequency] ?? frequency);
-const decimalAmount = (cents: number | null) => cents === null ? '' : (cents / 100).toFixed(2).replace('.', ',');
+const frequencyLabel = (frequency: string) =>
+    ({ monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual' })[frequency] ?? frequency;
+const decimalAmount = (cents: number | null) => (cents === null ? '' : (cents / 100).toFixed(2).replace('.', ','));
 const centsFrom = (value: string) => Math.round(Number(value.replace(/\./g, '').replace(',', '.')) * 100);
 
 function edit(item: ExpectedItem) {
@@ -53,7 +54,9 @@ function confirm(item: ExpectedItem) {
     form.actual_amount_cents = centsFrom(amount.value);
     form.post(route(props.confirmRoute, item.expectation_id), {
         preserveScroll: true,
-        onSuccess: () => { editingKey.value = null; },
+        onSuccess: () => {
+            editingKey.value = null;
+        },
     });
 }
 
@@ -72,34 +75,109 @@ function skip(item: ExpectedItem) {
             </div>
         </template>
         <ReportTable :empty="false" :empty-colspan="7">
-            <template #head><tr>
-                <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Vencimento previsto</th>
-                <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">{{ counterpartyLabel }}</th>
-                <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição</th>
-                <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">{{ accountLabel }}</th>
-                <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Previsão</th>
-                <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Comportamento</th>
-                <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Ações</th>
-            </tr></template>
+            <template #head
+                ><tr>
+                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Vencimento previsto</th>
+                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">{{ counterpartyLabel }}</th>
+                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Descrição</th>
+                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">{{ accountLabel }}</th>
+                    <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Previsão</th>
+                    <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Comportamento</th>
+                    <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Ações</th>
+                </tr></template
+            >
             <template v-for="item in items" :key="keyFor(item)">
                 <tr class="border-b border-gray-800">
-                    <td class="px-4 py-3 text-sm text-gray-300">{{ formatDate(item.due_date) }}<span v-if="item.is_overdue" class="ml-2 rounded bg-amber-950 px-2 py-0.5 text-xs text-amber-300">Atrasada</span></td>
+                    <td class="px-4 py-3 text-sm text-gray-300">
+                        {{ formatDate(item.due_date)
+                        }}<span v-if="item.is_overdue" class="ml-2 rounded bg-amber-950 px-2 py-0.5 text-xs text-amber-300">Atrasada</span>
+                    </td>
                     <td class="px-4 py-3 text-sm font-semibold text-white">{{ item.counterparty?.name ?? '—' }}</td>
-                    <td class="px-4 py-3 text-sm text-gray-300">{{ item.description }}<span class="ml-2 text-xs text-indigo-300">{{ frequencyLabel(item.frequency) }}</span></td>
+                    <td class="px-4 py-3 text-sm text-gray-300">
+                        {{ item.description }}<span class="ml-2 text-xs text-indigo-300">{{ frequencyLabel(item.frequency) }}</span>
+                    </td>
                     <td class="px-4 py-3 text-sm text-gray-400">{{ formatAccount(item.default_account?.code, item.default_account?.name) }}</td>
-                    <td class="px-4 py-3 text-right text-sm font-semibold text-gray-100">{{ item.expected_amount_cents === null ? 'Sem estimativa' : `${item.amount_mode === 'variable' ? '~ ' : ''}${formatCurrency(item.expected_amount_cents)}` }}</td>
+                    <td class="px-4 py-3 text-right text-sm font-semibold text-gray-100">
+                        {{
+                            item.expected_amount_cents === null
+                                ? 'Sem estimativa'
+                                : `${item.amount_mode === 'variable' ? '~ ' : ''}${formatCurrency(item.expected_amount_cents)}`
+                        }}
+                    </td>
                     <td class="px-4 py-3 text-sm text-gray-300">{{ item.amount_mode === 'fixed' ? 'Valor fixo' : 'Valor variável' }}</td>
-                    <td class="px-4 py-3 text-right text-sm"><div class="flex justify-end gap-2"><button class="rounded-lg bg-indigo-600 px-3 py-1.5 font-semibold text-white hover:bg-indigo-500" type="button" @click="edit(item)">Confirmar</button><button class="rounded-lg border border-gray-600 px-3 py-1.5 text-gray-300 hover:bg-gray-700" type="button" @click="skip(item)">Ignorar competência</button></div></td>
+                    <td class="px-4 py-3 text-right text-sm">
+                        <div class="flex justify-end gap-2">
+                            <button
+                                class="rounded-lg bg-indigo-600 px-3 py-1.5 font-semibold text-white hover:bg-indigo-500"
+                                type="button"
+                                @click="edit(item)"
+                            >
+                                Confirmar</button
+                            ><button
+                                class="rounded-lg border border-gray-600 px-3 py-1.5 text-gray-300 hover:bg-gray-700"
+                                type="button"
+                                @click="skip(item)"
+                            >
+                                Ignorar competência
+                            </button>
+                        </div>
+                    </td>
                 </tr>
-                <tr v-if="editingKey === keyFor(item)" class="bg-gray-950/60"><td colspan="7" class="p-4">
-                    <div class="grid gap-4 md:grid-cols-3">
-                        <div><label class="mb-1 block text-sm font-semibold text-gray-300">Valor real</label><input v-model="amount" :readonly="item.amount_mode === 'fixed'" inputmode="decimal" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white read-only:text-gray-400" placeholder="R$ 0,00"><p class="mt-1 text-sm text-red-400">{{ form.errors.actual_amount_cents }}</p><p v-if="item.amount_mode === 'variable'" class="mt-1 text-xs text-gray-400">{{ item.expected_amount_cents === null ? 'Sem histórico suficiente para estimativa.' : `Previsão baseada no histórico: ${formatCurrency(item.expected_amount_cents)}` }}</p></div>
-                        <div><label class="mb-1 block text-sm font-semibold text-gray-300">Vencimento</label><input v-model="form.due_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]"><p class="mt-1 text-sm text-red-400">{{ form.errors.due_date }}</p></div>
-                        <div><label class="mb-1 block text-sm font-semibold text-gray-300">Observações (opcional)</label><input v-model="form.notes" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><p class="mt-1 text-sm text-red-400">{{ form.errors.notes }}</p></div>
-                    </div>
-                    <p class="mt-2 text-sm text-red-400">{{ actionError }}</p>
-                    <div class="mt-4 flex gap-2"><button type="button" :disabled="form.processing" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="confirm(item)">Confirmar competência</button><button type="button" class="rounded-lg border border-gray-600 px-4 py-2 text-sm text-gray-300" @click="editingKey = null">Cancelar</button></div>
-                </td></tr>
+                <tr v-if="editingKey === keyFor(item)" class="bg-gray-950/60">
+                    <td colspan="7" class="p-4">
+                        <div class="grid gap-4 md:grid-cols-3">
+                            <div>
+                                <label class="mb-1 block text-sm font-semibold text-gray-300">Valor real</label
+                                ><input
+                                    v-model="amount"
+                                    :readonly="item.amount_mode === 'fixed'"
+                                    inputmode="decimal"
+                                    class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white read-only:text-gray-400"
+                                    placeholder="R$ 0,00"
+                                />
+                                <p class="mt-1 text-sm text-red-400">{{ form.errors.actual_amount_cents }}</p>
+                                <p v-if="item.amount_mode === 'variable'" class="mt-1 text-xs text-gray-400">
+                                    {{
+                                        item.expected_amount_cents === null
+                                            ? 'Sem histórico suficiente para estimativa.'
+                                            : `Previsão baseada no histórico: ${formatCurrency(item.expected_amount_cents)}`
+                                    }}
+                                </p>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-sm font-semibold text-gray-300">Vencimento</label
+                                ><input
+                                    v-model="form.due_date"
+                                    type="date"
+                                    class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]"
+                                />
+                                <p class="mt-1 text-sm text-red-400">{{ form.errors.due_date }}</p>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-sm font-semibold text-gray-300">Observações (opcional)</label
+                                ><input v-model="form.notes" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
+                                <p class="mt-1 text-sm text-red-400">{{ form.errors.notes }}</p>
+                            </div>
+                        </div>
+                        <p class="mt-2 text-sm text-red-400">{{ actionError }}</p>
+                        <div class="mt-4 flex gap-2">
+                            <button
+                                type="button"
+                                :disabled="form.processing"
+                                class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                                @click="confirm(item)"
+                            >
+                                Confirmar competência</button
+                            ><button
+                                type="button"
+                                class="rounded-lg border border-gray-600 px-4 py-2 text-sm text-gray-300"
+                                @click="editingKey = null"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </td>
+                </tr>
             </template>
         </ReportTable>
     </ReportSection>

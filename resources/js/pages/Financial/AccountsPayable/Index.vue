@@ -45,21 +45,14 @@ function formatPaginationLabel(label: string): string {
                 </Link>
             </div>
 
-            <DateRangeFilter
-                v-model:start="accountsPayableIndex.form.start_date"
-                v-model:end="accountsPayableIndex.form.end_date"
-            />
+            <DateRangeFilter v-model:start="accountsPayableIndex.form.start_date" v-model:end="accountsPayableIndex.form.end_date" />
 
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">
-                            Filtros
-                        </h2>
+                        <h2 class="text-lg font-bold text-white">Filtros</h2>
 
-                        <p class="mt-1 text-sm text-gray-400">
-                            Os títulos são atualizados automaticamente ao alterar os filtros.
-                        </p>
+                        <p class="mt-1 text-sm text-gray-400">Os títulos são atualizados automaticamente ao alterar os filtros.</p>
                     </div>
                 </template>
 
@@ -99,45 +92,39 @@ function formatPaginationLabel(label: string): string {
                 </div>
             </ReportSection>
 
-            <RecurringExpectedItemsSection :items="recurringExpectedPayables" counterparty-label="Fornecedor" account-label="Despesa" confirm-route="accounts-payable.recurring.confirm" skip-route="accounts-payable.recurring.skip" />
+            <RecurringExpectedItemsSection
+                :items="recurringExpectedPayables"
+                counterparty-label="Fornecedor"
+                account-label="Despesa"
+                confirm-route="accounts-payable.recurring.confirm"
+                skip-route="accounts-payable.recurring.skip"
+            />
 
             <ReportSection>
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">
-                            Títulos a pagar
-                        </h2>
+                        <h2 class="text-lg font-bold text-white">Títulos a pagar</h2>
 
-                        <p class="text-sm text-gray-400">
-                            Controle financeiro de despesas pendentes e pagas.
-                        </p>
+                        <p class="text-sm text-gray-400">Controle financeiro de despesas pendentes e pagas.</p>
                     </div>
                 </template>
 
-                <ReportTable
-                    :empty="accountsPayable.data.length === 0"
-                    empty-message="Nenhuma conta a pagar encontrada."
-                    :empty-colspan="8"
-                >
+                <ReportTable :empty="accountsPayable.data.length === 0" empty-message="Nenhuma conta a pagar encontrada." :empty-colspan="8">
                     <template #head>
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Vencimento</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Fornecedor</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Descrição</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Despesa</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Valor</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Status</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Pagamento</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Ações</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Vencimento</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Fornecedor</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Descrição</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Despesa</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Valor</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Pagamento</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Ações</th>
                         </tr>
                     </template>
 
-                    <tr
-                        v-for="item in accountsPayable.data"
-                        :key="item.id"
-                        class="hover:bg-gray-800/50"
-                    >
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                    <tr v-for="item in accountsPayable.data" :key="item.id" class="hover:bg-gray-800/50">
+                        <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-300">
                             {{ formatDate(item.due_date) }}
                         </td>
 
@@ -146,26 +133,29 @@ function formatPaginationLabel(label: string): string {
                         </td>
 
                         <td class="px-4 py-3 text-sm text-gray-300">
-                            {{ item.description }} <span v-if="item.series_id" class="text-indigo-300">· Parcela {{ item.installment_number }}/{{ item.installment_count }} · Série #{{ item.series_id }}</span>
+                            {{ item.description }}
+                            <span v-if="item.series_id" class="text-indigo-300"
+                                >· Parcela {{ item.installment_number }}/{{ item.installment_count }} · Série #{{ item.series_id }}</span
+                            >
                         </td>
 
                         <td class="px-4 py-3 text-sm text-gray-400">
                             {{ formatAccount(item.expense_account?.code, item.expense_account?.name) }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">
+                        <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-gray-100">
                             {{ formatCurrency(item.amount_cents) }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-sm">
+                        <td class="px-4 py-3 text-sm whitespace-nowrap">
                             <StatusBadge :status="item.status" />
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-300">
+                        <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-300">
                             {{ item.paid_at ? formatDate(item.paid_at) : '-' }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm">
+                        <td class="px-4 py-3 text-right text-sm whitespace-nowrap">
                             <Link
                                 :href="route('accounts-payable.show', [item.id])"
                                 class="inline-flex items-center rounded-lg border border-gray-600 px-3 py-1.5 text-sm font-medium text-gray-200 transition hover:bg-gray-700"
@@ -181,10 +171,7 @@ function formatPaginationLabel(label: string): string {
                     class="flex flex-wrap items-center justify-center gap-2 border-t border-gray-700 px-4 py-4"
                 >
                     <template v-for="link in accountsPayable.links" :key="link.label">
-                        <span
-                            v-if="!link.url"
-                            class="rounded-md px-3 py-1.5 text-sm text-gray-500"
-                        >
+                        <span v-if="!link.url" class="rounded-md px-3 py-1.5 text-sm text-gray-500">
                             {{ formatPaginationLabel(link.label) }}
                         </span>
 
@@ -192,9 +179,7 @@ function formatPaginationLabel(label: string): string {
                             v-else
                             :href="link.url"
                             class="rounded-md px-3 py-1.5 text-sm transition"
-                            :class="link.active
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
+                            :class="link.active ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'"
                         >
                             {{ formatPaginationLabel(link.label) }}
                         </Link>
