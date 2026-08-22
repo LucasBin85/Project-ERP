@@ -19,6 +19,7 @@ class BuildMonthlyWalletClosingSummary
     public function __construct(
         private readonly BuildBankStatementClosingSummary $bankClosing,
         private readonly AssessJournalEntryPostingReadiness $readiness,
+        private readonly ListRecurringFinancialExpectationsForRange $recurringExpectations,
     ) {}
 
     public function execute(Wallet $wallet, int $year, int $month): array
@@ -69,6 +70,7 @@ class BuildMonthlyWalletClosingSummary
             ->with(['closedBy:id,name', 'reopenedBy:id,name'])->first();
         $cards = $this->cards($wallet, $year, $month);
         $blockers = ManageMonthlyWalletClosing::blockers(['banks' => $banks->all(), 'accounting' => $accounting, 'cards' => $cards]);
+        $recurringReview = $this->recurringReview($wallet, $start, $end);
 
         return [
             'period' => ['year' => $year, 'month' => $month, 'start_date' => $start->toDateString(), 'end_date' => $end->toDateString(), 'label' => $start->locale('pt_BR')->translatedFormat('F/Y')],
@@ -94,6 +96,7 @@ class BuildMonthlyWalletClosingSummary
             'cards' => $cards,
             'payables' => $this->payables($wallet, $start, $end),
             'receivables' => $this->receivables($wallet, $start, $end),
+            'recurring_review' => $recurringReview,
             'accounting' => $accounting,
             'ready_entry_ids' => $accounting['ready_entry_ids'],
             'links' => $this->links($start, $end),
@@ -177,6 +180,49 @@ class BuildMonthlyWalletClosingSummary
     private function amountCount($items): array
     {
         return ['count' => $items->count(), 'amount_cents' => (int) $items->sum('amount_cents')];
+    }
+
+    private function recurringReview(Wallet $wallet, CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $buildGroup = function (string $type) use ($wallet, $start, $end): array {
+            $items = collect($this->recurringExpectations->execute($wallet, $type, $start, $end))
+                ->map(fn (array $item) => [
+                    'expectation_id' => $item['expectation_id'],
+                    'period_date' => $item['period_date'],
+                    'due_date' => $item['due_date'],
+                    'description' => $item['description'],
+                    'counterparty' => $item['counterparty'],
+                    'default_account' => $item['default_account'],
+                    'amount_mode' => $item['amount_mode'],
+                    'expected_amount_cents' => $item['expected_amount_cents'],
+                    'has_estimated_amount' => $item['expected_amount_cents'] !== null,
+                    'is_overdue' => $item['is_overdue'],
+                ])->values();
+            $estimated = $items->whereNotNull('expected_amount_cents');
+
+            return [
+                'count' => $items->count(),
+                'estimated_count' => $estimated->count(),
+                'unestimated_count' => $items->whereNull('expected_amount_cents')->count(),
+                'estimated_amount_cents' => (int) $estimated->sum('expected_amount_cents'),
+                'items' => $items->all(),
+                'url' => route($type === 'payable' ? 'accounts-payable.index' : 'accounts-receivable.index', [
+                    'start_date' => $start->toDateString(),
+                    'end_date' => $end->toDateString(),
+                ]),
+            ];
+        };
+
+        $payables = $buildGroup('payable');
+        $receivables = $buildGroup('receivable');
+
+        return [
+            'payables' => $payables,
+            'receivables' => $receivables,
+            'total_count' => $payables['count'] + $receivables['count'],
+            'unestimated_count' => $payables['unestimated_count'] + $receivables['unestimated_count'],
+            'has_pending' => $payables['count'] + $receivables['count'] > 0,
+        ];
     }
 
     private function links(CarbonImmutable $start, CarbonImmutable $end): array

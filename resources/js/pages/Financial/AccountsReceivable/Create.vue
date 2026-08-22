@@ -6,29 +6,322 @@ import { useAccountReceivableCreate } from '@/composables/financial/useAccountRe
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCurrency } from '@/lib/formatters';
 import { Link } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
-import { computed, ref } from 'vue';
-const props = defineProps<{ wallet: Record<string, any>; customers: Array<Record<string, any>>; receivableControlAccounts: Array<Record<string, any>>; revenueAccounts: Array<Record<string, any>>; customerNames: string[] }>();
-const ar = useAccountReceivableCreate(); const customers = ref([...props.customers]); const customerNames = ref([...props.customerNames]); const showDialog = ref(false);
+const props = defineProps<{
+    wallet: Record<string, any>;
+    customers: Array<Record<string, any>>;
+    receivableControlAccounts: Array<Record<string, any>>;
+    revenueAccounts: Array<Record<string, any>>;
+    customerNames: string[];
+}>();
+const ar = useAccountReceivableCreate();
+const customers = ref([...props.customers]);
+const customerNames = ref([...props.customerNames]);
+const showDialog = ref(false);
 const selected = computed(() => customers.value.find((item) => item.id === Number(ar.form.customer_id)));
-function created(customer: Record<string, any>) { customers.value.push(customer); customerNames.value.push(customer.name); customers.value.sort((a,b) => a.name.localeCompare(b.name)); ar.form.customer_id = String(customer.id); }
-function submit() { if (ar.canSubmit.value) ar.form.post(route('accounts-receivable.store')); }
+watch(
+    () => ar.form.customer_id,
+    () => {
+        ar.form.recurring_default_account_id = selected.value?.default_revenue_account_id ? String(selected.value.default_revenue_account_id) : '';
+    },
+);
+function created(customer: Record<string, any>) {
+    customers.value.push(customer);
+    customerNames.value.push(customer.name);
+    customers.value.sort((a, b) => a.name.localeCompare(b.name));
+    ar.form.customer_id = String(customer.id);
+}
+function submit() {
+    if (ar.canSubmit.value) ar.form.post(route('accounts-receivable.store'));
+}
 </script>
 <template>
-<AppLayout title="Nova conta a receber"><ReportPage title="Nova conta a receber" :subtitle="wallet.name"><ReportSection>
-<template #header><div><h2 class="text-lg font-bold text-white">Dados do título</h2><p class="mt-1 text-sm text-gray-400">A provisão contábil será criada em rascunho pelo valor total.</p></div></template>
-<form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
-<div class="md:col-span-2"><label class="mb-1 block text-sm font-semibold text-gray-300">Descrição</label><input v-model="ar.form.description" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
-<div class="md:col-span-2"><label class="mb-1 block text-sm font-semibold text-gray-300">Cliente</label><div class="flex gap-2"><select v-model="ar.form.customer_id" class="min-w-0 flex-1 rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="">Selecione o cliente</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select><button type="button" class="rounded-lg border border-indigo-500 px-3 py-2 text-sm text-indigo-300" @click="showDialog = true">Cadastrar cliente</button></div><div v-if="selected" class="mt-2 rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-gray-300">Conta de controle: {{ selected.receivable_account.code }} - {{ selected.receivable_account.name }} · Receita: {{ selected.default_revenue_account.code }} - {{ selected.default_revenue_account.name }}</div></div>
-<div><label class="mb-1 block text-sm font-semibold text-gray-300">Valor total</label><input :value="ar.form.amount" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" placeholder="R$ 0,00" @input="ar.updateAmount" /></div>
-<div><label class="mb-1 block text-sm font-semibold text-gray-300">Vencimento inicial</label><input v-model="ar.form.due_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" /></div>
-<div><label class="mb-1 block text-sm font-semibold text-gray-300">Competência</label><input v-model="ar.form.competence_date" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" /></div>
-<div><label class="mb-1 block text-sm font-semibold text-gray-300">Forma de recebimento</label><select v-model="ar.form.mode" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"><option value="single">À vista</option><option value="installment">Parcelado</option></select></div>
-<template v-if="ar.form.mode === 'installment'"><div><label class="mb-1 block text-sm font-semibold text-gray-300">Quantidade de parcelas</label><input v-model.number="ar.form.installment_count" type="number" min="2" max="360" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div><div><label class="mb-1 block text-sm font-semibold text-gray-300">Intervalo mensal</label><input v-model.number="ar.form.interval_months" type="number" min="1" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
-<div class="md:col-span-2 rounded-lg border border-gray-700"><div class="flex items-center justify-between border-b border-gray-700 p-4"><div><h3 class="font-semibold text-white">Parcelas do título</h3><p class="text-sm text-gray-400">Revise e ajuste os valores antes de salvar.</p></div><div class="flex gap-2"><button type="button" class="rounded border border-gray-600 px-3 py-1.5 text-sm text-gray-200" @click="ar.recalculateInstallments">Recalcular parcelas</button><button v-if="ar.difference.value !== 0" type="button" class="rounded border border-indigo-500 px-3 py-1.5 text-sm text-indigo-300" @click="ar.adjustLastInstallment">Ajustar diferença na última</button></div></div>
-<div class="overflow-x-auto"><table class="w-full"><thead><tr class="text-left text-xs uppercase text-gray-400"><th class="p-3">Parcela</th><th class="p-3">Vencimento</th><th class="p-3">Valor</th><th class="p-3">Validação</th></tr></thead><tbody><tr v-for="(item,index) in ar.form.installments" :key="index" class="border-t border-gray-800"><td class="p-3 text-white">{{ index+1 }}/{{ ar.form.installment_count }}</td><td class="p-3"><input v-model="item.due_date" type="date" class="rounded border border-gray-700 bg-black px-2 py-1 text-white [color-scheme:dark]" /></td><td class="p-3"><input :value="item.amount" class="rounded border border-gray-700 bg-black px-2 py-1 text-white" @input="ar.updateInstallmentAmount(index,$event)" /></td><td class="p-3 text-sm" :class="item.amount_cents > 0 ? 'text-green-400':'text-red-400'">{{ item.amount_cents > 0 ? 'Válida':'Valor inválido' }}</td></tr></tbody></table></div>
-<div class="grid gap-2 border-t border-gray-700 p-4 text-sm md:grid-cols-3"><p class="text-gray-300">Total do título: <strong>{{ formatCurrency(ar.form.amount_cents) }}</strong></p><p class="text-gray-300">Total das parcelas: <strong>{{ formatCurrency(ar.installmentTotal.value) }}</strong></p><p :class="ar.difference.value===0?'text-green-400':'text-red-400'">Diferença: <strong>{{ formatCurrency(ar.difference.value) }}</strong></p><p class="md:col-span-3" :class="ar.difference.value===0?'text-green-400':'text-red-400'">{{ ar.difference.value===0?'Parcelas fecham com o valor total.':'A soma das parcelas precisa ser igual ao valor total.' }}</p></div><p class="px-4 pb-4 text-sm text-red-400">{{ ar.form.errors.installments }}</p></div></template>
-<div class="md:col-span-2"><label class="mb-1 block text-sm font-semibold text-gray-300">Observações</label><textarea v-model="ar.form.notes" rows="3" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" /></div>
-<div class="md:col-span-2 flex justify-end gap-3"><Link :href="route('accounts-receivable.index')" class="rounded-lg border border-gray-600 px-4 py-2 text-gray-300">Cancelar</Link><button type="submit" :disabled="!ar.canSubmit.value || ar.form.processing" class="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Salvar conta a receber</button></div>
-</form></ReportSection></ReportPage><CustomerQuickCreateDialog :show="showDialog" :control-accounts="receivableControlAccounts" :revenue-accounts="revenueAccounts" :existing-names="customerNames" @close="showDialog=false" @created="created" /></AppLayout>
+    <AppLayout title="Nova conta a receber"
+        ><ReportPage title="Nova conta a receber" :subtitle="wallet.name"
+            ><ReportSection>
+                <template #header
+                    ><div>
+                        <h2 class="text-lg font-bold text-white">Dados do título</h2>
+                        <p class="mt-1 text-sm text-gray-400">A provisão contábil será criada em rascunho pelo valor total.</p>
+                    </div></template
+                >
+                <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submit">
+                    <div class="md:col-span-2">
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Descrição</label
+                        ><input v-model="ar.form.description" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Cliente</label>
+                        <div class="flex gap-2">
+                            <select
+                                v-model="ar.form.customer_id"
+                                class="min-w-0 flex-1 rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            >
+                                <option value="">Selecione o cliente</option>
+                                <option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select
+                            ><button
+                                type="button"
+                                class="rounded-lg border border-indigo-500 px-3 py-2 text-sm text-indigo-300"
+                                @click="showDialog = true"
+                            >
+                                Cadastrar cliente
+                            </button>
+                        </div>
+                        <div v-if="selected" class="mt-2 rounded-lg border border-gray-700 bg-gray-950 p-3 text-sm text-gray-300">
+                            Conta de controle: {{ selected.receivable_account.code }} - {{ selected.receivable_account.name }} · Receita:
+                            {{ selected.default_revenue_account.code }} - {{ selected.default_revenue_account.name }}
+                        </div>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Valor total</label
+                        ><input
+                            :value="ar.form.amount"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            placeholder="R$ 0,00"
+                            @input="ar.updateAmount"
+                        />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Vencimento inicial</label
+                        ><input
+                            v-model="ar.form.due_date"
+                            type="date"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]"
+                        />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Competência</label
+                        ><input
+                            v-model="ar.form.competence_date"
+                            type="date"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]"
+                        />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Tipo do lançamento</label
+                        ><select v-model="ar.form.mode" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
+                            <option value="single">Única</option>
+                            <option value="installment">Parcelada</option>
+                            <option value="recurring">Recorrente</option>
+                        </select>
+                    </div>
+                    <div
+                        v-if="ar.form.mode === 'recurring'"
+                        class="grid grid-cols-1 gap-4 rounded-lg border border-gray-700 bg-gray-950 p-4 md:col-span-2 md:grid-cols-2"
+                    >
+                        <div class="md:col-span-2">
+                            <h3 class="font-semibold text-white">Configuração da recorrência</h3>
+                            <p class="mt-1 text-sm text-gray-400">
+                                Somente esta competência será criada agora. As próximas serão tratadas conforme forem confirmadas.
+                            </p>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-semibold text-gray-300">Periodicidade</label
+                            ><select
+                                v-model="ar.form.recurring_frequency"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            >
+                                <option value="monthly">Mensal</option>
+                                <option value="quarterly">Trimestral</option>
+                                <option value="semiannual">Semestral</option>
+                                <option value="annual">Anual</option>
+                            </select>
+                            <p class="mt-1 text-sm text-red-400">{{ ar.form.errors.recurring_frequency }}</p>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-semibold text-gray-300">Comportamento do valor</label
+                            ><select
+                                v-model="ar.form.recurring_amount_mode"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            >
+                                <option value="fixed">Fixo</option>
+                                <option value="variable">Variável</option>
+                            </select>
+                            <p class="mt-1 text-sm text-red-400">{{ ar.form.errors.recurring_amount_mode }}</p>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-semibold text-gray-300">Dia esperado de vencimento</label
+                            ><input
+                                v-model.number="ar.form.recurring_due_day"
+                                type="number"
+                                min="1"
+                                max="31"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            />
+                            <p class="mt-1 text-sm text-red-400">{{ ar.form.errors.recurring_due_day }}</p>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-semibold text-gray-300">Conta de receita</label
+                            ><select
+                                v-model="ar.form.recurring_default_account_id"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            >
+                                <option value="">Selecione a conta</option>
+                                <option v-for="account in revenueAccounts" :key="account.id" :value="account.id">{{ account.label }}</option>
+                            </select>
+                            <p class="mt-1 text-sm text-red-400">
+                                {{ ar.form.errors.recurring_default_account_id || ar.form.errors.default_account_id }}
+                            </p>
+                        </div>
+                        <div v-if="ar.form.recurring_amount_mode === 'variable'">
+                            <label class="mb-1 block text-sm font-semibold text-gray-300">Previsão inicial (opcional)</label
+                            ><input
+                                :value="ar.form.recurring_expected_amount"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                                placeholder="R$ 0,00"
+                                inputmode="numeric"
+                                @input="ar.updateRecurringExpectedAmount"
+                            />
+                            <p class="mt-1 text-sm text-red-400">{{ ar.form.errors.recurring_expected_amount_cents }}</p>
+                        </div>
+                        <div v-if="ar.form.recurring_amount_mode === 'variable'">
+                            <label class="mb-1 block text-sm font-semibold text-gray-300">Método de previsão</label
+                            ><select
+                                v-model="ar.form.recurring_forecast_strategy"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            >
+                                <option value="mean_last_3">Média das últimas 3</option>
+                                <option value="last_actual">Último realizado</option>
+                                <option value="median_last_3">Mediana das últimas 3</option>
+                            </select>
+                            <p class="mt-1 text-sm text-red-400">{{ ar.form.errors.recurring_forecast_strategy }}</p>
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-semibold text-gray-300">Encerrar recorrência em (opcional)</label
+                            ><input
+                                v-model="ar.form.recurring_ends_on"
+                                type="date"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]"
+                            />
+                            <p class="mt-1 text-sm text-red-400">{{ ar.form.errors.recurring_ends_on }}</p>
+                        </div>
+                        <p v-if="ar.form.recurring_amount_mode === 'variable'" class="text-sm text-gray-400 md:col-span-2">
+                            A previsão usa os valores reais das competências anteriores. Sem histórico, será usada a previsão base informada, quando
+                            existir.
+                        </p>
+                    </div>
+                    <template v-if="ar.form.mode === 'installment'"
+                        ><div>
+                            <label class="mb-1 block text-sm font-semibold text-gray-300">Quantidade de parcelas</label
+                            ><input
+                                v-model.number="ar.form.installment_count"
+                                type="number"
+                                min="2"
+                                max="360"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            />
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-semibold text-gray-300">Intervalo mensal</label
+                            ><input
+                                v-model.number="ar.form.interval_months"
+                                type="number"
+                                min="1"
+                                class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
+                            />
+                        </div>
+                        <div class="rounded-lg border border-gray-700 md:col-span-2">
+                            <div class="flex items-center justify-between border-b border-gray-700 p-4">
+                                <div>
+                                    <h3 class="font-semibold text-white">Parcelas do título</h3>
+                                    <p class="text-sm text-gray-400">Revise e ajuste os valores antes de salvar.</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button
+                                        type="button"
+                                        class="rounded border border-gray-600 px-3 py-1.5 text-sm text-gray-200"
+                                        @click="ar.recalculateInstallments"
+                                    >
+                                        Recalcular parcelas</button
+                                    ><button
+                                        v-if="ar.difference.value !== 0"
+                                        type="button"
+                                        class="rounded border border-indigo-500 px-3 py-1.5 text-sm text-indigo-300"
+                                        @click="ar.adjustLastInstallment"
+                                    >
+                                        Ajustar diferença na última
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full">
+                                    <thead>
+                                        <tr class="text-left text-xs text-gray-400 uppercase">
+                                            <th class="p-3">Parcela</th>
+                                            <th class="p-3">Vencimento</th>
+                                            <th class="p-3">Valor</th>
+                                            <th class="p-3">Validação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(item, index) in ar.form.installments" :key="index" class="border-t border-gray-800">
+                                            <td class="p-3 text-white">{{ index + 1 }}/{{ ar.form.installment_count }}</td>
+                                            <td class="p-3">
+                                                <input
+                                                    v-model="item.due_date"
+                                                    type="date"
+                                                    class="rounded border border-gray-700 bg-black px-2 py-1 text-white [color-scheme:dark]"
+                                                />
+                                            </td>
+                                            <td class="p-3">
+                                                <input
+                                                    :value="item.amount"
+                                                    class="rounded border border-gray-700 bg-black px-2 py-1 text-white"
+                                                    @input="ar.updateInstallmentAmount(index, $event)"
+                                                />
+                                            </td>
+                                            <td class="p-3 text-sm" :class="item.amount_cents > 0 ? 'text-green-400' : 'text-red-400'">
+                                                {{ item.amount_cents > 0 ? 'Válida' : 'Valor inválido' }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="grid gap-2 border-t border-gray-700 p-4 text-sm md:grid-cols-3">
+                                <p class="text-gray-300">
+                                    Total do título: <strong>{{ formatCurrency(ar.form.amount_cents) }}</strong>
+                                </p>
+                                <p class="text-gray-300">
+                                    Total das parcelas: <strong>{{ formatCurrency(ar.installmentTotal.value) }}</strong>
+                                </p>
+                                <p :class="ar.difference.value === 0 ? 'text-green-400' : 'text-red-400'">
+                                    Diferença: <strong>{{ formatCurrency(ar.difference.value) }}</strong>
+                                </p>
+                                <p class="md:col-span-3" :class="ar.difference.value === 0 ? 'text-green-400' : 'text-red-400'">
+                                    {{
+                                        ar.difference.value === 0
+                                            ? 'Parcelas fecham com o valor total.'
+                                            : 'A soma das parcelas precisa ser igual ao valor total.'
+                                    }}
+                                </p>
+                            </div>
+                            <p class="px-4 pb-4 text-sm text-red-400">{{ ar.form.errors.installments }}</p>
+                        </div></template
+                    >
+                    <div class="md:col-span-2">
+                        <label class="mb-1 block text-sm font-semibold text-gray-300">Observações</label
+                        ><textarea v-model="ar.form.notes" rows="3" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white" />
+                    </div>
+                    <div class="flex justify-end gap-3 md:col-span-2">
+                        <Link :href="route('accounts-receivable.index')" class="rounded-lg border border-gray-600 px-4 py-2 text-gray-300"
+                            >Cancelar</Link
+                        ><button
+                            type="submit"
+                            :disabled="!ar.canSubmit.value || ar.form.processing"
+                            class="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
+                        >
+                            Salvar conta a receber
+                        </button>
+                    </div>
+                </form></ReportSection
+            ></ReportPage
+        ><CustomerQuickCreateDialog
+            :show="showDialog"
+            :control-accounts="receivableControlAccounts"
+            :revenue-accounts="revenueAccounts"
+            :existing-names="customerNames"
+            @close="showDialog = false"
+            @created="created"
+    /></AppLayout>
 </template>

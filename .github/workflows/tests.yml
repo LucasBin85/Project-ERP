@@ -21,11 +21,9 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          # php-version: 8.4
-          php-version: 8.3 # Versão suportada pelo GitHub Actions
+          php-version: '8.3'
           tools: composer:v2
-          # coverage: xdebug
-          coverage: xdebug → none	# Evita sobrecarga desnecessária
+          coverage: none
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -49,8 +47,7 @@ jobs:
         run: php artisan ziggy:generate
 
       - name: Build Assets
-        #run: npm run build
-        run: npx vite build --config vite.config.ts # ✅ força leitura correta do app.ts
-        
-      # - name: Tests Evita erro até que o Pest ou PHPUnit esteja pronto
-      #  run: ./vendor/bin/pest
+        run: npm run build
+
+      - name: Run Tests
+        run: php artisan test

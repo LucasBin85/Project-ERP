@@ -5,80 +5,130 @@ import type { BankStatementAccount, BankStatementTransaction } from '@/types/fin
 import { Link, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { route } from 'ziggy-js';
-import CustomerQuickCreateDialog from '@/components/financial/counterparties/CustomerQuickCreateDialog.vue';
-
-interface Candidate {
-    id: number; customer_name: string; description: string; due_date: string; amount_cents: number;
-}
-const props = defineProps<{ transaction: BankStatementTransaction; bankAccount: BankStatementAccount; customers: Array<{ id: number; name: string }> }>();
-const expanded = ref(false);
-const loading = ref(false);
-const loaded = ref(false);
-const candidates = ref<Candidate[]>([]);
-const loadError = ref<string | null>(null);
-const form = useForm({ account_receivable_id: '' });
-const createForm = useForm({ customer_id: '', description: props.transaction.description ?? '', due_date: props.transaction.date ?? '', notes: '' });
-const showQuickCustomer = ref(false);
-const localCustomers = ref([...props.customers]);
-function customerCreated(customer: { id: number; name: string }) { localCustomers.value.push(customer); createForm.customer_id = String(customer.id); }
-
-async function loadCandidates() {
-    if (!props.transaction.journal_entry_id || loading.value || loaded.value) return;
-    loading.value = true; loadError.value = null;
+type C = { id: number; customer_name: string; description: string; amount_cents: number };
+type R = {
+    expectation_id: number;
+    period_date: string;
+    description: string;
+    expected_due_date: string;
+    expected_amount_cents: number | null;
+    statement_amount_cents: number;
+    amount_difference_cents: number | null;
+    counterparty: { name: string } | null;
+};
+const p = defineProps<{ transaction: BankStatementTransaction; bankAccount: BankStatementAccount; customers: Array<{ id: number; name: string }> }>(),
+    open = ref(false),
+    loading = ref(false),
+    error = ref<string | null>(null),
+    candidates = ref<C[]>([]),
+    recurring = ref<R[]>([]),
+    selected = ref<R | null>(null);
+const linkForm = useForm({ account_receivable_id: '' }),
+    createForm = useForm({ customer_id: '', description: p.transaction.description ?? '', notes: '' }),
+    rf = useForm({ recurring_financial_expectation_id: '', period_date: '', due_date: '', notes: '' });
+async function load() {
+    if (!p.transaction.journal_entry_id) return;
+    loading.value = true;
     try {
-        const response = await fetch(route('bank-accounts.statement.receivable-candidates', [props.bankAccount.id, props.transaction.journal_entry_id]), { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(String(payload.errors ? Object.values(payload.errors).flat()[0] : payload.message));
-        candidates.value = payload.candidates ?? []; loaded.value = true;
-    } catch (error) { loadError.value = error instanceof Error ? error.message : 'Não foi possível buscar contas a receber.'; }
-    finally { loading.value = false; }
+        const r = await fetch(route('bank-accounts.statement.receivable-candidates', [p.bankAccount.id, p.transaction.journal_entry_id]), {
+                headers: { Accept: 'application/json' },
+            }),
+            j = await r.json();
+        if (!r.ok) throw new Error(String(j.errors ? Object.values(j.errors).flat()[0] : j.message));
+        candidates.value = j.candidates ?? [];
+        recurring.value = j.recurring_candidates ?? [];
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : 'Falha ao buscar candidatos.';
+    } finally {
+        loading.value = false;
+    }
 }
-function toggle() { expanded.value = !expanded.value; if (expanded.value) void loadCandidates(); }
-function linkReceivable() {
-    if (!props.transaction.journal_entry_id || !form.account_receivable_id) return;
-    form.post(route('bank-accounts.statement.link-receivable', [props.bankAccount.id, props.transaction.journal_entry_id]), { preserveScroll: true, onSuccess: () => { expanded.value = false; } });
+function toggle() {
+    open.value = !open.value;
+    if (open.value) void load();
 }
-function createAndLinkReceivable() {
-    if (!props.transaction.journal_entry_id || !createForm.customer_id) return;
-    createForm.post(route('bank-accounts.statement.create-link-receivable', [props.bankAccount.id, props.transaction.journal_entry_id]), { preserveScroll: true });
+function choose(i: R) {
+    selected.value = i;
+    rf.recurring_financial_expectation_id = String(i.expectation_id);
+    rf.period_date = i.period_date;
+    rf.due_date = i.expected_due_date;
+    rf.clearErrors();
+}
+function link() {
+    linkForm.post(route('bank-accounts.statement.link-receivable', [p.bankAccount.id, p.transaction.journal_entry_id]), { preserveScroll: true });
+}
+function confirm() {
+    rf.post(route('bank-accounts.statement.confirm-link-recurring-receivable', [p.bankAccount.id, p.transaction.journal_entry_id]), {
+        preserveScroll: true,
+    });
+}
+function create() {
+    createForm.post(route('bank-accounts.statement.create-link-receivable', [p.bankAccount.id, p.transaction.journal_entry_id]), {
+        preserveScroll: true,
+    });
 }
 </script>
-
 <template>
-    <div v-if="transaction.linked_account_receivable" class="min-w-60 space-y-1.5">
-        <span class="inline-flex rounded bg-green-950 px-2 py-1 text-xs font-semibold text-green-300">Conta a receber vinculada</span>
-        <Link :href="transaction.linked_account_receivable.show_url" class="block text-sm font-semibold text-indigo-300 hover:text-indigo-200">{{ transaction.linked_account_receivable.description }}</Link>
-        <p class="text-xs text-gray-500">{{ transaction.linked_account_receivable.customer_name }}</p>
-        <p class="text-xs text-gray-400">Classificação: {{ transaction.classification_label }}</p>
+    <div v-if="transaction.linked_account_receivable">
+        <Link :href="transaction.linked_account_receivable.show_url" class="text-indigo-300"
+            >Conta a receber vinculada: {{ transaction.linked_account_receivable.description }}</Link
+        >
     </div>
-    <div v-else-if="transaction.can_link_account_receivable" class="min-w-72 space-y-2">
-        <button type="button" class="rounded-lg border border-indigo-500/60 px-3 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-950/40" @click="toggle">Criar ou vincular título a receber</button>
-        <div v-if="expanded" class="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4" @click.self="expanded = false">
-          <div class="max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-xl border border-gray-700 bg-gray-950 p-5 shadow-2xl">
-            <div class="flex items-center justify-between"><p class="font-bold text-white">Conta a receber do extrato</p><button type="button" class="text-gray-400" @click="expanded = false">Fechar</button></div>
-            <div class="grid grid-cols-2 gap-2 rounded bg-gray-900 p-3 text-xs text-gray-300"><p>Valor: <strong>{{ formatCurrency(Math.abs(transaction.amount_cents)) }}</strong></p><p>Data do movimento: <strong>{{ formatDate(transaction.date) }}</strong></p></div>
-            <p v-if="loading" class="text-xs text-gray-400">Buscando títulos pendentes...</p>
-            <p v-else-if="loadError" class="text-xs text-red-300">{{ loadError }}</p>
-            <div v-else-if="!candidates.length" class="space-y-2">
-                <p class="text-xs text-amber-300">Nenhum título pendente com o mesmo valor.</p>
-                <p class="font-semibold text-white">Criar título a receber e vincular</p>
-                <select v-model="createForm.customer_id" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white"><option value="" disabled>Cliente...</option><option v-for="customer in localCustomers" :key="customer.id" :value="String(customer.id)">{{ customer.name }}</option></select>
-                <button type="button" class="text-left font-semibold text-indigo-300 hover:underline" @click="showQuickCustomer = true">Cadastrar cliente rápido</button>
-                <input v-model="createForm.description" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" placeholder="Descrição" />
-                <textarea v-model="createForm.notes" class="w-full rounded border border-gray-700 bg-black px-2 py-1.5 text-white" placeholder="Observações opcionais" />
-                <button type="button" :disabled="createForm.processing || !createForm.customer_id" class="w-full rounded bg-indigo-600 px-3 py-2 font-semibold text-white disabled:opacity-50" @click="createAndLinkReceivable">Criar título a receber e vincular</button>
-                <InputError :message="Object.values(createForm.errors)[0]" />
+    <div v-else-if="transaction.can_link_account_receivable">
+        <button class="rounded border border-indigo-500 px-3 py-2" @click="toggle">Criar ou vincular título a receber</button>
+        <div v-if="open" class="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4" @click.self="open = false">
+            <div class="max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto rounded-xl bg-gray-950 p-5">
+                <div class="flex justify-between"><b>Conta a receber do extrato</b><button @click="open = false">Fechar</button></div>
+                <p>Valor: {{ formatCurrency(Math.abs(transaction.amount_cents)) }} · Data: {{ formatDate(transaction.date) }}</p>
+                <p v-if="loading">Buscando...</p>
+                <p v-if="error" class="text-red-300">{{ error }}</p>
+                <section v-if="candidates.length" class="space-y-2">
+                    <h3>Títulos pendentes já existentes</h3>
+                    <select v-model="linkForm.account_receivable_id" class="w-full bg-black p-2">
+                        <option value="">Selecione...</option>
+                        <option v-for="i in candidates" :key="i.id" :value="String(i.id)">
+                            {{ i.customer_name }} · {{ i.description }} · {{ formatCurrency(i.amount_cents) }}
+                        </option></select
+                    ><button class="w-full bg-indigo-600 p-2" @click="link">Confirmar vínculo</button>
+                </section>
+                <section v-if="recurring.length" class="space-y-2 border-t pt-3">
+                    <h3>Recorrências esperadas</h3>
+                    <div v-for="i in recurring" :key="`${i.expectation_id}-${i.period_date}`" class="border p-3 text-xs">
+                        <b>{{ i.description }} · {{ i.counterparty?.name }}</b>
+                        <p>Vencimento previsto: {{ formatDate(i.expected_due_date) }}</p>
+                        <p>
+                            Previsto: {{ i.expected_amount_cents === null ? 'Sem estimativa' : formatCurrency(i.expected_amount_cents) }} · Real:
+                            {{ formatCurrency(i.statement_amount_cents) }}
+                        </p>
+                        <p v-if="i.amount_difference_cents !== null">
+                            Diferença: {{ i.amount_difference_cents >= 0 ? '+' : '-' }}{{ formatCurrency(Math.abs(i.amount_difference_cents)) }}
+                        </p>
+                        <button class="text-indigo-300" @click="choose(i)">Usar esta recorrência</button>
+                    </div>
+                    <div v-if="selected" class="space-y-2 bg-gray-900 p-3">
+                        <p>
+                            Competência: {{ selected.period_date.slice(0, 7) }} · Valor readonly:
+                            {{ formatCurrency(selected.statement_amount_cents) }}
+                        </p>
+                        <input v-model="rf.due_date" type="date" class="w-full bg-black p-2" /><textarea
+                            v-model="rf.notes"
+                            class="w-full bg-black p-2"
+                        /><button class="w-full bg-indigo-600 p-2" @click="confirm">Confirmar recorrência e vincular</button
+                        ><button @click="selected = null">Cancelar</button><InputError :message="Object.values(rf.errors)[0]" />
+                    </div>
+                </section>
+                <section class="space-y-2 border-t pt-3">
+                    <h3>Criar novo título</h3>
+                    <select v-model="createForm.customer_id" class="w-full bg-black p-2">
+                        <option value="">Cliente...</option>
+                        <option v-for="i in customers" :key="i.id" :value="String(i.id)">{{ i.name }}</option></select
+                    ><input v-model="createForm.description" class="w-full bg-black p-2" /><textarea
+                        v-model="createForm.notes"
+                        class="w-full bg-black p-2"
+                    /><button class="w-full bg-indigo-600 p-2" @click="create">Criar título e vincular</button
+                    ><InputError :message="Object.values(createForm.errors)[0]" />
+                </section>
             </div>
-            <template v-else>
-                <select v-model="form.account_receivable_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-sm text-white" aria-label="Conta a receber para vincular">
-                    <option value="" disabled>Selecione explicitamente...</option>
-                    <option v-for="candidate in candidates" :key="candidate.id" :value="String(candidate.id)">{{ candidate.customer_name }} · {{ candidate.description }} · {{ formatDate(candidate.due_date) }} · {{ formatCurrency(candidate.amount_cents) }}</option>
-                </select>
-                <button type="button" :disabled="form.processing || !form.account_receivable_id" class="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" @click="linkReceivable">{{ form.processing ? 'Vinculando...' : 'Confirmar vínculo' }}</button>
-            </template>
-            <InputError :message="form.errors.account_receivable_id || Object.values(form.errors)[0]" />
-          </div>
         </div>
     </div>
-    <CustomerQuickCreateDialog :show="showQuickCustomer" :existing-names="localCustomers.map((item) => item.name)" @close="showQuickCustomer = false" @created="customerCreated" />
 </template>

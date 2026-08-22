@@ -27,7 +27,9 @@ class CreateAccountReceivable
         if ($dto->customerId && ! $customer) {
             throw ValidationException::withMessages(['customer_id' => 'Cliente ativo inválido.']);
         }
-        $revenueId = $customer?->default_revenue_account_id ?? $dto->revenueAccountId;
+        $revenueId = $dto->preferExplicitRevenueAccount
+            ? $dto->revenueAccountId
+            : ($customer?->default_revenue_account_id ?? $dto->revenueAccountId);
         $receivableId = $customer?->receivable_account_id ?? $dto->receivableAccountId;
         $revenueAccount = ChartOfAccount::query()
             ->where('wallet_id', $wallet->id)

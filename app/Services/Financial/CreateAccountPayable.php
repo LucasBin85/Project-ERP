@@ -27,7 +27,9 @@ class CreateAccountPayable
         if ($dto->supplierId && ! $supplier) {
             throw ValidationException::withMessages(['supplier_id' => 'Fornecedor ativo inválido.']);
         }
-        $expenseId = $supplier?->default_expense_account_id ?? $dto->expenseAccountId;
+        $expenseId = $dto->preferExplicitExpenseAccount
+            ? $dto->expenseAccountId
+            : ($supplier?->default_expense_account_id ?? $dto->expenseAccountId);
         $payableId = $supplier?->payable_account_id ?? $dto->payableAccountId;
         $expenseAccount = ChartOfAccount::query()
             ->where('wallet_id', $wallet->id)
