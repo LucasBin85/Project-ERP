@@ -1,5 +1,6 @@
 <?php
 
+use App\DTOs\Financial\BankReconciliationDraftDTO;
 use App\DTOs\Financial\BankReconciliationDTO;
 use App\Models\BankReconciliationStatementItem;
 use App\Models\BankStatementImportTransaction;
@@ -11,8 +12,11 @@ use App\Services\Financial\BankReconciliationPreviewService;
 use App\Services\Financial\BuildOfxReconciliationStatementItems;
 use App\Services\Financial\ConfirmOfxBankStatement;
 use App\Services\Financial\CreateBankReconciliation;
+use App\Services\Financial\DiscardBankReconciliationDraft;
 use App\Services\Financial\PreviewOfxBankStatement;
+use App\Services\Financial\UpdateBankReconciliationDraft;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\Helpers\FinancialTestHelper;
 
 uses(RefreshDatabase::class);
@@ -149,23 +153,41 @@ it('builds reconciliation statement items from imported OFX transactions and com
         ->and(collect($ofxItems)->pluck('journal_line_id')->filter())->toHaveCount(2)
         ->and(collect($ofxItems)->sum('amount_cents'))->toBe(337410);
 
-    $reconciliation = app(CreateBankReconciliation::class)->execute(
+    $statementItems = collect($ofxItems)
+        ->map(fn (array $item) => [
+            'bank_statement_import_transaction_id' => $item['bank_statement_import_transaction_id'],
+            'transaction_date' => $item['transaction_date'],
+            'description' => $item['description'],
+            'amount_cents' => $item['amount_cents'],
+            'journal_line_id' => $item['journal_line_id'],
+        ])
+        ->all();
+
+    $draft = app(CreateBankReconciliation::class)->execute(
         $wallet,
         new BankReconciliationDTO(
             bankAccountId: $bankAccount->id,
             periodStart: '2026-07-01',
             periodEnd: '2026-07-31',
-            statementBalanceCents: 337410,
-            statementItems: collect($ofxItems)
-                ->map(fn (array $item) => [
-                    'bank_statement_import_transaction_id' => $item['bank_statement_import_transaction_id'],
-                    'transaction_date' => $item['transaction_date'],
-                    'description' => $item['description'],
-                    'amount_cents' => $item['amount_cents'],
-                    'journal_line_id' => $item['journal_line_id'],
-                ])
-                ->all(),
+            statementBalanceCents: 337411,
+            statementItems: $statementItems,
         ),
+    );
+
+    $reviewed = app(UpdateBankReconciliationDraft::class)->execute(
+        $wallet,
+        $draft,
+        new BankReconciliationDraftDTO(337411, $statementItems, 'IDs importados reutilizados na revisão'),
+    );
+
+    expect($reviewed->status)->toBe('draft')
+        ->and($reviewed->statementItems->pluck('bank_statement_import_transaction_id')->filter())->toHaveCount(2);
+
+    app(DiscardBankReconciliationDraft::class)->execute($wallet, $reviewed);
+
+    $reconciliation = app(CreateBankReconciliation::class)->execute(
+        $wallet,
+        new BankReconciliationDTO($bankAccount->id, '2026-07-01', '2026-07-31', 337410, $statementItems),
     );
 
     expect($reconciliation->status)->toBe('completed')
@@ -177,4 +199,18 @@ it('builds reconciliation statement items from imported OFX transactions and com
 
     expect(BankReconciliationStatementItem::query()->whereNotNull('bank_statement_import_transaction_id')->count())->toBe(2)
         ->and(BankStatementImportTransaction::query()->where('status', 'imported')->count())->toBe(2);
+
+    $foreignDraft = \App\Models\BankReconciliation::query()->create([
+        'wallet_id' => $wallet->id,
+        'bank_account_id' => $bankAccount->id,
+        'period_start' => '2026-07-01',
+        'period_end' => '2026-07-31',
+        'status' => 'draft',
+    ]);
+
+    expect(fn () => app(UpdateBankReconciliationDraft::class)->execute(
+        $wallet,
+        $foreignDraft,
+        new BankReconciliationDraftDTO(337410, $statementItems),
+    ))->toThrow(ValidationException::class);
 });

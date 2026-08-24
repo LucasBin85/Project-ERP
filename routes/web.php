@@ -173,7 +173,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('bank-reconciliations/preview', [BankReconciliationController::class, 'preview'])
             ->name('bank-reconciliations.preview');
         Route::resource('bank-reconciliations', BankReconciliationController::class)
-            ->only(['index', 'create', 'store', 'show']);
+            ->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
 
         Route::post('accounts-payable/{accountPayable}/pay', [AccountPayableController::class, 'pay'])
             ->name('accounts-payable.pay');

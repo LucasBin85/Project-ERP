@@ -8,6 +8,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class BankReconciliation extends Model
 {
+    protected static function booted(): void
+    {
+        static::updating(function (BankReconciliation $reconciliation) {
+            if ($reconciliation->getOriginal('status') === 'completed') {
+                throw new \DomainException('Uma conciliação concluída é imutável.');
+            }
+        });
+
+        static::deleting(function (BankReconciliation $reconciliation) {
+            if ($reconciliation->status === 'completed') {
+                throw new \DomainException('Uma conciliação concluída não pode ser excluída.');
+            }
+        });
+    }
+
     protected $fillable = [
         'wallet_id',
         'bank_account_id',

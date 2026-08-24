@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Financial;
 
+use App\DTOs\Financial\BankReconciliationDraftDTO;
 use App\DTOs\Financial\BankReconciliationDTO;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
 use App\Http\Controllers\Controller;
@@ -10,6 +11,8 @@ use App\Models\BankReconciliation;
 use App\Services\Financial\BankReconciliationPreviewService;
 use App\Services\Financial\BuildOfxReconciliationStatementItems;
 use App\Services\Financial\CreateBankReconciliation;
+use App\Services\Financial\DiscardBankReconciliationDraft;
+use App\Services\Financial\UpdateBankReconciliationDraft;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -76,12 +79,24 @@ class BankReconciliationController extends Controller
     public function preview(Request $request, BankReconciliationPreviewService $service): JsonResponse
     {
         $wallet = $this->resolveActiveWallet($request);
-        $data = $this->validated($request);
+        $data = $this->validated($request, true);
         $bankAccount = BankAccount::query()
             ->where('wallet_id', $wallet->id)
             ->where('is_active', true)
             ->findOrFail($data['bank_account_id']);
         $dto = BankReconciliationDTO::fromArray($data);
+        $ignoredReconciliationId = null;
+
+        if (isset($data['bank_reconciliation_id'])) {
+            $ignoredReconciliationId = BankReconciliation::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('status', 'draft')
+                ->where('bank_account_id', $bankAccount->id)
+                ->whereDate('period_start', $dto->periodStart)
+                ->whereDate('period_end', $dto->periodEnd)
+                ->findOrFail($data['bank_reconciliation_id'])
+                ->id;
+        }
 
         return response()->json($service->buildForStatement(
             wallet: $wallet,
@@ -90,7 +105,59 @@ class BankReconciliationController extends Controller
             periodEnd: $dto->periodEnd,
             statementBalanceCents: $dto->statementBalanceCents,
             statementItems: $dto->statementItems,
+            ignoredReconciliationId: $ignoredReconciliationId,
         ));
+    }
+
+    public function edit(Request $request, BankReconciliation $bankReconciliation, BankReconciliationPreviewService $previewService): Response
+    {
+        $wallet = $this->resolveActiveWallet($request);
+
+        abort_unless($bankReconciliation->wallet_id === $wallet->id && $bankReconciliation->status === 'draft', 404);
+
+        $bankReconciliation->load([
+            'bankAccount',
+            'statementItems.bankStatementImportTransaction.import',
+            'statementItems.journalLine.journalEntry',
+        ]);
+        $lines = $previewService->build(
+            $wallet,
+            $bankReconciliation->bankAccount,
+            $bankReconciliation->period_start->toDateString(),
+            $bankReconciliation->period_end->toDateString(),
+        )['lines'];
+
+        return Inertia::render('Financial/BankReconciliations/Edit', [
+            'wallet' => ['id' => $wallet->id, 'name' => $wallet->name],
+            'reconciliation' => $bankReconciliation,
+            'availableLines' => $lines,
+        ]);
+    }
+
+    public function update(
+        Request $request,
+        BankReconciliation $bankReconciliation,
+        UpdateBankReconciliationDraft $service,
+    ): RedirectResponse {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($bankReconciliation->wallet_id === $wallet->id, 404);
+
+        $reconciliation = $service->execute($wallet, $bankReconciliation, BankReconciliationDraftDTO::fromArray($this->validatedDraft($request)));
+
+        return redirect()->route('bank-reconciliations.show', $reconciliation)->with('success', 'Conciliação bancária revisada com sucesso.');
+    }
+
+    public function destroy(
+        Request $request,
+        BankReconciliation $bankReconciliation,
+        DiscardBankReconciliationDraft $service,
+    ): RedirectResponse {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($bankReconciliation->wallet_id === $wallet->id, 404);
+
+        $service->execute($wallet, $bankReconciliation);
+
+        return redirect()->route('bank-reconciliations.index')->with('success', 'Rascunho de conciliação descartado com sucesso.');
     }
 
     public function store(Request $request, CreateBankReconciliation $service): RedirectResponse
@@ -155,7 +222,7 @@ class BankReconciliationController extends Controller
         ]);
     }
 
-    private function validated(Request $request): array
+    private function validated(Request $request, bool $allowEditContext = false): array
     {
         return $request->validate([
             'bank_account_id' => ['required', 'integer'],
@@ -166,6 +233,24 @@ class BankReconciliationController extends Controller
             'statement_items' => ['present', 'array', 'max:500'],
             'statement_items.*.bank_statement_import_transaction_id' => ['nullable', 'integer'],
             'statement_items.*.transaction_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:period_start', 'before_or_equal:period_end'],
+            'statement_items.*.description' => ['required', 'string', 'max:255'],
+            'statement_items.*.amount_cents' => ['required', 'integer'],
+            'statement_items.*.journal_line_id' => ['nullable', 'integer'],
+            'bank_reconciliation_id' => $allowEditContext ? ['nullable', 'integer'] : ['prohibited'],
+        ]);
+    }
+
+    private function validatedDraft(Request $request): array
+    {
+        return $request->validate([
+            'bank_account_id' => ['prohibited'],
+            'period_start' => ['prohibited'],
+            'period_end' => ['prohibited'],
+            'statement_balance_cents' => ['required', 'integer'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+            'statement_items' => ['present', 'array', 'max:500'],
+            'statement_items.*.bank_statement_import_transaction_id' => ['nullable', 'integer'],
+            'statement_items.*.transaction_date' => ['required', 'date_format:Y-m-d'],
             'statement_items.*.description' => ['required', 'string', 'max:255'],
             'statement_items.*.amount_cents' => ['required', 'integer'],
             'statement_items.*.journal_line_id' => ['nullable', 'integer'],

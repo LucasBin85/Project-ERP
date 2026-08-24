@@ -27,7 +27,10 @@ it('keeps financial navigation routes aligned with the contextual bank statement
         ->and(\Illuminate\Support\Facades\Route::has('bank-accounts.statement'))->toBeTrue()
         ->and(\Illuminate\Support\Facades\Route::has('ofx-imports.index'))->toBeTrue()
         ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.index'))->toBeTrue()
-        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.show'))->toBeTrue();
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.show'))->toBeTrue()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.edit'))->toBeTrue()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.update'))->toBeTrue()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.destroy'))->toBeTrue();
 });
 
 it('creates a completed reconciliation when statement items match system movements', function () {
@@ -452,9 +455,10 @@ it('rejects a journal line already used by another reconciliation', function () 
 
     $historical = BankReconciliation::query()->create([
         'wallet_id' => $wallet->id, 'bank_account_id' => $historicalAccount->id,
-        'period_start' => '2026-06-01', 'period_end' => '2026-06-30', 'status' => 'completed',
+        'period_start' => '2026-06-01', 'period_end' => '2026-06-30', 'status' => 'draft',
     ]);
     $historical->items()->create(['journal_line_id' => $line->id, 'amount_cents' => 1000]);
+    $historical->update(['status' => 'completed', 'completed_at' => now()]);
 
     expect(fn () => app(CreateBankReconciliation::class)->execute(
         $wallet,

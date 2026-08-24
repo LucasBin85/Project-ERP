@@ -32,6 +32,7 @@ class BankReconciliationPreviewService
         string $periodEnd,
         int $statementBalanceCents,
         array $statementItems,
+        ?int $ignoredReconciliationId = null,
     ): array {
         $preview = $this->build($wallet, $bankAccount, $periodStart, $periodEnd);
         $availableLines = collect($preview['lines'])->keyBy('id');
@@ -65,6 +66,7 @@ class BankReconciliationPreviewService
             ->where('bank_account_id', $bankAccount->id)
             ->whereDate('period_start', '<=', $periodEnd)
             ->whereDate('period_end', '>=', $periodStart)
+            ->when($ignoredReconciliationId !== null, fn ($query) => $query->whereKeyNot($ignoredReconciliationId))
             ->orderBy('id')
             ->first(['id']);
 
