@@ -5,6 +5,7 @@ namespace App\Services\Financial;
 use App\DTOs\Financial\BankReconciliationDTO;
 use App\Models\BankAccount;
 use App\Models\BankReconciliation;
+use App\Models\BankReconciliationItem;
 use App\Models\BankReconciliationStatementItem;
 use App\Models\BankStatementImportTransaction;
 use App\Models\Wallet;
@@ -39,13 +40,29 @@ class CreateBankReconciliation
             $bankAccount = BankAccount::query()
                 ->where('wallet_id', $wallet->id)
                 ->where('is_active', true)
+                ->lockForUpdate()
                 ->findOrFail($dto->bankAccountId);
 
-            $preview = $this->previewService->build(
+            $hasOverlap = BankReconciliation::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('bank_account_id', $bankAccount->id)
+                ->whereDate('period_start', '<=', $dto->periodEnd)
+                ->whereDate('period_end', '>=', $dto->periodStart)
+                ->exists();
+
+            if ($hasOverlap) {
+                throw ValidationException::withMessages([
+                    'period_start' => 'Já existe uma conciliação para esta conta em um período sobreposto.',
+                ]);
+            }
+
+            $preview = $this->previewService->buildForStatement(
                 wallet: $wallet,
                 bankAccount: $bankAccount,
                 periodStart: $dto->periodStart,
                 periodEnd: $dto->periodEnd,
+                statementBalanceCents: $dto->statementBalanceCents,
+                statementItems: $dto->statementItems,
             );
 
             $availableLines = collect($preview['lines'])->keyBy('id');
@@ -65,13 +82,13 @@ class CreateBankReconciliation
                 ->map(fn ($id) => (int) $id)
                 ->values();
 
-            $duplicatedLinkedIds = $linkedLineIds
-                ->duplicates()
-                ->values();
+            $alreadyReconciledLines = BankReconciliationItem::query()
+                ->whereIn('journal_line_id', $linkedLineIds->unique())
+                ->exists();
 
-            if ($duplicatedLinkedIds->isNotEmpty()) {
+            if ($alreadyReconciledLines) {
                 throw ValidationException::withMessages([
-                    'statement_items' => 'Um mesmo lançamento do sistema não pode ser vinculado a mais de um item do extrato.',
+                    'statement_items' => 'Uma ou mais movimentações do sistema já pertencem a outra conciliação.',
                 ]);
             }
 
@@ -85,36 +102,18 @@ class CreateBankReconciliation
                 ]);
             }
 
-            $statementMovementCents = $statementItems
-                ->sum('amount_cents');
-
-            $statementBalanceCents = (int) $preview['opening_balance_cents'] + (int) $statementMovementCents;
-
-            $reconciledMovementCents = $linkedLineIds
-                ->unique()
-                ->map(fn (int $id) => $availableLines->get($id))
-                ->sum('signed_amount_cents');
-
-            $reconciledBalanceCents = (int) $preview['opening_balance_cents'] + (int) $reconciledMovementCents;
-            $differenceCents = $reconciledBalanceCents - $statementBalanceCents;
-
-            $hasPendingItems = $statementItems
-                ->contains(fn (array $item) => empty($item['journal_line_id']));
-
-            $status = $differenceCents === 0 && ! $hasPendingItems ? 'completed' : 'draft';
-
             $reconciliation = BankReconciliation::query()->create([
                 'wallet_id' => $wallet->id,
                 'bank_account_id' => $bankAccount->id,
                 'period_start' => $dto->periodStart,
                 'period_end' => $dto->periodEnd,
                 'opening_balance_cents' => $preview['opening_balance_cents'],
-                'statement_balance_cents' => $statementBalanceCents,
+                'statement_balance_cents' => $dto->statementBalanceCents,
                 'book_balance_cents' => $preview['book_balance_cents'],
-                'reconciled_balance_cents' => $reconciledBalanceCents,
-                'difference_cents' => $differenceCents,
-                'status' => $status,
-                'completed_at' => $status === 'completed' ? now() : null,
+                'reconciled_balance_cents' => $preview['reconciled_balance_cents'],
+                'difference_cents' => $preview['difference_cents'],
+                'status' => $preview['status'],
+                'completed_at' => $preview['status'] === 'completed' ? now() : null,
                 'notes' => $dto->notes,
             ]);
 

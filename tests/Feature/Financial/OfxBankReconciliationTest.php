@@ -155,7 +155,7 @@ it('builds reconciliation statement items from imported OFX transactions and com
             bankAccountId: $bankAccount->id,
             periodStart: '2026-07-01',
             periodEnd: '2026-07-31',
-            statementBalanceCents: 0,
+            statementBalanceCents: 337410,
             statementItems: collect($ofxItems)
                 ->map(fn (array $item) => [
                     'bank_statement_import_transaction_id' => $item['bank_statement_import_transaction_id'],

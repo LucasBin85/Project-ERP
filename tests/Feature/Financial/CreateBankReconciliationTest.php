@@ -5,9 +5,11 @@ use App\Models\BankReconciliation;
 use App\Models\BankReconciliationItem;
 use App\Models\BankReconciliationStatementItem;
 use App\Models\JournalLine;
+use App\Models\MonthlyWalletClosing;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Services\Financial\CreateBankReconciliation;
+use App\Services\Financial\ManageMonthlyWalletClosing;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
@@ -20,7 +22,8 @@ uses(RefreshDatabase::class);
 it('keeps financial navigation routes aligned with the contextual bank statement flow', function () {
     expect(\Illuminate\Support\Facades\Route::has('bank-statements.index'))->toBeFalse()
         ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.create'))->toBeFalse()
-        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.store'))->toBeFalse()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.store'))->toBeTrue()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.preview'))->toBeTrue()
         ->and(\Illuminate\Support\Facades\Route::has('bank-accounts.statement'))->toBeTrue()
         ->and(\Illuminate\Support\Facades\Route::has('ofx-imports.index'))->toBeTrue()
         ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.index'))->toBeTrue()
@@ -162,6 +165,33 @@ it('keeps reconciliation as draft when there is a difference', function () {
         ->and($reconciliation->difference_cents)->toBe(10000)
         ->and($reconciliation->statementItems)->toHaveCount(1)
         ->and($reconciliation->statementItems->first()->status)->toBe('reconciled');
+});
+
+it('persists the authoritative statement balance and calculates difference from it', function () {
+    $user = User::factory()->create();
+    $wallet = Wallet::query()->create(['user_id' => $user->id, 'name' => 'Carteira saldo oficial']);
+    $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.050', 'Banco saldo oficial');
+    $counterpart = AccountingTestHelper::account($wallet, '3.050', 'Contrapartida', 'patrimonio', 'credit');
+    $entry = AccountingTestHelper::createPostedEntry($wallet, '2026-07-10', [
+        [$bankAccount->chartOfAccount, 'debit', 5000],
+        [$counterpart, 'credit', 5000],
+    ]);
+    $line = $entry->lines->firstWhere('chart_of_account_id', $bankAccount->chart_of_account_id);
+
+    $reconciliation = app(CreateBankReconciliation::class)->execute(
+        $wallet,
+        new BankReconciliationDTO($bankAccount->id, '2026-07-01', '2026-07-31', 7000, [[
+            'transaction_date' => '2026-07-10',
+            'description' => 'Movimento presente, saldo externo divergente',
+            'amount_cents' => 5000,
+            'journal_line_id' => $line->id,
+        ]]),
+    );
+
+    expect($reconciliation->statement_balance_cents)->toBe(7000)
+        ->and($reconciliation->reconciled_balance_cents)->toBe(5000)
+        ->and($reconciliation->difference_cents)->toBe(-2000)
+        ->and($reconciliation->status)->toBe('draft');
 });
 
 it('keeps reconciliation as draft when a statement item is pending', function () {
@@ -360,25 +390,104 @@ it('rolls back the reconciliation and all items when item persistence fails', fu
         ->and(BankReconciliationItem::query()->count())->toBe(0);
 });
 
-it('preserves the existing duplicate policy', function () {
+it('rejects overlapping draft and completed reconciliations but permits adjacent periods', function () {
     $user = User::factory()->create();
     $wallet = Wallet::query()->create(['user_id' => $user->id, 'name' => 'Carteira duplicidade']);
     $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.601', 'Banco duplicidade');
-    $counterpart = AccountingTestHelper::account($wallet, '3.601', 'Contrapartida', 'patrimonio', 'credit');
+    $completed = app(CreateBankReconciliation::class)->execute($wallet, new BankReconciliationDTO($bankAccount->id, '2026-01-01', '2026-01-31', 0));
+
+    expect(fn () => app(CreateBankReconciliation::class)->execute(
+        $wallet,
+        new BankReconciliationDTO($bankAccount->id, '2026-01-15', '2026-02-15', 0),
+    ))->toThrow(ValidationException::class);
+
+    $draft = BankReconciliation::query()->create([
+        'wallet_id' => $wallet->id, 'bank_account_id' => $bankAccount->id,
+        'period_start' => '2026-03-01', 'period_end' => '2026-03-31',
+        'statement_balance_cents' => 100, 'difference_cents' => -100, 'status' => 'draft',
+    ]);
+
+    expect(fn () => app(CreateBankReconciliation::class)->execute(
+        $wallet,
+        new BankReconciliationDTO($bankAccount->id, '2026-03-31', '2026-04-30', 0),
+    ))->toThrow(ValidationException::class);
+
+    $adjacent = app(CreateBankReconciliation::class)->execute($wallet, new BankReconciliationDTO($bankAccount->id, '2026-02-01', '2026-02-28', 0));
+
+    expect($completed->status)->toBe('completed')
+        ->and($draft->fresh()->status)->toBe('draft')
+        ->and($adjacent->period_start->toDateString())->toBe('2026-02-01')
+        ->and(BankReconciliation::query()->count())->toBe(3);
+});
+
+it('permits the same period for different bank accounts', function () {
+    $user = User::factory()->create();
+    $wallet = Wallet::query()->create(['user_id' => $user->id, 'name' => 'Carteira contas']);
+    $first = FinancialTestHelper::bankAccount($wallet, '1.1.2.701', 'Banco um');
+    $second = FinancialTestHelper::bankAccount($wallet, '1.1.2.702', 'Banco dois');
+
+    app(CreateBankReconciliation::class)->execute($wallet, new BankReconciliationDTO($first->id, '2026-07-01', '2026-07-31', 0));
+    app(CreateBankReconciliation::class)->execute($wallet, new BankReconciliationDTO($second->id, '2026-07-01', '2026-07-31', 0));
+
+    expect(BankReconciliation::query()->count())->toBe(2);
+});
+
+it('rejects a journal line already used by another reconciliation', function () {
+    $user = User::factory()->create();
+    $wallet = Wallet::query()->create(['user_id' => $user->id, 'name' => 'Carteira linha única']);
+    $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.801', 'Banco linha única');
+    $historicalAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.802', 'Banco histórico');
+    $counterpart = AccountingTestHelper::account($wallet, '3.801', 'Contrapartida', 'patrimonio', 'credit');
     $entry = AccountingTestHelper::createPostedEntry($wallet, '2026-07-10', [
         [$bankAccount->chartOfAccount, 'debit', 1000],
         [$counterpart, 'credit', 1000],
     ]);
     $line = $entry->lines->firstWhere('chart_of_account_id', $bankAccount->chart_of_account_id);
-    $item = ['transaction_date' => '2026-07-10', 'description' => 'Mesmo lançamento', 'amount_cents' => 1000, 'journal_line_id' => $line->id];
+    $duplicateItem = ['transaction_date' => '2026-07-10', 'description' => 'Linha duplicada', 'amount_cents' => 1000, 'journal_line_id' => $line->id];
 
     expect(fn () => app(CreateBankReconciliation::class)->execute(
         $wallet,
-        new BankReconciliationDTO($bankAccount->id, '2026-07-01', '2026-07-31', 2000, [$item, $item]),
+        new BankReconciliationDTO($bankAccount->id, '2026-07-01', '2026-07-31', 2000, [$duplicateItem, $duplicateItem]),
     ))->toThrow(ValidationException::class);
 
-    app(CreateBankReconciliation::class)->execute($wallet, new BankReconciliationDTO($bankAccount->id, '2026-07-01', '2026-07-31', 1000, [$item]));
-    app(CreateBankReconciliation::class)->execute($wallet, new BankReconciliationDTO($bankAccount->id, '2026-07-01', '2026-07-31', 1000, [$item]));
+    $historical = BankReconciliation::query()->create([
+        'wallet_id' => $wallet->id, 'bank_account_id' => $historicalAccount->id,
+        'period_start' => '2026-06-01', 'period_end' => '2026-06-30', 'status' => 'completed',
+    ]);
+    $historical->items()->create(['journal_line_id' => $line->id, 'amount_cents' => 1000]);
 
-    expect(BankReconciliation::query()->count())->toBe(2);
+    expect(fn () => app(CreateBankReconciliation::class)->execute(
+        $wallet,
+        new BankReconciliationDTO($bankAccount->id, '2026-07-01', '2026-07-31', 1000, [[
+            'transaction_date' => '2026-07-10', 'description' => 'Linha já conciliada', 'amount_cents' => 1000, 'journal_line_id' => $line->id,
+        ]]),
+    ))->toThrow(ValidationException::class);
+
+    expect(BankReconciliation::query()->count())->toBe(1);
+});
+
+it('allows reconciliation in a formally closed month without changing accounting or closing', function () {
+    $user = User::factory()->create();
+    $wallet = Wallet::query()->create(['user_id' => $user->id, 'name' => 'Carteira fechada']);
+    $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.901', 'Banco fechado');
+    $counterpart = AccountingTestHelper::account($wallet, '3.901', 'Contrapartida', 'patrimonio', 'credit');
+    $entry = AccountingTestHelper::createPostedEntry($wallet, '2026-07-10', [
+        [$bankAccount->chartOfAccount, 'debit', 1000],
+        [$counterpart, 'credit', 1000],
+    ]);
+    $line = $entry->lines->firstWhere('chart_of_account_id', $bankAccount->chart_of_account_id);
+    $closing = app(ManageMonthlyWalletClosing::class)->close($wallet, $user, 2026, 7, 'Fechamento testado');
+    $entrySnapshot = $entry->fresh()->getAttributes();
+
+    $reconciliation = app(CreateBankReconciliation::class)->execute(
+        $wallet,
+        new BankReconciliationDTO($bankAccount->id, '2026-07-01', '2026-07-31', 1000, [[
+            'transaction_date' => '2026-07-10', 'description' => 'Movimento fechado', 'amount_cents' => 1000, 'journal_line_id' => $line->id,
+        ]]),
+    );
+
+    expect($reconciliation->exists)->toBeTrue()
+        ->and($closing->fresh()->status)->toBe('closed')
+        ->and($entry->fresh()->getAttributes())->toBe($entrySnapshot)
+        ->and(MonthlyWalletClosing::query()->count())->toBe(1);
 });

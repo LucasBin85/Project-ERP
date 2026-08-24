@@ -3,9 +3,11 @@
 namespace App\Services\Financial;
 
 use App\Models\BankAccount;
+use App\Models\BankReconciliation;
 use App\Models\JournalLine;
 use App\Models\Wallet;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
 class BankReconciliationPreviewService
 {
@@ -20,6 +22,75 @@ class BankReconciliationPreviewService
             'opening_balance_cents' => $openingBalanceCents,
             'book_balance_cents' => $bookBalanceCents,
             'lines' => $lines->values(),
+        ];
+    }
+
+    public function buildForStatement(
+        Wallet $wallet,
+        BankAccount $bankAccount,
+        string $periodStart,
+        string $periodEnd,
+        int $statementBalanceCents,
+        array $statementItems,
+    ): array {
+        $preview = $this->build($wallet, $bankAccount, $periodStart, $periodEnd);
+        $availableLines = collect($preview['lines'])->keyBy('id');
+        $items = collect($statementItems);
+        $linkedLineIds = $items->pluck('journal_line_id')->filter()->map(fn ($id) => (int) $id)->values();
+
+        if ($linkedLineIds->duplicates()->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'statement_items' => 'Um mesmo lançamento do sistema não pode ser vinculado a mais de um item do extrato.',
+            ]);
+        }
+
+        $invalidIds = $linkedLineIds->unique()->reject(fn (int $id) => $availableLines->has($id));
+
+        if ($invalidIds->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'statement_items' => 'Uma ou mais movimentações vinculadas não pertencem à conta, período ou carteira informados.',
+            ]);
+        }
+
+        $statementMovementCents = (int) $items->sum('amount_cents');
+        $calculatedStatementBalanceCents = (int) $preview['opening_balance_cents'] + $statementMovementCents;
+        $reconciledMovementCents = (int) $linkedLineIds->unique()
+            ->map(fn (int $id) => $availableLines->get($id))
+            ->sum('signed_amount_cents');
+        $reconciledBalanceCents = (int) $preview['opening_balance_cents'] + $reconciledMovementCents;
+        $differenceCents = $reconciledBalanceCents - $statementBalanceCents;
+        $pendingCount = $items->filter(fn (array $item) => empty($item['journal_line_id']))->count();
+        $overlap = BankReconciliation::query()
+            ->where('wallet_id', $wallet->id)
+            ->where('bank_account_id', $bankAccount->id)
+            ->whereDate('period_start', '<=', $periodEnd)
+            ->whereDate('period_end', '>=', $periodStart)
+            ->orderBy('id')
+            ->first(['id']);
+
+        return [
+            'bank_account' => [
+                'id' => $bankAccount->id,
+                'name' => $bankAccount->name,
+            ],
+            'period_start' => $periodStart,
+            'period_end' => $periodEnd,
+            'opening_balance_cents' => (int) $preview['opening_balance_cents'],
+            'statement_balance_cents' => $statementBalanceCents,
+            'calculated_statement_balance_cents' => $calculatedStatementBalanceCents,
+            'statement_items_difference_cents' => $calculatedStatementBalanceCents - $statementBalanceCents,
+            'book_balance_cents' => (int) $preview['book_balance_cents'],
+            'reconciled_balance_cents' => $reconciledBalanceCents,
+            'difference_cents' => $differenceCents,
+            'statement_items' => $items->map(fn (array $item) => [
+                ...$item,
+                'status' => empty($item['journal_line_id']) ? 'pending' : 'reconciled',
+            ])->values(),
+            'pending_count' => $pendingCount,
+            'status' => $differenceCents === 0 && $pendingCount === 0 ? 'completed' : 'draft',
+            'lines' => $preview['lines'],
+            'has_existing_overlap' => $overlap !== null,
+            'existing_reconciliation_id' => $overlap?->id,
         ];
     }
 

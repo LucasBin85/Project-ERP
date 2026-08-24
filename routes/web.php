@@ -170,8 +170,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('ofx-imports/confirm', [OfxImportController::class, 'confirm'])
             ->name('ofx-imports.confirm');
 
+        Route::post('bank-reconciliations/preview', [BankReconciliationController::class, 'preview'])
+            ->name('bank-reconciliations.preview');
         Route::resource('bank-reconciliations', BankReconciliationController::class)
-            ->only(['index', 'show']);
+            ->only(['index', 'store', 'show']);
 
         Route::post('accounts-payable/{accountPayable}/pay', [AccountPayableController::class, 'pay'])
             ->name('accounts-payable.pay');
