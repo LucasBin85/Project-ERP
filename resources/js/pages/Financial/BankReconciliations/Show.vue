@@ -63,12 +63,16 @@ defineProps<{
 
                     <ReportSummaryCard label="Saldo contábil" :value="formatCurrency(reconciliation.book_balance_cents)" tone="neutral" />
 
-                    <ReportSummaryCard label="Saldo extrato" :value="formatCurrency(reconciliation.statement_balance_cents)" tone="neutral" />
+                    <ReportSummaryCard
+                        label="Saldo final informado pelo banco"
+                        :value="formatCurrency(reconciliation.statement_balance_cents)"
+                        tone="neutral"
+                    />
 
                     <ReportSummaryCard label="Saldo conciliado" :value="formatCurrency(reconciliation.reconciled_balance_cents)" tone="green" />
 
                     <ReportSummaryCard
-                        label="Diferença"
+                        label="Diferença da conciliação"
                         :value="formatCurrency(reconciliation.difference_cents)"
                         :tone="Number(reconciliation.difference_cents) === 0 ? 'green' : 'yellow'"
                     />

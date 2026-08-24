@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankReconciliation;
 use App\Services\Financial\BankReconciliationPreviewService;
+use App\Services\Financial\BuildOfxReconciliationStatementItems;
 use App\Services\Financial\CreateBankReconciliation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +19,59 @@ use Inertia\Response;
 class BankReconciliationController extends Controller
 {
     use ResolvesActiveWallet;
+
+    public function create(
+        Request $request,
+        BankReconciliationPreviewService $previewService,
+        BuildOfxReconciliationStatementItems $statementItemsBuilder,
+    ): Response {
+        $wallet = $this->resolveActiveWallet($request);
+        $query = validator($request->query(), [
+            'bank_account_id' => ['nullable', 'integer'],
+            'period_start' => ['nullable', 'date_format:Y-m-d'],
+            'period_end' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:period_start'],
+        ])->validate();
+
+        $bankAccount = null;
+
+        if (isset($query['bank_account_id'])) {
+            $bankAccount = BankAccount::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('is_active', true)
+                ->findOrFail($query['bank_account_id']);
+        }
+
+        $periodStart = $query['period_start'] ?? null;
+        $periodEnd = $query['period_end'] ?? null;
+        $statementItems = [];
+
+        if ($bankAccount && $periodStart && $periodEnd) {
+            $preview = $previewService->build($wallet, $bankAccount, $periodStart, $periodEnd);
+            $statementItems = $statementItemsBuilder->build(
+                wallet: $wallet,
+                bankAccount: $bankAccount,
+                periodStart: $periodStart,
+                periodEnd: $periodEnd,
+                availableLineIds: collect($preview['lines'])->pluck('id')->all(),
+            );
+        }
+
+        return Inertia::render('Financial/BankReconciliations/Create', [
+            'wallet' => ['id' => $wallet->id, 'name' => $wallet->name],
+            'bankAccounts' => BankAccount::query()
+                ->where('wallet_id', $wallet->id)
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'bank_name', 'agency', 'account_number']),
+            'initial' => [
+                'bank_account_id' => $bankAccount?->id,
+                'period_start' => $periodStart,
+                'period_end' => $periodEnd,
+                'statement_balance_cents' => null,
+                'statement_items' => $statementItems,
+            ],
+        ]);
+    }
 
     public function preview(Request $request, BankReconciliationPreviewService $service): JsonResponse
     {

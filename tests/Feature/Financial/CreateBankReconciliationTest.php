@@ -21,7 +21,7 @@ uses(RefreshDatabase::class);
 
 it('keeps financial navigation routes aligned with the contextual bank statement flow', function () {
     expect(\Illuminate\Support\Facades\Route::has('bank-statements.index'))->toBeFalse()
-        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.create'))->toBeFalse()
+        ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.create'))->toBeTrue()
         ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.store'))->toBeTrue()
         ->and(\Illuminate\Support\Facades\Route::has('bank-reconciliations.preview'))->toBeTrue()
         ->and(\Illuminate\Support\Facades\Route::has('bank-accounts.statement'))->toBeTrue()

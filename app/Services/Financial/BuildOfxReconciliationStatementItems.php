@@ -34,7 +34,7 @@ class BuildOfxReconciliationStatementItems
             ->whereDate('posted_at', '>=', $periodStart)
             ->whereDate('posted_at', '<=', $periodEnd)
             ->when($alreadyReconciledIds !== [], fn ($query) => $query->whereNotIn('id', $alreadyReconciledIds))
-            ->with(['journalEntry.lines', 'journalLine.journalEntry'])
+            ->with(['import:id,source', 'journalEntry.lines', 'journalLine.journalEntry'])
             ->orderBy('posted_at')
             ->orderBy('id')
             ->get()
@@ -47,8 +47,8 @@ class BuildOfxReconciliationStatementItems
 
                 return [
                     'bank_statement_import_transaction_id' => $transaction->id,
-                    'source' => 'ofx',
-                    'source_label' => 'OFX',
+                    'source' => $transaction->import?->source ?? 'ofx',
+                    'source_label' => 'Extrato importado',
                     'external_id' => $transaction->external_id,
                     'fit_id' => $transaction->fit_id,
                     'transaction_date' => $transaction->posted_at?->toDateString(),
