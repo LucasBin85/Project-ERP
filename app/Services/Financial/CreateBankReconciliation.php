@@ -9,17 +9,32 @@ use App\Models\BankReconciliationStatementItem;
 use App\Models\BankStatementImportTransaction;
 use App\Models\Wallet;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class CreateBankReconciliation
 {
     public function __construct(
         private readonly BankReconciliationPreviewService $previewService,
-    ) {
-    }
+    ) {}
 
     public function execute(Wallet $wallet, BankReconciliationDTO $dto): BankReconciliation
     {
+        Validator::make([
+            'period_start' => $dto->periodStart,
+            'period_end' => $dto->periodEnd,
+            'statement_items' => $dto->statementItems,
+        ], [
+            'period_start' => ['required', 'date_format:Y-m-d'],
+            'period_end' => ['required', 'date_format:Y-m-d', 'after_or_equal:period_start'],
+            'statement_items.*.transaction_date' => [
+                'required',
+                'date_format:Y-m-d',
+                'after_or_equal:period_start',
+                'before_or_equal:period_end',
+            ],
+        ])->validate();
+
         return DB::transaction(function () use ($wallet, $dto) {
             $bankAccount = BankAccount::query()
                 ->where('wallet_id', $wallet->id)
