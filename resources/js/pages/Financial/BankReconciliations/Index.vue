@@ -24,6 +24,15 @@ function formatPaginationLabel(label: string): string {
 <template>
     <AppLayout title="Histórico de conciliações">
         <ReportPage title="Histórico de conciliações bancárias" :subtitle="wallet.name">
+            <div class="flex justify-end">
+                <Link
+                    :href="route('bank-reconciliations.create')"
+                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                >
+                    Nova conciliação
+                </Link>
+            </div>
+
             <ReportSection>
                 <template #header>
                     <div>
@@ -44,7 +53,7 @@ function formatPaginationLabel(label: string): string {
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Período</th>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Conta</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo banco</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo final informado pelo banco</th>
                             <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Saldo conciliado</th>
                             <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Diferença</th>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Status</th>

@@ -79,3 +79,18 @@ O módulo está integrado a:
 
 Versionamento, previsão configurável, integração com extrato, performance e
 backtest estão documentados em [Recorrências financeiras](recurring-financial-expectations.md).
+
+## Conciliação bancária formal — implementada
+
+O fluxo formal de conciliação bancária está disponível a partir do extrato e do histórico de conciliações. Ele inclui:
+
+- preview read-only antes da persistência;
+- criação como draft ou completed conforme diferenças e pendências;
+- saldo final informado pelo banco como valor oficial autoritativo;
+- revisão e descarte de drafts;
+- transição automática de draft para completed quando reconciliado;
+- completed imutável como snapshot de auditoria;
+- proteção contra períodos sobrepostos, journal lines e transações importadas reutilizadas;
+- suporte a conciliação após o fechamento mensal, sem reabrir o mês ou alterar contabilidade.
+
+Detalhes do contrato estão em [Conciliação bancária formal](bank-reconciliation.md).

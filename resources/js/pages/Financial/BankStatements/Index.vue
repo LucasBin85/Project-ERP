@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import BankStatementDateRangeFilter from '@/components/financial/bankStatements/BankStatementDateRangeFilter.vue';
 import BankStatementTable from '@/components/financial/bankStatements/BankStatementTable.vue';
-import OfxImportDialog from '@/components/financial/ofxImports/OfxImportDialog.vue';
-import ClassificationRulesPanel from '@/components/financial/bankStatements/ClassificationRulesPanel.vue';
 import BulkClassificationSuggestions from '@/components/financial/bankStatements/BulkClassificationSuggestions.vue';
+import ClassificationRulesPanel from '@/components/financial/bankStatements/ClassificationRulesPanel.vue';
+import OfxImportDialog from '@/components/financial/ofxImports/OfxImportDialog.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { formatCurrency } from '@/lib/formatters';
 import type {
     BankStatementAccount,
     BankStatementClassificationAccount,
@@ -20,7 +21,6 @@ import type { FinancialOperationTypeOption } from '@/types/financial/operationTy
 import { Link, router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { route } from 'ziggy-js';
-import { formatCurrency } from '@/lib/formatters';
 
 const props = defineProps<{
     wallet: BankStatementWallet;
@@ -30,7 +30,12 @@ const props = defineProps<{
     summary: { opening_balance_cents: number; total_inflows_cents: number; total_outflows_cents: number; closing_balance_cents: number };
     classificationAccounts: BankStatementClassificationAccount[];
     classificationRules: Array<Record<string, unknown>>;
-    classificationBulkResult?: { applied: number; ignored: number; failed: number; items: Array<{ status: string; journal_entry_id: number; message: string }> } | null;
+    classificationBulkResult?: {
+        applied: number;
+        ignored: number;
+        failed: number;
+        items: Array<{ status: string; journal_entry_id: number; message: string }>;
+    } | null;
     operationTypes: FinancialOperationTypeOption[];
     settlementParties: { suppliers: Array<{ id: number; name: string }>; customers: Array<{ id: number; name: string }> };
     creditCardInvoices: Array<Record<string, any>>;
@@ -162,7 +167,31 @@ onBeforeUnmount(() => {
                 >
                     Resumo da conta
                 </Link>
-                <Link v-if="selectedBankAccount" :href="route('bank-accounts.closing.show',{bankAccount:selectedBankAccount.id,start_date:form.start_date,end_date:form.end_date})" class="rounded-lg border border-indigo-500/60 px-4 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-950/30">Conferir período</Link>
+                <Link
+                    v-if="selectedBankAccount"
+                    :href="
+                        route('bank-accounts.closing.show', {
+                            bankAccount: selectedBankAccount.id,
+                            start_date: form.start_date,
+                            end_date: form.end_date,
+                        })
+                    "
+                    class="rounded-lg border border-indigo-500/60 px-4 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-950/30"
+                    >Conferir período</Link
+                >
+                <Link
+                    v-if="selectedBankAccount && form.start_date && form.end_date && form.start_date <= form.end_date"
+                    :href="
+                        route('bank-reconciliations.create', {
+                            bank_account_id: selectedBankAccount.id,
+                            period_start: form.start_date,
+                            period_end: form.end_date,
+                        })
+                    "
+                    class="rounded-lg border border-green-500/60 px-4 py-2 text-sm font-semibold text-green-200 hover:bg-green-950/30"
+                >
+                    Conciliar período
+                </Link>
 
                 <button
                     type="button"
@@ -193,8 +222,21 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-if="classificationBulkResult" class="rounded-2xl border border-indigo-500/30 bg-indigo-950/30 px-4 py-3 text-sm text-indigo-100">
-                <b>{{ classificationBulkResult.applied }} aplicadas · {{ classificationBulkResult.ignored }} ignoradas · {{ classificationBulkResult.failed }} falhas</b>
-                <details v-if="classificationBulkResult.ignored || classificationBulkResult.failed" class="mt-2"><summary class="cursor-pointer text-xs">Ver detalhes</summary><ul class="mt-2 space-y-1 text-xs text-gray-300"><li v-for="item in classificationBulkResult.items.filter(item => item.status !== 'applied')" :key="`${item.journal_entry_id}-${item.status}`">JE-{{ String(item.journal_entry_id).padStart(6,'0') }}: {{ item.message }}</li></ul></details>
+                <b
+                    >{{ classificationBulkResult.applied }} aplicadas · {{ classificationBulkResult.ignored }} ignoradas ·
+                    {{ classificationBulkResult.failed }} falhas</b
+                >
+                <details v-if="classificationBulkResult.ignored || classificationBulkResult.failed" class="mt-2">
+                    <summary class="cursor-pointer text-xs">Ver detalhes</summary>
+                    <ul class="mt-2 space-y-1 text-xs text-gray-300">
+                        <li
+                            v-for="item in classificationBulkResult.items.filter((item) => item.status !== 'applied')"
+                            :key="`${item.journal_entry_id}-${item.status}`"
+                        >
+                            JE-{{ String(item.journal_entry_id).padStart(6, '0') }}: {{ item.message }}
+                        </li>
+                    </ul>
+                </details>
             </div>
 
             <div
@@ -218,10 +260,22 @@ onBeforeUnmount(() => {
                 </template>
 
                 <div class="grid grid-cols-2 gap-px border-b border-gray-700 bg-gray-700 md:grid-cols-4">
-                    <div class="bg-gray-950 p-4"><p class="text-xs text-gray-500">Saldo anterior</p><b class="text-gray-100">{{ formatCurrency(summary.opening_balance_cents) }}</b></div>
-                    <div class="bg-gray-950 p-4"><p class="text-xs text-gray-500">Entradas do período</p><b class="text-green-300">{{ formatCurrency(summary.total_inflows_cents) }}</b></div>
-                    <div class="bg-gray-950 p-4"><p class="text-xs text-gray-500">Saídas do período</p><b class="text-red-300">{{ formatCurrency(summary.total_outflows_cents) }}</b></div>
-                    <div class="bg-gray-950 p-4"><p class="text-xs text-gray-500">Saldo final do período</p><b class="text-white">{{ formatCurrency(summary.closing_balance_cents) }}</b></div>
+                    <div class="bg-gray-950 p-4">
+                        <p class="text-xs text-gray-500">Saldo anterior</p>
+                        <b class="text-gray-100">{{ formatCurrency(summary.opening_balance_cents) }}</b>
+                    </div>
+                    <div class="bg-gray-950 p-4">
+                        <p class="text-xs text-gray-500">Entradas do período</p>
+                        <b class="text-green-300">{{ formatCurrency(summary.total_inflows_cents) }}</b>
+                    </div>
+                    <div class="bg-gray-950 p-4">
+                        <p class="text-xs text-gray-500">Saídas do período</p>
+                        <b class="text-red-300">{{ formatCurrency(summary.total_outflows_cents) }}</b>
+                    </div>
+                    <div class="bg-gray-950 p-4">
+                        <p class="text-xs text-gray-500">Saldo final do período</p>
+                        <b class="text-white">{{ formatCurrency(summary.closing_balance_cents) }}</b>
+                    </div>
                 </div>
 
                 <div class="border-b border-gray-700 p-6">
