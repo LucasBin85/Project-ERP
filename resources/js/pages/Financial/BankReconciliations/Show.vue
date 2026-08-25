@@ -4,21 +4,66 @@ import ReportSection from '@/components/reports/ReportSection.vue';
 import ReportSummaryCard from '@/components/reports/ReportSummaryCard.vue';
 import ReportTable from '@/components/reports/ReportTable.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
+import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCurrency, formatDate } from '@/lib/formatters';
-import { Link } from '@inertiajs/vue3';
+import { Link, useForm } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 
-defineProps<{
+const props = defineProps<{
     wallet: Record<string, any>;
     reconciliation: Record<string, any>;
 }>();
+
+const discardForm = useForm({});
+
+function discardDraft() {
+    discardForm.delete(route('bank-reconciliations.destroy', [props.reconciliation.id]));
+}
 </script>
 
 <template>
     <AppLayout title="Auditoria de conciliação">
         <ReportPage title="Registro de conciliação" :subtitle="wallet.name">
             <div class="flex justify-end gap-3">
+                <Link
+                    v-if="reconciliation.status === 'draft'"
+                    :href="route('bank-reconciliations.edit', [reconciliation.id])"
+                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                >
+                    Revisar rascunho
+                </Link>
+
+                <Dialog v-if="reconciliation.status === 'draft'">
+                    <DialogTrigger as-child>
+                        <Button variant="destructive">Descartar rascunho</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Descartar este rascunho?</DialogTitle>
+                            <DialogDescription>
+                                Esta ação remove apenas o rascunho da conciliação. Lançamentos contábeis e movimentos bancários não serão excluídos.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter class="gap-2">
+                            <DialogClose as-child><Button variant="secondary">Voltar</Button></DialogClose>
+                            <Button variant="destructive" :disabled="discardForm.processing" @click="discardDraft">
+                                {{ discardForm.processing ? 'Descartando...' : 'Confirmar descarte' }}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
                 <Link
                     :href="route('bank-reconciliations.index')"
                     class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
@@ -55,6 +100,9 @@ defineProps<{
                         </div>
 
                         <StatusBadge :status="reconciliation.status" />
+                        <p v-if="reconciliation.completed_at" class="mt-2 text-xs text-gray-500">
+                            Concluída em {{ formatDate(reconciliation.completed_at) }}
+                        </p>
                     </div>
                 </template>
 
@@ -63,12 +111,16 @@ defineProps<{
 
                     <ReportSummaryCard label="Saldo contábil" :value="formatCurrency(reconciliation.book_balance_cents)" tone="neutral" />
 
-                    <ReportSummaryCard label="Saldo extrato" :value="formatCurrency(reconciliation.statement_balance_cents)" tone="neutral" />
+                    <ReportSummaryCard
+                        label="Saldo final informado pelo banco"
+                        :value="formatCurrency(reconciliation.statement_balance_cents)"
+                        tone="neutral"
+                    />
 
                     <ReportSummaryCard label="Saldo conciliado" :value="formatCurrency(reconciliation.reconciled_balance_cents)" tone="green" />
 
                     <ReportSummaryCard
-                        label="Diferença"
+                        label="Diferença da conciliação"
                         :value="formatCurrency(reconciliation.difference_cents)"
                         :tone="Number(reconciliation.difference_cents) === 0 ? 'green' : 'yellow'"
                     />
