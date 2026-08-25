@@ -98,6 +98,7 @@ function previewPayload() {
 const signature = computed(() => JSON.stringify(updatePayload()));
 const previewIsCurrent = computed(() => preview.value !== null && previewSignature.value === signature.value);
 const canSave = computed(() => previewIsCurrent.value && !preview.value?.has_existing_overlap && !form.processing);
+const formErrorMessages = computed(() => Object.values(form.errors));
 
 function updateBalance(event: Event) {
     const value = (event.target as HTMLInputElement).value;
@@ -275,6 +276,12 @@ function save() {
                 Os dados mudaram. Gere uma nova prévia antes de salvar.
             </div>
             <div v-if="previewError" class="rounded-xl border border-red-500/30 bg-red-950/30 p-4 text-sm text-red-200">{{ previewError }}</div>
+            <div v-if="formErrorMessages.length" role="alert" class="rounded-xl border border-red-500/30 bg-red-950/30 p-4 text-sm text-red-200">
+                <p class="font-semibold">Revise os dados antes de salvar:</p>
+                <ul class="mt-2 list-disc space-y-1 pl-5">
+                    <li v-for="message in formErrorMessages" :key="message">{{ message }}</li>
+                </ul>
+            </div>
             <div class="flex justify-end">
                 <button
                     type="button"
