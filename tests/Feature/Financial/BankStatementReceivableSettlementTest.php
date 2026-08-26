@@ -1,22 +1,25 @@
 <?php
 
+use App\DTOs\Financial\AccountReceivableDTO;
 use App\DTOs\Financial\BankStatementFiltersDTO;
 use App\Models\AccountReceivable;
 use App\Models\BankStatementImport;
 use App\Models\BankStatementImportTransaction;
+use App\Models\Customer;
+use App\Models\FinancialTitleSeries;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
+use App\Models\MonthlyWalletClosing;
 use App\Models\User;
-use App\Models\Customer;
-use App\DTOs\Financial\AccountReceivableDTO;
-use App\Services\Financial\CreateAndLinkAccountReceivableFromBankStatement;
-use App\Services\Accounting\CreateBankImportEntry;
-use App\Services\Financial\BankStatementService;
-use App\Services\Financial\OfxOperationTypePolicy;
-use App\Services\Financial\BankAccountBalanceService;
-use App\Services\Accounting\PostJournalEntry;
-use App\Services\Accounting\IncomeStatementService;
 use App\Services\Accounting\BalanceSheetService;
+use App\Services\Accounting\CreateBankImportEntry;
+use App\Services\Accounting\IncomeStatementService;
+use App\Services\Accounting\PostJournalEntry;
+use App\Services\Financial\BankAccountBalanceService;
+use App\Services\Financial\BankStatementService;
+use App\Services\Financial\CreateAndLinkAccountReceivableFromBankStatement;
+use App\Services\Financial\LinkAccountReceivableFromBankStatement;
+use App\Services\Financial\OfxOperationTypePolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
@@ -125,7 +128,8 @@ it('creates a receivable provision and links the current statement entry as its 
 });
 
 it('ignores a divergent date when creating a receivable from the statement endpoint', function () {
-    $context = receivableSettlementContext(); $movement = receivableMovement($context);
+    $context = receivableSettlementContext();
+    $movement = receivableMovement($context);
     $customer = Customer::query()->create(['wallet_id' => $context['wallet']->id, 'name' => 'Cliente data fixa', 'active' => true,
         'receivable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->value('id'), 'default_revenue_account_id' => $context['revenue']->id]);
     $this->actingAs($context['user'])->withSession(['active_wallet' => $context['wallet']->id])->post(route('bank-accounts.statement.create-link-receivable', [$context['bankAccount'], $movement['entry']]), [
@@ -198,4 +202,42 @@ it('blocks invalid amount, received title, outgoing movement, other wallet and d
     $freshMovement = receivableMovement($context);
     $this->postJson(route('bank-accounts.statement.link-receivable', [$context['bankAccount'], $freshMovement['entry']]), ['account_receivable_id' => $other->id])
         ->assertUnprocessable()->assertJsonValidationErrors('account_receivable_id');
+});
+
+it('updates a receivable installment series after each bank settlement', function () {
+    $context = receivableSettlementContext();
+    $series = FinancialTitleSeries::query()->create([
+        'wallet_id' => $context['wallet']->id, 'type' => 'receivable', 'mode' => 'installment',
+        'description' => 'Série AR', 'counterparty' => 'Cliente', 'total_amount_cents' => 50_000,
+        'installment_count' => 2, 'competence_date' => '2026-07-01', 'status' => 'pending',
+    ]);
+    $first = receivableTitle($context, ['series_id' => $series->id, 'installment_number' => 1]);
+    $second = receivableTitle($context, ['series_id' => $series->id, 'installment_number' => 2]);
+
+    app(LinkAccountReceivableFromBankStatement::class)->execute($context['wallet'], $context['bankAccount'], receivableMovement($context)['entry'], $first);
+    expect($first->fresh()->status)->toBe('received')->and($series->fresh()->status)->toBe('partially_settled');
+
+    app(LinkAccountReceivableFromBankStatement::class)->execute($context['wallet'], $context['bankAccount'], receivableMovement($context)['entry'], $second);
+    expect($second->fresh()->status)->toBe('received')->and($series->fresh()->status)->toBe('settled');
+});
+
+it('rejects receivable bank settlement in a closed period without partial mutations', function () {
+    $context = receivableSettlementContext();
+    $movement = receivableMovement($context);
+    $title = receivableTitle($context);
+    MonthlyWalletClosing::query()->create([
+        'wallet_id' => $context['wallet']->id, 'year' => 2026, 'month' => 7,
+        'period_start' => '2026-07-01', 'period_end' => '2026-07-31', 'status' => 'closed',
+        'closed_at' => now(), 'closed_by' => $context['user']->id,
+    ]);
+    $counterpart = $movement['counterpart']->only(['chart_of_account_id', 'memo']);
+    $audit = $movement['audit']->only(['journal_line_id', 'classification_account_id']);
+
+    expect(fn () => app(LinkAccountReceivableFromBankStatement::class)->execute(
+        $context['wallet'], $context['bankAccount'], $movement['entry'], $title,
+    ))->toThrow(\Illuminate\Validation\ValidationException::class)
+        ->and($title->fresh()->status)->toBe('pending')
+        ->and($title->fresh()->receipt_journal_entry_id)->toBeNull()
+        ->and($movement['counterpart']->fresh()->only(array_keys($counterpart)))->toBe($counterpart)
+        ->and($movement['audit']->fresh()->only(array_keys($audit)))->toBe($audit);
 });

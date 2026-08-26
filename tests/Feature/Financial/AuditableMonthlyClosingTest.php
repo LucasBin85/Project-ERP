@@ -79,8 +79,16 @@ it('blocks posting classification suggestions and batches in a closed month', fu
     $entry = AccountingTestHelper::createDraftEntry($context['wallet'], '2026-07-10', [
         [$context['expense'], 'debit', 1000], [$context['bank']->chartOfAccount, 'credit', 1000],
     ], 'ofx');
+    $closing = MonthlyWalletClosing::query()->firstOrFail();
+    $closedAt = $closing->closed_at;
+    $lines = $entry->lines()->orderBy('id')->get()->map->only(['chart_of_account_id', 'type', 'amount_cents', 'memo'])->all();
     $session = ['active_wallet' => $context['wallet']->id];
     $this->actingAs($context['user'])->withSession($session)->post(route('journal-entries.post', $entry))->assertSessionHasErrors('period');
+    expect($entry->fresh()->status)->toBe('draft')
+        ->and($entry->fresh()->posted_at)->toBeNull()
+        ->and($entry->lines()->orderBy('id')->get()->map->only(['chart_of_account_id', 'type', 'amount_cents', 'memo'])->all())->toBe($lines)
+        ->and($closing->fresh()->status)->toBe('closed')
+        ->and($closing->fresh()->closed_at->equalTo($closedAt))->toBeTrue();
     $this->post(route('bank-accounts.statement.classify', [$context['bank'], $entry]), [])->assertSessionHasErrors('period');
     $this->post(route('bank-accounts.statement.apply-suggestion', [$context['bank'], $entry]), [])->assertSessionHasErrors('period');
     $this->post(route('bank-accounts.statement.bulk-apply-suggestions', $context['bank']), [
@@ -113,6 +121,8 @@ it('does not block views reports or another wallet', function () {
     ]);
     $this->actingAs($foreign['user'])->withSession(['active_wallet' => $foreign['wallet']->id])
         ->post(route('journal-entries.post', $entry))->assertSessionDoesntHaveErrors('period');
+    expect($entry->fresh()->status)->toBe('posted')
+        ->and($entry->fresh()->posted_at)->not->toBeNull();
 });
 
 it('shows formal status actions and closing reasons in the page', function () {

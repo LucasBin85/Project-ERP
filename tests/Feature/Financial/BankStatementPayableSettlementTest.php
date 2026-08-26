@@ -1,5 +1,6 @@
 <?php
 
+use App\DTOs\Financial\AccountPayableDTO;
 use App\DTOs\Financial\BankStatementFiltersDTO;
 use App\DTOs\Financial\OfxClassificationDTO;
 use App\Exceptions\OfxClassificationException;
@@ -7,21 +8,23 @@ use App\Models\AccountPayable;
 use App\Models\BankAccount;
 use App\Models\BankStatementImport;
 use App\Models\BankStatementImportTransaction;
+use App\Models\FinancialTitleSeries;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
+use App\Models\MonthlyWalletClosing;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Wallet;
-use App\Models\Supplier;
-use App\DTOs\Financial\AccountPayableDTO;
-use App\Services\Financial\CreateAndLinkAccountPayableFromBankStatement;
+use App\Services\Accounting\BalanceSheetService;
 use App\Services\Accounting\CreateBankImportEntry;
+use App\Services\Accounting\IncomeStatementService;
+use App\Services\Accounting\PostJournalEntry;
+use App\Services\Financial\BankAccountBalanceService;
 use App\Services\Financial\BankStatementService;
 use App\Services\Financial\ClassifyOfxDraftEntry;
+use App\Services\Financial\CreateAndLinkAccountPayableFromBankStatement;
+use App\Services\Financial\LinkAccountPayableFromBankStatement;
 use App\Services\Financial\OfxOperationTypePolicy;
-use App\Services\Financial\BankAccountBalanceService;
-use App\Services\Accounting\PostJournalEntry;
-use App\Services\Accounting\IncomeStatementService;
-use App\Services\Accounting\BalanceSheetService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
@@ -251,7 +254,8 @@ it('creates a payable provision and links the current statement entry as its pay
 });
 
 it('ignores a divergent date when creating a payable from the statement endpoint', function () {
-    $context = payableSettlementContext(); $movement = payableSettlementMovement($context, date: '2026-07-10');
+    $context = payableSettlementContext();
+    $movement = payableSettlementMovement($context, date: '2026-07-10');
     $supplier = Supplier::query()->create(['wallet_id' => $context['wallet']->id, 'name' => 'Fornecedor data fixa', 'active' => true,
         'payable_account_id' => $context['wallet']->chartOfAccounts()->where('financial_group', 'accounts_payable')->where('allows_posting', true)->value('id'), 'default_expense_account_id' => $context['expense']->id]);
     $this->actingAs($context['user'])->withSession(['active_wallet' => $context['wallet']->id])->post(route('bank-accounts.statement.create-link-payable', [$context['bankAccount'], $movement['entry']]), [
@@ -527,6 +531,44 @@ it('blocks a payable from another wallet and hides movements outside the active 
             $movement['entry'],
         ]))
         ->assertNotFound();
+});
+
+it('updates a payable installment series after each bank settlement', function () {
+    $context = payableSettlementContext();
+    $series = FinancialTitleSeries::query()->create([
+        'wallet_id' => $context['wallet']->id, 'type' => 'payable', 'mode' => 'installment',
+        'description' => 'Série AP', 'counterparty' => 'Fornecedor', 'total_amount_cents' => 50_000,
+        'installment_count' => 2, 'competence_date' => '2026-07-01', 'status' => 'pending',
+    ]);
+    $first = payableSettlementPayable($context, ['series_id' => $series->id, 'installment_number' => 1]);
+    $second = payableSettlementPayable($context, ['series_id' => $series->id, 'installment_number' => 2]);
+
+    app(LinkAccountPayableFromBankStatement::class)->execute($context['wallet'], $context['bankAccount'], payableSettlementMovement($context)['entry'], $first);
+    expect($first->fresh()->status)->toBe('paid')->and($series->fresh()->status)->toBe('partially_settled');
+
+    app(LinkAccountPayableFromBankStatement::class)->execute($context['wallet'], $context['bankAccount'], payableSettlementMovement($context)['entry'], $second);
+    expect($second->fresh()->status)->toBe('paid')->and($series->fresh()->status)->toBe('settled');
+});
+
+it('rejects payable bank settlement in a closed period without partial mutations', function () {
+    $context = payableSettlementContext();
+    $movement = payableSettlementMovement($context);
+    $title = payableSettlementPayable($context);
+    MonthlyWalletClosing::query()->create([
+        'wallet_id' => $context['wallet']->id, 'year' => 2026, 'month' => 7,
+        'period_start' => '2026-07-01', 'period_end' => '2026-07-31', 'status' => 'closed',
+        'closed_at' => now(), 'closed_by' => $context['user']->id,
+    ]);
+    $counterpart = $movement['counterpart_line']->only(['chart_of_account_id', 'memo']);
+    $audit = $movement['audit']->only(['journal_line_id', 'classification_account_id']);
+
+    expect(fn () => app(LinkAccountPayableFromBankStatement::class)->execute(
+        $context['wallet'], $context['bankAccount'], $movement['entry'], $title,
+    ))->toThrow(\Illuminate\Validation\ValidationException::class)
+        ->and($title->fresh()->status)->toBe('pending')
+        ->and($title->fresh()->payment_journal_entry_id)->toBeNull()
+        ->and($movement['counterpart_line']->fresh()->only(array_keys($counterpart)))->toBe($counterpart)
+        ->and($movement['audit']->fresh()->only(array_keys($audit)))->toBe($audit);
 });
 
 it('requires authentication for payable settlement endpoints', function () {

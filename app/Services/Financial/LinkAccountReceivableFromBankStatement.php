@@ -8,11 +8,17 @@ use App\Models\BankStatementImportTransaction;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Wallet;
+use App\Services\Accounting\EnsureAccountingPeriodIsOpen;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class LinkAccountReceivableFromBankStatement
 {
+    public function __construct(
+        private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
+        private readonly UpdateFinancialTitleSeriesStatus $updateSeriesStatus,
+    ) {}
+
     public function execute(Wallet $wallet, BankAccount $bankAccount, JournalEntry $entry, AccountReceivable $receivable): AccountReceivable
     {
         return DB::transaction(function () use ($wallet, $bankAccount, $entry, $receivable) {
@@ -23,6 +29,7 @@ class LinkAccountReceivableFromBankStatement
             if (! $bankAccount->is_active || ! in_array($entry->source, OfxOperationTypePolicy::STATEMENT_IMPORT_SOURCES, true) || $entry->status !== 'draft' || ! $wallet->suspense_account_id) {
                 $this->fail('journal_entry_id', 'Somente movimentos importados do extrato e em rascunho da wallet ativa podem ser vinculados.');
             }
+            $this->ensurePeriodIsOpen->handle($wallet, $entry->entry_date);
             if (AccountReceivable::query()->where('receipt_journal_entry_id', $entry->id)->lockForUpdate()->exists()) {
                 $this->fail('journal_entry_id', 'Este movimento já está vinculado a outra conta a receber.');
             }
@@ -87,6 +94,9 @@ class LinkAccountReceivableFromBankStatement
                 'received_at' => $entry->entry_date->toDateString(),
                 'status' => 'received',
             ]);
+            if ($receivable->series_id) {
+                $this->updateSeriesStatus->execute($receivable->series()->firstOrFail());
+            }
 
             return $receivable->fresh(['revenueAccount', 'receivableAccount', 'bankAccount', 'receiptJournalEntry.lines.chartOfAccount']);
         });
