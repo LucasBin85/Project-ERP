@@ -11,6 +11,7 @@ use App\Models\RecurringFinancialExpectation;
 use App\Models\RecurringFinancialOccurrence;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Services\Accounting\PostJournalEntry;
 use App\Services\Financial\CancelAccountPayable;
 use App\Services\Financial\ConfirmRecurringFinancialExpectation;
 use App\Services\Financial\CreateAccountPayable;
@@ -129,6 +130,30 @@ it('preserves a confirmed recurring occurrence and its snapshots after title can
         ->and($occurrence->fresh()->account_payable_id)->toBe($snapshot['account_payable_id'])
         ->and($occurrence->accountPayable->fresh()->status)->toBe('cancelled')
         ->and(RecurringFinancialOccurrence::query()->count())->toBe(1)
+        ->and(app(ListRecurringFinancialExpectationsForRange::class)->execute(
+            $context['wallet'], 'payable', CarbonImmutable::parse('2026-08-01'), CarbonImmutable::parse('2026-08-31'),
+        ))->toBeEmpty();
+});
+
+it('preserves recurring history when a posted provision is cancelled through reversal', function () {
+    $context = recurringResolutionContext();
+    $expectation = recurringExpectation(['context' => $context, 'amountMode' => 'fixed', 'expectedAmountCents' => 25_000]);
+    $occurrence = app(ConfirmRecurringFinancialExpectation::class)->execute(
+        $context['wallet'], $expectation, CarbonImmutable::parse('2026-08-01'), 25_000,
+    );
+    $snapshotKeys = ['status', 'period_date', 'due_date', 'expected_amount_cents', 'actual_amount_cents', 'account_payable_id'];
+    $snapshot = collect($occurrence->fresh()->attributesToArray())->only($snapshotKeys)->all();
+    app(PostJournalEntry::class)->handle($occurrence->accountPayable->provisionJournalEntry);
+
+    app(CancelAccountPayable::class)->execute(
+        $context['wallet'], $occurrence->accountPayable, User::query()->findOrFail($context['wallet']->user_id),
+        'Serviço encerrado após contabilização', '2026-08-20',
+    );
+
+    expect(collect($occurrence->fresh()->attributesToArray())->only($snapshotKeys)->all())->toBe($snapshot)
+        ->and($occurrence->accountPayable->fresh()->cancellationJournalEntry->status)->toBe('posted')
+        ->and(RecurringFinancialOccurrence::query()->count())->toBe(1)
+        ->and($expectation->fresh()->status)->toBe($expectation->status)
         ->and(app(ListRecurringFinancialExpectationsForRange::class)->execute(
             $context['wallet'], 'payable', CarbonImmutable::parse('2026-08-01'), CarbonImmutable::parse('2026-08-31'),
         ))->toBeEmpty();

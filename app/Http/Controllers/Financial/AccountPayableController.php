@@ -251,6 +251,7 @@ class AccountPayableController extends Controller
             'series.provisionJournalEntry.lines.chartOfAccount',
             'series.payables',
             'cancelledBy:id,name',
+            'cancellationJournalEntry:id,entry_date,status,reversal_of_journal_entry_id',
         ]);
 
         $bankAccounts = BankAccount::query()
@@ -303,8 +304,11 @@ class AccountPayableController extends Controller
     {
         $wallet = $this->resolveActiveWallet($request);
         abort_unless($accountPayable->wallet_id === $wallet->id, 404);
-        $data = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
-        $service->execute($wallet, $accountPayable, $request->user(), $data['reason']);
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+            'reversal_date' => ['nullable', 'date'],
+        ]);
+        $service->execute($wallet, $accountPayable, $request->user(), $data['reason'], $data['reversal_date'] ?? null);
 
         return redirect()->route('accounts-payable.show', $accountPayable)->with('success', 'Título a pagar cancelado com sucesso.');
     }

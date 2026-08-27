@@ -26,6 +26,7 @@ class AccountReceivable extends Model
         'received_at',
         'amount_cents',
         'status',
+        'cancellation_journal_entry_id',
         'cancelled_at',
         'cancelled_by_user_id',
         'cancellation_reason',
@@ -84,5 +85,10 @@ class AccountReceivable extends Model
     public function cancelledBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'cancelled_by_user_id');
+    }
+
+    public function cancellationJournalEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class, 'cancellation_journal_entry_id');
     }
 }

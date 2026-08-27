@@ -46,6 +46,9 @@ function submitReceipt() {
                 v-if="accountReceivable.status === 'pending' && !accountReceivable.receipt_journal_entry_id"
                 route-name="accounts-receivable.cancel"
                 :title-id="accountReceivable.id"
+                :requires-reversal="
+                    (accountReceivable.series?.provision_journal_entry ?? accountReceivable.provision_journal_entry)?.status === 'posted'
+                "
             />
 
             <ReportSection>
@@ -91,6 +94,14 @@ function submitReceipt() {
                     <p class="mt-1 text-sm text-gray-400">
                         {{ formatDate(accountReceivable.cancelled_at)
                         }}<span v-if="accountReceivable.cancelled_by"> · {{ accountReceivable.cancelled_by.name }}</span>
+                    </p>
+                    <p v-if="accountReceivable.cancellation_journal_entry" class="mt-3 text-sm text-amber-200">
+                        Estorno contábil em {{ formatDate(accountReceivable.cancellation_journal_entry.entry_date) }} ·
+                        <Link
+                            :href="route('journal-entries.show', [accountReceivable.cancellation_journal_entry.id])"
+                            class="font-semibold underline hover:text-amber-100"
+                            >Ver lançamento #{{ accountReceivable.cancellation_journal_entry.id }}</Link
+                        >
                     </p>
                 </div>
             </ReportSection>

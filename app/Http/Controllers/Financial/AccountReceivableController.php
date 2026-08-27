@@ -245,6 +245,7 @@ class AccountReceivableController extends Controller
             'series.provisionJournalEntry.lines.chartOfAccount',
             'series.receivables',
             'cancelledBy:id,name',
+            'cancellationJournalEntry:id,entry_date,status,reversal_of_journal_entry_id',
         ]);
 
         $bankAccounts = BankAccount::query()
@@ -297,8 +298,11 @@ class AccountReceivableController extends Controller
     {
         $wallet = $this->resolveActiveWallet($request);
         abort_unless($accountReceivable->wallet_id === $wallet->id, 404);
-        $data = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
-        $service->execute($wallet, $accountReceivable, $request->user(), $data['reason']);
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+            'reversal_date' => ['nullable', 'date'],
+        ]);
+        $service->execute($wallet, $accountReceivable, $request->user(), $data['reason'], $data['reversal_date'] ?? null);
 
         return redirect()->route('accounts-receivable.show', $accountReceivable)->with('success', 'Título a receber cancelado com sucesso.');
     }

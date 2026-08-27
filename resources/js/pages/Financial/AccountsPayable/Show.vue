@@ -52,6 +52,7 @@ function submitPayment() {
                 v-if="accountPayable.status === 'pending' && !accountPayable.payment_journal_entry_id"
                 route-name="accounts-payable.cancel"
                 :title-id="accountPayable.id"
+                :requires-reversal="(accountPayable.series?.provision_journal_entry ?? accountPayable.provision_journal_entry)?.status === 'posted'"
             />
 
             <ReportSection>
@@ -109,6 +110,14 @@ function submitPayment() {
                     <p class="mt-1 text-sm text-gray-400">
                         {{ formatDate(accountPayable.cancelled_at)
                         }}<span v-if="accountPayable.cancelled_by"> · {{ accountPayable.cancelled_by.name }}</span>
+                    </p>
+                    <p v-if="accountPayable.cancellation_journal_entry" class="mt-3 text-sm text-amber-200">
+                        Estorno contábil em {{ formatDate(accountPayable.cancellation_journal_entry.entry_date) }} ·
+                        <Link
+                            :href="route('journal-entries.show', [accountPayable.cancellation_journal_entry.id])"
+                            class="font-semibold underline hover:text-amber-100"
+                            >Ver lançamento #{{ accountPayable.cancellation_journal_entry.id }}</Link
+                        >
                     </p>
                 </div>
             </ReportSection>

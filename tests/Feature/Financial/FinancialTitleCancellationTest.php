@@ -81,7 +81,7 @@ it('cancels legacy titles without provisions and creates no journal entry', func
     expect(JournalEntry::query()->count())->toBe(0)->and($payable->fresh()->status)->toBe('cancelled')->and($receivable->fresh()->status)->toBe('cancelled');
 });
 
-it('blocks posted provisions and existing settlements without mutating cancellation metadata', function () {
+it('blocks posted provisions without a reversal date and existing settlements without mutating cancellation metadata', function () {
     $c = cancellationContext();
     $postedAp = cancellationPayable($c);
     $postedAr = cancellationReceivable($c);

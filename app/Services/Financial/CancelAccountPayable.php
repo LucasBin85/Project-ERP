@@ -7,6 +7,7 @@ use App\Models\FinancialTitleSeries;
 use App\Models\JournalEntry;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Services\Accounting\CreateProvisionCancellationReversal;
 use App\Services\Accounting\EnsureAccountingPeriodIsOpen;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,11 +18,12 @@ class CancelAccountPayable
         private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
         private readonly ResizeDraftProvisionJournalEntry $resizeProvision,
         private readonly RefreshFinancialTitleSeriesStatus $refreshSeriesStatus,
+        private readonly CreateProvisionCancellationReversal $createReversal,
     ) {}
 
-    public function execute(Wallet $wallet, AccountPayable $payable, User $actor, string $reason): AccountPayable
+    public function execute(Wallet $wallet, AccountPayable $payable, User $actor, string $reason, ?string $reversalDate = null): AccountPayable
     {
-        return DB::transaction(function () use ($wallet, $payable, $actor, $reason) {
+        return DB::transaction(function () use ($wallet, $payable, $actor, $reason, $reversalDate) {
             $payable = AccountPayable::query()->whereKey($payable->id)->lockForUpdate()->firstOrFail();
             abort_unless($payable->wallet_id === $wallet->id, 404);
 
@@ -44,10 +46,22 @@ class CancelAccountPayable
                 ? JournalEntry::query()->whereKey($provisionId)->lockForUpdate()->firstOrFail()
                 : null;
 
+            $reversal = null;
             if ($provision?->status === 'posted') {
-                throw ValidationException::withMessages(['provision' => 'A provisão já foi contabilizada e exige reversão contábil.']);
-            }
-            if ($provision) {
+                if (! $reversalDate) {
+                    throw ValidationException::withMessages(['reversal_date' => 'Informe a data contábil do estorno.']);
+                }
+                if ($payable->cancellation_journal_entry_id) {
+                    throw ValidationException::withMessages(['provision' => 'Este título já possui um estorno de cancelamento.']);
+                }
+                $reversal = $this->createReversal->execute(
+                    $wallet,
+                    $provision,
+                    $payable->amount_cents,
+                    $reversalDate,
+                    "Reversão de provisão por cancelamento da conta a pagar #{$payable->id}",
+                );
+            } elseif ($provision) {
                 $this->ensurePeriodIsOpen->handle($wallet, $provision->entry_date);
             }
 
@@ -56,9 +70,10 @@ class CancelAccountPayable
                 'cancelled_at' => now(),
                 'cancelled_by_user_id' => $actor->id,
                 'cancellation_reason' => $reason,
+                'cancellation_journal_entry_id' => $reversal?->id,
             ]);
 
-            if ($provision) {
+            if ($provision && $provision->status === 'draft') {
                 $remaining = $series
                     ? (int) AccountPayable::query()->where('series_id', $series->id)->where('status', '!=', 'cancelled')->sum('amount_cents')
                     : 0;
