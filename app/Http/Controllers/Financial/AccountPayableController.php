@@ -13,6 +13,7 @@ use App\Models\ChartOfAccount;
 use App\Models\RecurringFinancialExpectation;
 use App\Models\Supplier;
 use App\Services\Financial\BuildRecurringFinancialRulesOverview;
+use App\Services\Financial\CancelAccountPayable;
 use App\Services\Financial\ConfirmRecurringFinancialExpectation;
 use App\Services\Financial\CreateAccountPayable;
 use App\Services\Financial\CreateRecurringAccountPayable;
@@ -249,6 +250,7 @@ class AccountPayableController extends Controller
             'paymentJournalEntry.lines.chartOfAccount',
             'series.provisionJournalEntry.lines.chartOfAccount',
             'series.payables',
+            'cancelledBy:id,name',
         ]);
 
         $bankAccounts = BankAccount::query()
@@ -295,6 +297,16 @@ class AccountPayableController extends Controller
         return redirect()
             ->route('accounts-payable.show', $accountPayable)
             ->with('success', 'Conta a pagar baixada com sucesso.');
+    }
+
+    public function cancel(Request $request, AccountPayable $accountPayable, CancelAccountPayable $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($accountPayable->wallet_id === $wallet->id, 404);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+        $service->execute($wallet, $accountPayable, $request->user(), $data['reason']);
+
+        return redirect()->route('accounts-payable.show', $accountPayable)->with('success', 'Título a pagar cancelado com sucesso.');
     }
 
     private function expenseAccounts(int $walletId): array

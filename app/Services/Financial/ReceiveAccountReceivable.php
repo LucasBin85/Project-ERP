@@ -16,7 +16,7 @@ class ReceiveAccountReceivable
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
         private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
-        private readonly UpdateFinancialTitleSeriesStatus $updateSeriesStatus,
+        private readonly RefreshFinancialTitleSeriesStatus $refreshSeriesStatus,
     ) {}
 
     public function execute(Wallet $wallet, AccountReceivable $accountReceivable, ReceiveAccountReceivableDTO $dto): AccountReceivable
@@ -83,7 +83,7 @@ class ReceiveAccountReceivable
                 'status' => 'received',
             ]);
             if ($accountReceivable->series_id) {
-                $this->updateSeriesStatus->execute($accountReceivable->series()->firstOrFail());
+                $this->refreshSeriesStatus->execute($accountReceivable->series()->firstOrFail());
             }
 
             return $accountReceivable->fresh([

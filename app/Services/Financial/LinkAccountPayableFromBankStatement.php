@@ -16,7 +16,7 @@ class LinkAccountPayableFromBankStatement
 {
     public function __construct(
         private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
-        private readonly UpdateFinancialTitleSeriesStatus $updateSeriesStatus,
+        private readonly RefreshFinancialTitleSeriesStatus $refreshSeriesStatus,
     ) {}
 
     public function execute(
@@ -150,7 +150,7 @@ class LinkAccountPayableFromBankStatement
                 'status' => 'paid',
             ]);
             if ($accountPayable->series_id) {
-                $this->updateSeriesStatus->execute($accountPayable->series()->firstOrFail());
+                $this->refreshSeriesStatus->execute($accountPayable->series()->firstOrFail());
             }
 
             return $accountPayable->fresh([

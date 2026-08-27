@@ -13,6 +13,7 @@ use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\RecurringFinancialExpectation;
 use App\Services\Financial\BuildRecurringFinancialRulesOverview;
+use App\Services\Financial\CancelAccountReceivable;
 use App\Services\Financial\ConfirmRecurringFinancialExpectation;
 use App\Services\Financial\CreateAccountReceivable;
 use App\Services\Financial\CreateRecurringAccountReceivable;
@@ -243,6 +244,7 @@ class AccountReceivableController extends Controller
             'receiptJournalEntry.lines.chartOfAccount',
             'series.provisionJournalEntry.lines.chartOfAccount',
             'series.receivables',
+            'cancelledBy:id,name',
         ]);
 
         $bankAccounts = BankAccount::query()
@@ -289,6 +291,16 @@ class AccountReceivableController extends Controller
         return redirect()
             ->route('accounts-receivable.show', $accountReceivable)
             ->with('success', 'Conta a receber baixada com sucesso.');
+    }
+
+    public function cancel(Request $request, AccountReceivable $accountReceivable, CancelAccountReceivable $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($accountReceivable->wallet_id === $wallet->id, 404);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+        $service->execute($wallet, $accountReceivable, $request->user(), $data['reason']);
+
+        return redirect()->route('accounts-receivable.show', $accountReceivable)->with('success', 'Título a receber cancelado com sucesso.');
     }
 
     private function revenueAccounts(int $walletId): array

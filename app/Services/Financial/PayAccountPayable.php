@@ -16,7 +16,7 @@ class PayAccountPayable
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
         private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
-        private readonly UpdateFinancialTitleSeriesStatus $updateSeriesStatus,
+        private readonly RefreshFinancialTitleSeriesStatus $refreshSeriesStatus,
     ) {}
 
     public function execute(Wallet $wallet, AccountPayable $accountPayable, PayAccountPayableDTO $dto): AccountPayable
@@ -83,7 +83,7 @@ class PayAccountPayable
                 'status' => 'paid',
             ]);
             if ($accountPayable->series_id) {
-                $this->updateSeriesStatus->execute($accountPayable->series()->firstOrFail());
+                $this->refreshSeriesStatus->execute($accountPayable->series()->firstOrFail());
             }
 
             return $accountPayable->fresh([

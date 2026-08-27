@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FinancialTitleCancellationDialog from '@/components/financial/FinancialTitleCancellationDialog.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import ReportSummaryCard from '@/components/reports/ReportSummaryCard.vue';
@@ -47,6 +48,12 @@ function submitPayment() {
                 </Link>
             </div>
 
+            <FinancialTitleCancellationDialog
+                v-if="accountPayable.status === 'pending' && !accountPayable.payment_journal_entry_id"
+                route-name="accounts-payable.cancel"
+                :title-id="accountPayable.id"
+            />
+
             <ReportSection>
                 <template #header>
                     <div class="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
@@ -65,17 +72,9 @@ function submitPayment() {
                 </template>
 
                 <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
-                    <ReportSummaryCard
-                        label="Valor"
-                        :value="formatCurrency(accountPayable.amount_cents)"
-                        tone="neutral"
-                    />
+                    <ReportSummaryCard label="Valor" :value="formatCurrency(accountPayable.amount_cents)" tone="neutral" />
 
-                    <ReportSummaryCard
-                        label="Vencimento"
-                        :value="formatDate(accountPayable.due_date)"
-                        tone="blue"
-                    />
+                    <ReportSummaryCard label="Vencimento" :value="formatDate(accountPayable.due_date)" tone="blue" />
 
                     <ReportSummaryCard
                         label="Pagamento"
@@ -83,23 +82,19 @@ function submitPayment() {
                         :tone="accountPayable.paid_at ? 'green' : 'yellow'"
                     />
 
-                    <ReportSummaryCard
-                        label="Conta bancária"
-                        :value="accountPayable.bank_account?.name ?? '-'"
-                        tone="neutral"
-                    />
+                    <ReportSummaryCard label="Conta bancária" :value="accountPayable.bank_account?.name ?? '-'" tone="neutral" />
                 </div>
 
                 <div class="grid grid-cols-1 gap-4 border-t border-gray-700 p-6 md:grid-cols-2">
                     <div>
-                        <p class="text-xs uppercase text-gray-500">Conta de despesa</p>
+                        <p class="text-xs text-gray-500 uppercase">Conta de despesa</p>
                         <p class="mt-1 text-sm text-gray-200">
                             {{ formatAccount(accountPayable.expense_account?.code, accountPayable.expense_account?.name) }}
                         </p>
                     </div>
 
                     <div v-if="accountPayable.notes">
-                        <p class="text-xs uppercase text-gray-500">Observações</p>
+                        <p class="text-xs text-gray-500 uppercase">Observações</p>
                         <p class="mt-1 text-sm text-gray-200">
                             {{ accountPayable.notes }}
                         </p>
@@ -107,12 +102,21 @@ function submitPayment() {
                 </div>
             </ReportSection>
 
+            <ReportSection v-if="accountPayable.status === 'cancelled'">
+                <div class="p-6">
+                    <p class="text-sm font-semibold text-white">Cancelamento</p>
+                    <p class="mt-2 text-sm text-gray-200">{{ accountPayable.cancellation_reason }}</p>
+                    <p class="mt-1 text-sm text-gray-400">
+                        {{ formatDate(accountPayable.cancelled_at)
+                        }}<span v-if="accountPayable.cancelled_by"> · {{ accountPayable.cancelled_by.name }}</span>
+                    </p>
+                </div>
+            </ReportSection>
+
             <ReportSection v-if="accountPayable.status === 'pending'">
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">
-                            Baixar pagamento
-                        </h2>
+                        <h2 class="text-lg font-bold text-white">Baixar pagamento</h2>
 
                         <p class="text-sm text-gray-400">
                             Ao baixar, o sistema gera um lançamento contábil postado: débito na despesa e crédito no banco.
@@ -123,16 +127,9 @@ function submitPayment() {
                 <form class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2" @submit.prevent="submitPayment">
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Conta bancária</label>
-                        <select
-                            v-model="payment.form.bank_account_id"
-                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white"
-                        >
+                        <select v-model="payment.form.bank_account_id" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white">
                             <option value="">Selecione uma conta</option>
-                            <option
-                                v-for="account in bankAccounts"
-                                :key="account.id"
-                                :value="account.id"
-                            >
+                            <option v-for="account in bankAccounts" :key="account.id" :value="account.id">
                                 {{ account.label }}
                             </option>
                         </select>
@@ -149,7 +146,7 @@ function submitPayment() {
                         <p class="mt-1 text-sm text-red-400">{{ payment.form.errors.paid_at }}</p>
                     </div>
 
-                    <div class="md:col-span-2 flex justify-end">
+                    <div class="flex justify-end md:col-span-2">
                         <button
                             type="submit"
                             :disabled="!payment.canSubmit.value || payment.form.processing"
@@ -164,13 +161,9 @@ function submitPayment() {
             <ReportSection v-if="accountPayable.payment_journal_entry">
                 <template #header>
                     <div>
-                        <h2 class="text-lg font-bold text-white">
-                            Lançamento contábil do pagamento
-                        </h2>
+                        <h2 class="text-lg font-bold text-white">Lançamento contábil do pagamento</h2>
 
-                        <p class="text-sm text-gray-400">
-                            Registro gerado automaticamente na baixa do título.
-                        </p>
+                        <p class="text-sm text-gray-400">Registro gerado automaticamente na baixa do título.</p>
                     </div>
                 </template>
 
@@ -181,18 +174,14 @@ function submitPayment() {
                 >
                     <template #head>
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Tipo</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Conta</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Valor</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Tipo</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Conta</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Valor</th>
                         </tr>
                     </template>
 
-                    <tr
-                        v-for="line in accountPayable.payment_journal_entry.lines"
-                        :key="line.id"
-                        class="hover:bg-gray-800/50"
-                    >
-                        <td class="whitespace-nowrap px-4 py-3 text-sm font-semibold text-gray-200">
+                    <tr v-for="line in accountPayable.payment_journal_entry.lines" :key="line.id" class="hover:bg-gray-800/50">
+                        <td class="px-4 py-3 text-sm font-semibold whitespace-nowrap text-gray-200">
                             {{ line.type === 'debit' ? 'Débito' : 'Crédito' }}
                         </td>
 
@@ -200,7 +189,7 @@ function submitPayment() {
                             {{ formatAccount(line.chart_of_account?.code, line.chart_of_account?.name) }}
                         </td>
 
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">
+                        <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-gray-100">
                             {{ formatCurrency(line.amount_cents) }}
                         </td>
                     </tr>

@@ -26,6 +26,9 @@ class AccountReceivable extends Model
         'received_at',
         'amount_cents',
         'status',
+        'cancelled_at',
+        'cancelled_by_user_id',
+        'cancellation_reason',
         'notes',
     ];
 
@@ -35,6 +38,7 @@ class AccountReceivable extends Model
         'amount_cents' => 'integer',
         'installment_number' => 'integer',
         'installment_count' => 'integer',
+        'cancelled_at' => 'datetime',
     ];
 
     public function wallet(): BelongsTo
@@ -75,5 +79,10 @@ class AccountReceivable extends Model
     public function receiptJournalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class, 'receipt_journal_entry_id');
+    }
+
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by_user_id');
     }
 }

@@ -16,7 +16,7 @@ class LinkAccountReceivableFromBankStatement
 {
     public function __construct(
         private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
-        private readonly UpdateFinancialTitleSeriesStatus $updateSeriesStatus,
+        private readonly RefreshFinancialTitleSeriesStatus $refreshSeriesStatus,
     ) {}
 
     public function execute(Wallet $wallet, BankAccount $bankAccount, JournalEntry $entry, AccountReceivable $receivable): AccountReceivable
@@ -95,7 +95,7 @@ class LinkAccountReceivableFromBankStatement
                 'status' => 'received',
             ]);
             if ($receivable->series_id) {
-                $this->updateSeriesStatus->execute($receivable->series()->firstOrFail());
+                $this->refreshSeriesStatus->execute($receivable->series()->firstOrFail());
             }
 
             return $receivable->fresh(['revenueAccount', 'receivableAccount', 'bankAccount', 'receiptJournalEntry.lines.chartOfAccount']);

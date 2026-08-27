@@ -26,6 +26,9 @@ class AccountPayable extends Model
         'paid_at',
         'amount_cents',
         'status',
+        'cancelled_at',
+        'cancelled_by_user_id',
+        'cancellation_reason',
         'notes',
     ];
 
@@ -35,6 +38,7 @@ class AccountPayable extends Model
         'amount_cents' => 'integer',
         'installment_number' => 'integer',
         'installment_count' => 'integer',
+        'cancelled_at' => 'datetime',
     ];
 
     public function wallet(): BelongsTo
@@ -75,5 +79,10 @@ class AccountPayable extends Model
     public function paymentJournalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class, 'payment_journal_entry_id');
+    }
+
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by_user_id');
     }
 }

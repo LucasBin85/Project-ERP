@@ -11,6 +11,7 @@ use App\Models\RecurringFinancialExpectation;
 use App\Models\RecurringFinancialOccurrence;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Services\Financial\CancelAccountPayable;
 use App\Services\Financial\ConfirmRecurringFinancialExpectation;
 use App\Services\Financial\CreateAccountPayable;
 use App\Services\Financial\CreateAccountReceivable;
@@ -18,6 +19,7 @@ use App\Services\Financial\CreateRecurringAccountPayable;
 use App\Services\Financial\CreateRecurringAccountReceivable;
 use App\Services\Financial\CreateRecurringFinancialExpectation;
 use App\Services\Financial\EstimateRecurringFinancialExpectationAmount;
+use App\Services\Financial\ListRecurringFinancialExpectationsForRange;
 use App\Services\Financial\SkipRecurringFinancialExpectation;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -107,6 +109,29 @@ it('keeps normal payable and receivable account precedence backward compatible',
 
     expect($payable->expense_account_id)->toBe($context['expenses'][0]->id)
         ->and($receivable->revenue_account_id)->toBe($context['revenues'][0]->id);
+});
+
+it('preserves a confirmed recurring occurrence and its snapshots after title cancellation', function () {
+    $context = recurringResolutionContext();
+    $expectation = recurringExpectation(['context' => $context, 'amountMode' => 'fixed', 'expectedAmountCents' => 25_000]);
+    $occurrence = app(ConfirmRecurringFinancialExpectation::class)->execute(
+        $context['wallet'], $expectation, CarbonImmutable::parse('2026-08-01'), 25_000,
+    );
+    $snapshotKeys = ['status', 'period_date', 'due_date', 'expected_amount_cents', 'actual_amount_cents', 'account_payable_id'];
+    $snapshot = collect($occurrence->fresh()->attributesToArray())->only($snapshotKeys)->all();
+
+    app(CancelAccountPayable::class)->execute(
+        $context['wallet'], $occurrence->accountPayable, User::query()->findOrFail($context['wallet']->user_id), 'Serviço encerrado',
+    );
+
+    expect(collect($occurrence->fresh()->attributesToArray())->only($snapshotKeys)->all())->toBe($snapshot)
+        ->and($occurrence->fresh()->status)->toBe('confirmed')
+        ->and($occurrence->fresh()->account_payable_id)->toBe($snapshot['account_payable_id'])
+        ->and($occurrence->accountPayable->fresh()->status)->toBe('cancelled')
+        ->and(RecurringFinancialOccurrence::query()->count())->toBe(1)
+        ->and(app(ListRecurringFinancialExpectationsForRange::class)->execute(
+            $context['wallet'], 'payable', CarbonImmutable::parse('2026-08-01'), CarbonImmutable::parse('2026-08-31'),
+        ))->toBeEmpty();
 });
 
 it('confirms payable using the recurring expense and supplier control accounts', function () {

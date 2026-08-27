@@ -177,6 +177,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('accounts-payable/{accountPayable}/pay', [AccountPayableController::class, 'pay'])
             ->name('accounts-payable.pay');
+        Route::post('accounts-payable/{accountPayable}/cancel', [AccountPayableController::class, 'cancel'])
+            ->name('accounts-payable.cancel');
 
         Route::post('accounts-payable/recurring/{expectation}/confirm', [AccountPayableController::class, 'confirmRecurring'])
             ->name('accounts-payable.recurring.confirm');
@@ -190,6 +192,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::post('accounts-receivable/{accountReceivable}/receive', [AccountReceivableController::class, 'receive'])
             ->name('accounts-receivable.receive');
+        Route::post('accounts-receivable/{accountReceivable}/cancel', [AccountReceivableController::class, 'cancel'])
+            ->name('accounts-receivable.cancel');
 
         Route::post('accounts-receivable/recurring/{expectation}/confirm', [AccountReceivableController::class, 'confirmRecurring'])
             ->name('accounts-receivable.recurring.confirm');

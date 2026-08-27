@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FinancialTitleCancellationDialog from '@/components/financial/FinancialTitleCancellationDialog.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import ReportSummaryCard from '@/components/reports/ReportSummaryCard.vue';
@@ -28,9 +29,24 @@ function submitReceipt() {
     <AppLayout title="Conta a Receber">
         <ReportPage title="Conta a Receber" :subtitle="wallet.name">
             <div class="flex justify-end gap-3">
-                <Link :href="route('accounts-receivable.index')" class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800">Voltar</Link>
-                <Link v-if="accountReceivable.receipt_journal_entry_id" :href="route('journal-entries.show', [accountReceivable.receipt_journal_entry_id])" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Ver lançamento contábil</Link>
+                <Link
+                    :href="route('accounts-receivable.index')"
+                    class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                    >Voltar</Link
+                >
+                <Link
+                    v-if="accountReceivable.receipt_journal_entry_id"
+                    :href="route('journal-entries.show', [accountReceivable.receipt_journal_entry_id])"
+                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                    >Ver lançamento contábil</Link
+                >
             </div>
+
+            <FinancialTitleCancellationDialog
+                v-if="accountReceivable.status === 'pending' && !accountReceivable.receipt_journal_entry_id"
+                route-name="accounts-receivable.cancel"
+                :title-id="accountReceivable.id"
+            />
 
             <ReportSection>
                 <template #header>
@@ -46,19 +62,36 @@ function submitReceipt() {
                 <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
                     <ReportSummaryCard label="Valor" :value="formatCurrency(accountReceivable.amount_cents)" tone="neutral" />
                     <ReportSummaryCard label="Vencimento" :value="formatDate(accountReceivable.due_date)" tone="blue" />
-                    <ReportSummaryCard label="Recebimento" :value="accountReceivable.received_at ? formatDate(accountReceivable.received_at) : '-'" :tone="accountReceivable.received_at ? 'green' : 'yellow'" />
+                    <ReportSummaryCard
+                        label="Recebimento"
+                        :value="accountReceivable.received_at ? formatDate(accountReceivable.received_at) : '-'"
+                        :tone="accountReceivable.received_at ? 'green' : 'yellow'"
+                    />
                     <ReportSummaryCard label="Conta bancária" :value="accountReceivable.bank_account?.name ?? '-'" tone="neutral" />
                 </div>
 
                 <div class="grid grid-cols-1 gap-4 border-t border-gray-700 p-6 md:grid-cols-2">
                     <div>
-                        <p class="text-xs uppercase text-gray-500">Conta de receita</p>
-                        <p class="mt-1 text-sm text-gray-200">{{ formatAccount(accountReceivable.revenue_account?.code, accountReceivable.revenue_account?.name) }}</p>
+                        <p class="text-xs text-gray-500 uppercase">Conta de receita</p>
+                        <p class="mt-1 text-sm text-gray-200">
+                            {{ formatAccount(accountReceivable.revenue_account?.code, accountReceivable.revenue_account?.name) }}
+                        </p>
                     </div>
                     <div v-if="accountReceivable.notes">
-                        <p class="text-xs uppercase text-gray-500">Observações</p>
+                        <p class="text-xs text-gray-500 uppercase">Observações</p>
                         <p class="mt-1 text-sm text-gray-200">{{ accountReceivable.notes }}</p>
                     </div>
+                </div>
+            </ReportSection>
+
+            <ReportSection v-if="accountReceivable.status === 'cancelled'">
+                <div class="p-6">
+                    <p class="text-sm font-semibold text-white">Cancelamento</p>
+                    <p class="mt-2 text-sm text-gray-200">{{ accountReceivable.cancellation_reason }}</p>
+                    <p class="mt-1 text-sm text-gray-400">
+                        {{ formatDate(accountReceivable.cancelled_at)
+                        }}<span v-if="accountReceivable.cancelled_by"> · {{ accountReceivable.cancelled_by.name }}</span>
+                    </p>
                 </div>
             </ReportSection>
 
@@ -66,7 +99,9 @@ function submitReceipt() {
                 <template #header>
                     <div>
                         <h2 class="text-lg font-bold text-white">Baixar recebimento</h2>
-                        <p class="text-sm text-gray-400">Ao baixar, o sistema gera um lançamento contábil postado: débito no banco e crédito na receita.</p>
+                        <p class="text-sm text-gray-400">
+                            Ao baixar, o sistema gera um lançamento contábil postado: débito no banco e crédito na receita.
+                        </p>
                     </div>
                 </template>
 
@@ -82,12 +117,20 @@ function submitReceipt() {
 
                     <div>
                         <label class="mb-1 block text-sm font-semibold text-gray-300">Data de recebimento</label>
-                        <input v-model="receipt.form.received_at" type="date" class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]" />
+                        <input
+                            v-model="receipt.form.received_at"
+                            type="date"
+                            class="w-full rounded-lg border border-gray-700 bg-black px-3 py-2 text-white [color-scheme:dark]"
+                        />
                         <p class="mt-1 text-sm text-red-400">{{ receipt.form.errors.received_at }}</p>
                     </div>
 
-                    <div class="md:col-span-2 flex justify-end">
-                        <button type="submit" :disabled="!receipt.canSubmit.value || receipt.form.processing" class="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50">
+                    <div class="flex justify-end md:col-span-2">
+                        <button
+                            type="submit"
+                            :disabled="!receipt.canSubmit.value || receipt.form.processing"
+                            class="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
                             Confirmar recebimento
                         </button>
                     </div>
@@ -102,18 +145,26 @@ function submitReceipt() {
                     </div>
                 </template>
 
-                <ReportTable :empty="!accountReceivable.receipt_journal_entry?.lines?.length" empty-message="Nenhuma linha contábil encontrada." :empty-colspan="3">
+                <ReportTable
+                    :empty="!accountReceivable.receipt_journal_entry?.lines?.length"
+                    empty-message="Nenhuma linha contábil encontrada."
+                    :empty-colspan="3"
+                >
                     <template #head>
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Tipo</th>
-                            <th class="px-4 py-3 text-left text-xs font-bold uppercase text-gray-400">Conta</th>
-                            <th class="px-4 py-3 text-right text-xs font-bold uppercase text-gray-400">Valor</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Tipo</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase">Conta</th>
+                            <th class="px-4 py-3 text-right text-xs font-bold text-gray-400 uppercase">Valor</th>
                         </tr>
                     </template>
                     <tr v-for="line in accountReceivable.receipt_journal_entry.lines" :key="line.id" class="hover:bg-gray-800/50">
-                        <td class="whitespace-nowrap px-4 py-3 text-sm font-semibold text-gray-200">{{ line.type === 'debit' ? 'Débito' : 'Crédito' }}</td>
+                        <td class="px-4 py-3 text-sm font-semibold whitespace-nowrap text-gray-200">
+                            {{ line.type === 'debit' ? 'Débito' : 'Crédito' }}
+                        </td>
                         <td class="px-4 py-3 text-sm text-gray-300">{{ formatAccount(line.chart_of_account?.code, line.chart_of_account?.name) }}</td>
-                        <td class="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold text-gray-100">{{ formatCurrency(line.amount_cents) }}</td>
+                        <td class="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap text-gray-100">
+                            {{ formatCurrency(line.amount_cents) }}
+                        </td>
                     </tr>
                 </ReportTable>
             </ReportSection>
