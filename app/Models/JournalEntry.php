@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class JournalEntry extends Model
@@ -14,6 +16,7 @@ class JournalEntry extends Model
         'wallet_id',
         'source',
         'external_id',
+        'reversal_of_journal_entry_id',
         'entry_date',
         'description',
         'status',
@@ -39,6 +42,16 @@ class JournalEntry extends Model
         return $this->hasMany(JournalLine::class);
     }
 
+    public function reversalOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reversal_of_journal_entry_id');
+    }
+
+    public function reversals(): HasMany
+    {
+        return $this->hasMany(self::class, 'reversal_of_journal_entry_id');
+    }
+
     public function settledAccountPayable(): HasOne
     {
         return $this->hasOne(AccountPayable::class, 'payment_journal_entry_id');
@@ -47,6 +60,11 @@ class JournalEntry extends Model
     public function settledAccountReceivable(): HasOne
     {
         return $this->hasOne(AccountReceivable::class, 'receipt_journal_entry_id');
+    }
+
+    public function bankStatementImportTransaction(): HasOne
+    {
+        return $this->hasOne(BankStatementImportTransaction::class);
     }
 
     public function creditCardTransaction(): HasOne

@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Accounting;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\Concerns\ResolvesActiveWallet;
+use App\Http\Controllers\Controller;
 use App\Models\ChartOfAccount;
 use App\Models\JournalEntry;
 use App\Models\Wallet;
@@ -20,6 +20,7 @@ use RuntimeException;
 class JournalEntryController extends Controller
 {
     use ResolvesActiveWallet;
+
     public function index(Request $request): Response
     {
         $wallet = $this->resolveActiveWallet($request);
@@ -75,7 +76,7 @@ class JournalEntryController extends Controller
         ]);
     }
 
-    public function post(Request $request, JournalEntry $journalEntry)
+    public function post(Request $request, JournalEntry $journalEntry, PostJournalEntry $postJournalEntry): RedirectResponse
     {
         $wallet = $this->resolveActiveWallet($request);
 
@@ -87,58 +88,26 @@ class JournalEntryController extends Controller
             return back()->with('error', 'Este lançamento já foi postado.');
         }
 
-        $journalEntry->load('lines.chartOfAccount');
-
-        $debits = $journalEntry->lines
-            ->where('type', 'debit')
-            ->sum('amount_cents');
-
-        $credits = $journalEntry->lines
-            ->where('type', 'credit')
-            ->sum('amount_cents');
-
-        if ($debits <= 0 || $credits <= 0 || $debits !== $credits) {
-            return back()->with('error', 'O lançamento precisa estar balanceado para ser postado.');
+        try {
+            $postJournalEntry->handle($journalEntry);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
         }
-
-        $hasSuspenseLine = $journalEntry->lines->contains(function ($line) use ($wallet) {
-            return (int) $line->chart_of_account_id === (int) $wallet->suspense_account_id;
-        });
-
-        if ($hasSuspenseLine) {
-            return back()->with('error', 'Reclassifique a conta transitória antes de postar.');
-        }
-
-        foreach ($journalEntry->lines as $line) {
-            if (! $line->chartOfAccount?->isPostingAllowed()) {
-                return back()->with('error', 'Todas as contas precisam permitir lançamento.');
-            }
-        }
-
-        $journalEntry->update([
-            'status' => 'posted',
-            'posted_at' => now(),
-            'is_balanced' => true,
-            'debit_total' => $debits,
-            'credit_total' => $credits,
-            'diff_total' => 0,
-        ]);
 
         return back()->with('success', 'Lançamento postado com sucesso.');
     }
 
-        /**
-        * Reclassifica um lançamento em draft movendo o valor da conta de suspense para outras contas.
-        *
-        * Regras:
-        * - O lançamento deve estar em status 'draft'.
-        * - O lançamento deve pertencer à wallet do usuário.
-        * - A wallet deve ter uma conta de suspense configurada.
-        * - O lançamento deve conter exatamente uma linha utilizando a conta de suspense.
-        * - A soma dos splits deve ser igual ao valor da linha de suspense.
-        * - As contas de destino dos splits devem permitir lançamentos.
-        **/
-
+    /**
+     * Reclassifica um lançamento em draft movendo o valor da conta de suspense para outras contas.
+     *
+     * Regras:
+     * - O lançamento deve estar em status 'draft'.
+     * - O lançamento deve pertencer à wallet do usuário.
+     * - A wallet deve ter uma conta de suspense configurada.
+     * - O lançamento deve conter exatamente uma linha utilizando a conta de suspense.
+     * - A soma dos splits deve ser igual ao valor da linha de suspense.
+     * - As contas de destino dos splits devem permitir lançamentos.
+     **/
     public function create(Request $request): Response
     {
         $wallet = $this->resolveActiveWallet($request);
@@ -251,21 +220,21 @@ class JournalEntryController extends Controller
                 ->with('error', $e->getMessage());
         }
     }
-/*
-    protected function resolveActiveWallet(Request $request): Wallet
-    {
-        $user = $request->user();
 
-        return $user
-            ->wallets()
-            ->findOrFail(session('active_wallet', $user->wallets()->first()->id));
-    }
-*/
+    /*
+        protected function resolveActiveWallet(Request $request): Wallet
+        {
+            $user = $request->user();
+
+            return $user
+                ->wallets()
+                ->findOrFail(session('active_wallet', $user->wallets()->first()->id));
+        }
+    */
     protected function ensureEntryBelongsToWallet(Wallet $wallet, JournalEntry $journalEntry): void
     {
         abort_unless((int) $journalEntry->wallet_id === (int) $wallet->id, 404);
     }
-
 
     private function ensureDraft(JournalEntry $journalEntry): void
     {

@@ -8,11 +8,17 @@ use App\Models\BankStatementImportTransaction;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
 use App\Models\Wallet;
+use App\Services\Accounting\EnsureAccountingPeriodIsOpen;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class LinkAccountPayableFromBankStatement
 {
+    public function __construct(
+        private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
+        private readonly RefreshFinancialTitleSeriesStatus $refreshSeriesStatus,
+    ) {}
+
     public function execute(
         Wallet $wallet,
         BankAccount $bankAccount,
@@ -26,6 +32,7 @@ class LinkAccountPayableFromBankStatement
                 ->firstOrFail();
 
             $this->validateEntry($wallet, $bankAccount, $entry);
+            $this->ensurePeriodIsOpen->handle($wallet, $entry->entry_date);
 
             $existingSettlement = AccountPayable::query()
                 ->where('payment_journal_entry_id', $entry->id)
@@ -142,6 +149,9 @@ class LinkAccountPayableFromBankStatement
                 'paid_at' => $entry->entry_date->toDateString(),
                 'status' => 'paid',
             ]);
+            if ($accountPayable->series_id) {
+                $this->refreshSeriesStatus->execute($accountPayable->series()->firstOrFail());
+            }
 
             return $accountPayable->fresh([
                 'expenseAccount',

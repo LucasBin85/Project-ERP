@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AccountReceivable extends Model
 {
@@ -26,6 +27,10 @@ class AccountReceivable extends Model
         'received_at',
         'amount_cents',
         'status',
+        'cancellation_journal_entry_id',
+        'cancelled_at',
+        'cancelled_by_user_id',
+        'cancellation_reason',
         'notes',
     ];
 
@@ -35,6 +40,7 @@ class AccountReceivable extends Model
         'amount_cents' => 'integer',
         'installment_number' => 'integer',
         'installment_count' => 'integer',
+        'cancelled_at' => 'datetime',
     ];
 
     public function wallet(): BelongsTo
@@ -75,5 +81,20 @@ class AccountReceivable extends Model
     public function receiptJournalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class, 'receipt_journal_entry_id');
+    }
+
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by_user_id');
+    }
+
+    public function cancellationJournalEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class, 'cancellation_journal_entry_id');
+    }
+
+    public function settlementReversals(): HasMany
+    {
+        return $this->hasMany(FinancialTitleSettlementReversal::class)->latest('reversed_at');
     }
 }

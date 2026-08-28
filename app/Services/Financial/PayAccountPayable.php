@@ -16,6 +16,7 @@ class PayAccountPayable
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
         private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
+        private readonly RefreshFinancialTitleSeriesStatus $refreshSeriesStatus,
     ) {}
 
     public function execute(Wallet $wallet, AccountPayable $accountPayable, PayAccountPayableDTO $dto): AccountPayable
@@ -82,8 +83,7 @@ class PayAccountPayable
                 'status' => 'paid',
             ]);
             if ($accountPayable->series_id) {
-                $pending = AccountPayable::query()->where('series_id', $accountPayable->series_id)->where('status', 'pending')->count();
-                $accountPayable->series()->update(['status' => $pending === 0 ? 'settled' : 'partially_settled']);
+                $this->refreshSeriesStatus->execute($accountPayable->series()->firstOrFail());
             }
 
             return $accountPayable->fresh([

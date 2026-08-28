@@ -13,12 +13,14 @@ use App\Models\ChartOfAccount;
 use App\Models\Customer;
 use App\Models\RecurringFinancialExpectation;
 use App\Services\Financial\BuildRecurringFinancialRulesOverview;
+use App\Services\Financial\CancelAccountReceivable;
 use App\Services\Financial\ConfirmRecurringFinancialExpectation;
 use App\Services\Financial\CreateAccountReceivable;
 use App\Services\Financial\CreateRecurringAccountReceivable;
 use App\Services\Financial\DeactivateRecurringFinancialExpectation;
 use App\Services\Financial\ListRecurringFinancialExpectationsForRange;
 use App\Services\Financial\ReceiveAccountReceivable;
+use App\Services\Financial\ReverseAccountReceivableSettlement;
 use App\Services\Financial\ReviseRecurringFinancialExpectation;
 use App\Services\Financial\SkipRecurringFinancialExpectation;
 use Carbon\CarbonImmutable;
@@ -241,8 +243,16 @@ class AccountReceivableController extends Controller
             'provisionJournalEntry.lines.chartOfAccount',
             'bankAccount',
             'receiptJournalEntry.lines.chartOfAccount',
+            'receiptJournalEntry.bankStatementImportTransaction:id,journal_entry_id',
             'series.provisionJournalEntry.lines.chartOfAccount',
             'series.receivables',
+            'cancelledBy:id,name',
+            'cancellationJournalEntry:id,entry_date,status,reversal_of_journal_entry_id',
+            'settlementReversals.reversalJournalEntry:id,entry_date,status,reversal_of_journal_entry_id',
+            'settlementReversals.classificationAdjustmentJournalEntry:id,entry_date,status',
+            'settlementReversals.bankStatementImportTransaction:id,journal_entry_id,journal_line_id,external_id',
+            'settlementReversals.bankAccount:id,name',
+            'settlementReversals.reversedBy:id,name',
         ]);
 
         $bankAccounts = BankAccount::query()
@@ -289,6 +299,32 @@ class AccountReceivableController extends Controller
         return redirect()
             ->route('accounts-receivable.show', $accountReceivable)
             ->with('success', 'Conta a receber baixada com sucesso.');
+    }
+
+    public function cancel(Request $request, AccountReceivable $accountReceivable, CancelAccountReceivable $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($accountReceivable->wallet_id === $wallet->id, 404);
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+            'reversal_date' => ['nullable', 'date'],
+        ]);
+        $service->execute($wallet, $accountReceivable, $request->user(), $data['reason'], $data['reversal_date'] ?? null);
+
+        return redirect()->route('accounts-receivable.show', $accountReceivable)->with('success', 'Título a receber cancelado com sucesso.');
+    }
+
+    public function reverseSettlement(Request $request, AccountReceivable $accountReceivable, ReverseAccountReceivableSettlement $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($accountReceivable->wallet_id === $wallet->id, 404);
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+            'reversal_date' => ['nullable', 'date'],
+        ]);
+        $service->execute($wallet, $accountReceivable, $request->user(), $data['reason'], $data['reversal_date'] ?? null);
+
+        return redirect()->route('accounts-receivable.show', $accountReceivable)->with('success', 'Recebimento revertido com sucesso.');
     }
 
     private function revenueAccounts(int $walletId): array

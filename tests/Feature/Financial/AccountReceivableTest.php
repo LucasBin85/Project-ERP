@@ -2,6 +2,7 @@
 
 use App\DTOs\Financial\AccountReceivableDTO;
 use App\DTOs\Financial\ReceiveAccountReceivableDTO;
+use App\Models\AccountReceivable;
 use App\Models\Customer;
 use App\Models\JournalEntry;
 use App\Models\JournalLine;
@@ -10,6 +11,7 @@ use App\Models\Wallet;
 use App\Services\Financial\CreateAccountReceivable;
 use App\Services\Financial\ReceiveAccountReceivable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\Helpers\AccountingTestHelper;
 use Tests\Helpers\FinancialTestHelper;
 
@@ -128,4 +130,34 @@ it('receives an account receivable against its control account and keeps the ent
         'type' => 'credit',
         'amount_cents' => 150000,
     ]);
+});
+
+it('revalidates the persisted receivable state instead of trusting a stale model', function () {
+    $user = User::factory()->create();
+    $wallet = $user->wallets()->firstOrFail();
+    $revenueAccount = $wallet->chartOfAccounts()->where('type', 'receita')->where('allows_posting', true)->firstOrFail();
+    $receivableAccount = $wallet->chartOfAccounts()->where('financial_group', 'accounts_receivable')->where('allows_posting', true)->firstOrFail();
+    $bankAccount = FinancialTestHelper::bankAccount($wallet, '1.1.2.099', 'Banco stale state');
+    $stale = app(CreateAccountReceivable::class)->execute($wallet, new AccountReceivableDTO(
+        revenueAccountId: $revenueAccount->id,
+        customerName: 'Cliente stale',
+        description: 'Recebimento concorrente',
+        dueDate: '2026-07-20',
+        amountCents: 10_000,
+        receivableAccountId: $receivableAccount->id,
+    ));
+    $entryCount = JournalEntry::query()->count();
+
+    AccountReceivable::query()->whereKey($stale->id)->update([
+        'status' => 'received',
+        'received_at' => '2026-07-12',
+    ]);
+
+    expect(fn () => app(ReceiveAccountReceivable::class)->execute(
+        $wallet,
+        $stale,
+        new ReceiveAccountReceivableDTO($bankAccount->id, '2026-07-13'),
+    ))->toThrow(ValidationException::class)
+        ->and(JournalEntry::query()->count())->toBe($entryCount)
+        ->and($stale->fresh()->received_at->toDateString())->toBe('2026-07-12');
 });

@@ -13,12 +13,14 @@ use App\Models\ChartOfAccount;
 use App\Models\RecurringFinancialExpectation;
 use App\Models\Supplier;
 use App\Services\Financial\BuildRecurringFinancialRulesOverview;
+use App\Services\Financial\CancelAccountPayable;
 use App\Services\Financial\ConfirmRecurringFinancialExpectation;
 use App\Services\Financial\CreateAccountPayable;
 use App\Services\Financial\CreateRecurringAccountPayable;
 use App\Services\Financial\DeactivateRecurringFinancialExpectation;
 use App\Services\Financial\ListRecurringFinancialExpectationsForRange;
 use App\Services\Financial\PayAccountPayable;
+use App\Services\Financial\ReverseAccountPayableSettlement;
 use App\Services\Financial\ReviseRecurringFinancialExpectation;
 use App\Services\Financial\SkipRecurringFinancialExpectation;
 use Carbon\CarbonImmutable;
@@ -247,8 +249,16 @@ class AccountPayableController extends Controller
             'provisionJournalEntry.lines.chartOfAccount',
             'bankAccount',
             'paymentJournalEntry.lines.chartOfAccount',
+            'paymentJournalEntry.bankStatementImportTransaction:id,journal_entry_id',
             'series.provisionJournalEntry.lines.chartOfAccount',
             'series.payables',
+            'cancelledBy:id,name',
+            'cancellationJournalEntry:id,entry_date,status,reversal_of_journal_entry_id',
+            'settlementReversals.reversalJournalEntry:id,entry_date,status,reversal_of_journal_entry_id',
+            'settlementReversals.classificationAdjustmentJournalEntry:id,entry_date,status',
+            'settlementReversals.bankStatementImportTransaction:id,journal_entry_id,journal_line_id,external_id',
+            'settlementReversals.bankAccount:id,name',
+            'settlementReversals.reversedBy:id,name',
         ]);
 
         $bankAccounts = BankAccount::query()
@@ -295,6 +305,32 @@ class AccountPayableController extends Controller
         return redirect()
             ->route('accounts-payable.show', $accountPayable)
             ->with('success', 'Conta a pagar baixada com sucesso.');
+    }
+
+    public function cancel(Request $request, AccountPayable $accountPayable, CancelAccountPayable $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($accountPayable->wallet_id === $wallet->id, 404);
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+            'reversal_date' => ['nullable', 'date'],
+        ]);
+        $service->execute($wallet, $accountPayable, $request->user(), $data['reason'], $data['reversal_date'] ?? null);
+
+        return redirect()->route('accounts-payable.show', $accountPayable)->with('success', 'Título a pagar cancelado com sucesso.');
+    }
+
+    public function reverseSettlement(Request $request, AccountPayable $accountPayable, ReverseAccountPayableSettlement $service): RedirectResponse
+    {
+        $wallet = $this->resolveActiveWallet($request);
+        abort_unless($accountPayable->wallet_id === $wallet->id, 404);
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+            'reversal_date' => ['nullable', 'date'],
+        ]);
+        $service->execute($wallet, $accountPayable, $request->user(), $data['reason'], $data['reversal_date'] ?? null);
+
+        return redirect()->route('accounts-payable.show', $accountPayable)->with('success', 'Pagamento revertido com sucesso.');
     }
 
     private function expenseAccounts(int $walletId): array

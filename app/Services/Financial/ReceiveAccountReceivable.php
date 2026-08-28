@@ -16,11 +16,17 @@ class ReceiveAccountReceivable
     public function __construct(
         private readonly CreateJournalEntry $createJournalEntry,
         private readonly EnsureAccountingPeriodIsOpen $ensurePeriodIsOpen,
+        private readonly RefreshFinancialTitleSeriesStatus $refreshSeriesStatus,
     ) {}
 
     public function execute(Wallet $wallet, AccountReceivable $accountReceivable, ReceiveAccountReceivableDTO $dto): AccountReceivable
     {
         return DB::transaction(function () use ($wallet, $accountReceivable, $dto) {
+            $accountReceivable = AccountReceivable::query()
+                ->whereKey($accountReceivable->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             if ($accountReceivable->wallet_id !== $wallet->id) {
                 abort(404);
             }
@@ -77,8 +83,7 @@ class ReceiveAccountReceivable
                 'status' => 'received',
             ]);
             if ($accountReceivable->series_id) {
-                $pending = AccountReceivable::query()->where('series_id', $accountReceivable->series_id)->where('status', 'pending')->count();
-                $accountReceivable->series()->update(['status' => $pending === 0 ? 'settled' : 'partially_settled']);
+                $this->refreshSeriesStatus->execute($accountReceivable->series()->firstOrFail());
             }
 
             return $accountReceivable->fresh([
