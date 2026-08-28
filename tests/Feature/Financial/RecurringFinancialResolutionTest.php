@@ -2,6 +2,7 @@
 
 use App\DTOs\Financial\AccountPayableDTO;
 use App\DTOs\Financial\AccountReceivableDTO;
+use App\DTOs\Financial\PayAccountPayableDTO;
 use App\DTOs\Financial\RecurringFinancialExpectationDTO;
 use App\Models\AccountPayable;
 use App\Models\AccountReceivable;
@@ -21,11 +22,14 @@ use App\Services\Financial\CreateRecurringAccountReceivable;
 use App\Services\Financial\CreateRecurringFinancialExpectation;
 use App\Services\Financial\EstimateRecurringFinancialExpectationAmount;
 use App\Services\Financial\ListRecurringFinancialExpectationsForRange;
+use App\Services\Financial\PayAccountPayable;
+use App\Services\Financial\ReverseAccountPayableSettlement;
 use App\Services\Financial\SkipRecurringFinancialExpectation;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\Helpers\AccountingTestHelper;
+use Tests\Helpers\FinancialTestHelper;
 
 uses(RefreshDatabase::class);
 
@@ -154,6 +158,32 @@ it('preserves recurring history when a posted provision is cancelled through rev
         ->and($occurrence->accountPayable->fresh()->cancellationJournalEntry->status)->toBe('posted')
         ->and(RecurringFinancialOccurrence::query()->count())->toBe(1)
         ->and($expectation->fresh()->status)->toBe($expectation->status)
+        ->and(app(ListRecurringFinancialExpectationsForRange::class)->execute(
+            $context['wallet'], 'payable', CarbonImmutable::parse('2026-08-01'), CarbonImmutable::parse('2026-08-31'),
+        ))->toBeEmpty();
+});
+
+it('preserves recurring history when a manual settlement is reversed', function () {
+    $context = recurringResolutionContext();
+    $expectation = recurringExpectation(['context' => $context, 'amountMode' => 'fixed', 'expectedAmountCents' => 25_000]);
+    $occurrence = app(ConfirmRecurringFinancialExpectation::class)->execute(
+        $context['wallet'], $expectation, CarbonImmutable::parse('2026-08-01'), 25_000,
+    );
+    $snapshotKeys = ['status', 'period_date', 'due_date', 'expected_amount_cents', 'actual_amount_cents', 'account_payable_id'];
+    $snapshot = collect($occurrence->fresh()->attributesToArray())->only($snapshotKeys)->all();
+    $bank = FinancialTestHelper::bankAccount($context['wallet'], '1.1.2.991', 'Banco recurring reversal');
+    app(PayAccountPayable::class)->execute(
+        $context['wallet'], $occurrence->accountPayable, new PayAccountPayableDTO($bank->id, '2026-08-15'),
+    );
+
+    app(ReverseAccountPayableSettlement::class)->execute(
+        $context['wallet'], $occurrence->accountPayable, User::query()->findOrFail($context['wallet']->user_id), 'Pagamento corrigido',
+    );
+
+    expect(collect($occurrence->fresh()->attributesToArray())->only($snapshotKeys)->all())->toBe($snapshot)
+        ->and($occurrence->accountPayable->fresh()->status)->toBe('pending')
+        ->and($occurrence->accountPayable->settlementReversals()->count())->toBe(1)
+        ->and(RecurringFinancialOccurrence::query()->count())->toBe(1)
         ->and(app(ListRecurringFinancialExpectationsForRange::class)->execute(
             $context['wallet'], 'payable', CarbonImmutable::parse('2026-08-01'), CarbonImmutable::parse('2026-08-31'),
         ))->toBeEmpty();

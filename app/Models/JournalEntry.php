@@ -62,6 +62,11 @@ class JournalEntry extends Model
         return $this->hasOne(AccountReceivable::class, 'receipt_journal_entry_id');
     }
 
+    public function bankStatementImportTransaction(): HasOne
+    {
+        return $this->hasOne(BankStatementImportTransaction::class);
+    }
+
     public function creditCardTransaction(): HasOne
     {
         return $this->hasOne(CreditCardTransaction::class);

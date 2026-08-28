@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FinancialTitleCancellationDialog from '@/components/financial/FinancialTitleCancellationDialog.vue';
+import FinancialTitleSettlementReversalDialog from '@/components/financial/FinancialTitleSettlementReversalDialog.vue';
 import ReportPage from '@/components/reports/ReportPage.vue';
 import ReportSection from '@/components/reports/ReportSection.vue';
 import ReportSummaryCard from '@/components/reports/ReportSummaryCard.vue';
@@ -49,6 +50,17 @@ function submitReceipt() {
                 :requires-reversal="
                     (accountReceivable.series?.provision_journal_entry ?? accountReceivable.provision_journal_entry)?.status === 'posted'
                 "
+            />
+            <FinancialTitleSettlementReversalDialog
+                v-if="
+                    accountReceivable.status === 'received' &&
+                    accountReceivable.receipt_journal_entry?.source === 'manual' &&
+                    !accountReceivable.receipt_journal_entry.bank_statement_import_transaction
+                "
+                route-name="accounts-receivable.reverse-settlement"
+                :title-id="accountReceivable.id"
+                :settlement-status="accountReceivable.receipt_journal_entry.status"
+                action-label="Reverter recebimento"
             />
 
             <ReportSection>
@@ -146,6 +158,32 @@ function submitReceipt() {
                         </button>
                     </div>
                 </form>
+            </ReportSection>
+
+            <ReportSection v-if="accountReceivable.settlement_reversals?.length">
+                <template #header><h2 class="text-lg font-bold text-white">Histórico de reversões de liquidação</h2></template>
+                <div class="divide-y divide-gray-800">
+                    <div v-for="item in accountReceivable.settlement_reversals" :key="item.id" class="space-y-1 p-6 text-sm text-gray-300">
+                        <p class="font-semibold text-white">{{ item.mode === 'draft_void' ? 'Rascunho desfeito' : 'Estorno contabilizado' }}</p>
+                        <p>
+                            Liquidação original #{{ item.settlement_journal_entry_id_snapshot }} · {{ formatDate(item.settlement_entry_date) }} ·
+                            {{ formatCurrency(item.settlement_amount_cents) }}
+                        </p>
+                        <p>Conta bancária: {{ item.bank_account?.name ?? 'indisponível' }}</p>
+                        <p>Motivo: {{ item.reason }}</p>
+                        <p>
+                            {{ formatDate(item.reversed_at) }}<span v-if="item.reversed_by"> · {{ item.reversed_by.name }}</span>
+                        </p>
+                        <p v-if="item.reversal_journal_entry">
+                            Reversão em {{ formatDate(item.reversal_date) }} ·
+                            <Link
+                                :href="route('journal-entries.show', [item.reversal_journal_entry.id])"
+                                class="font-semibold text-amber-200 underline"
+                                >Ver lançamento #{{ item.reversal_journal_entry.id }}</Link
+                            >
+                        </p>
+                    </div>
+                </div>
             </ReportSection>
 
             <ReportSection v-if="accountReceivable.receipt_journal_entry">

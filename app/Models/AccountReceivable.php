@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AccountReceivable extends Model
 {
@@ -90,5 +91,10 @@ class AccountReceivable extends Model
     public function cancellationJournalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class, 'cancellation_journal_entry_id');
+    }
+
+    public function settlementReversals(): HasMany
+    {
+        return $this->hasMany(FinancialTitleSettlementReversal::class)->latest('reversed_at');
     }
 }
