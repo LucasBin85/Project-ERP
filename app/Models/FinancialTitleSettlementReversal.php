@@ -10,7 +10,9 @@ class FinancialTitleSettlementReversal extends Model
     protected $fillable = [
         'wallet_id', 'account_payable_id', 'account_receivable_id',
         'settlement_journal_entry_id', 'settlement_journal_entry_id_snapshot', 'reversal_journal_entry_id',
-        'bank_account_id', 'settlement_entry_date', 'settlement_amount_cents', 'mode',
+        'classification_adjustment_journal_entry_id', 'bank_account_id', 'bank_statement_import_transaction_id',
+        'bank_journal_line_id_snapshot', 'classification_account_id_snapshot', 'suspense_account_id_snapshot',
+        'settlement_entry_date', 'settlement_amount_cents', 'mode',
         'reversal_date', 'reversed_at', 'reversed_by_user_id', 'reason',
     ];
 
@@ -39,6 +41,16 @@ class FinancialTitleSettlementReversal extends Model
     public function reversalJournalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function classificationAdjustmentJournalEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function bankStatementImportTransaction(): BelongsTo
+    {
+        return $this->belongsTo(BankStatementImportTransaction::class);
     }
 
     public function bankAccount(): BelongsTo

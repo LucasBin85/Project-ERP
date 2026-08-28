@@ -20,10 +20,16 @@ class ReverseAccountPayableSettlement
         private readonly EnsureAccountingPeriodIsOpen $periodGuard,
         private readonly CreateCanonicalJournalEntryReversal $createReversal,
         private readonly RefreshFinancialTitleSeriesStatus $refreshSeries,
+        private readonly ReverseBankSettledFinancialTitle $reverseBankSettlement,
     ) {}
 
     public function execute(Wallet $wallet, AccountPayable $payable, User $actor, string $reason, ?string $reversalDate = null): AccountPayable
     {
+        $pointer = AccountPayable::query()->whereKey($payable->id)->value('payment_journal_entry_id');
+        if ($pointer && JournalEntry::query()->whereKey($pointer)->whereHas('bankStatementImportTransaction')->exists()) {
+            return $this->reverseBankSettlement->execute($wallet, $payable, $actor, $reason, $reversalDate);
+        }
+
         return DB::transaction(function () use ($wallet, $payable, $actor, $reason, $reversalDate) {
             $payable = AccountPayable::query()->whereKey($payable->id)->lockForUpdate()->firstOrFail();
             abort_unless($payable->wallet_id === $wallet->id, 404);

@@ -13,7 +13,13 @@ import { useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { route } from 'ziggy-js';
 
-const props = defineProps<{ routeName: string; titleId: number; settlementStatus: 'draft' | 'posted'; actionLabel: string }>();
+const props = defineProps<{
+    routeName: string;
+    titleId: number;
+    settlementStatus: 'draft' | 'posted';
+    actionLabel: string;
+    bankSettlement?: boolean;
+}>();
 const open = ref(false);
 const form = useForm({ reason: '', reversal_date: '' });
 
@@ -38,7 +44,14 @@ function submit() {
         <DialogContent class="border-gray-700 bg-gray-950 text-white">
             <DialogHeader>
                 <DialogTitle>{{ actionLabel }}</DialogTitle>
-                <DialogDescription v-if="settlementStatus === 'draft'" class="text-gray-400">
+                <DialogDescription v-if="bankSettlement && settlementStatus === 'draft'" class="text-gray-400">
+                    A classificação bancária será desfeita e o movimento voltará a ficar pendente de classificação. O movimento importado será
+                    preservado.
+                </DialogDescription>
+                <DialogDescription v-else-if="bankSettlement" class="text-gray-400">
+                    O movimento bancário original será preservado. Será criado um ajuste contábil para reabrir o título sem apagar o fato bancário.
+                </DialogDescription>
+                <DialogDescription v-else-if="settlementStatus === 'draft'" class="text-gray-400">
                     Esta liquidação ainda não foi contabilizada. O lançamento em rascunho será removido e o título voltará a ficar pendente.
                 </DialogDescription>
                 <DialogDescription v-else class="text-gray-400">

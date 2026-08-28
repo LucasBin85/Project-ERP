@@ -6,12 +6,15 @@ use App\DTOs\Financial\PayAccountPayableDTO;
 use App\DTOs\Financial\RecurringFinancialExpectationDTO;
 use App\Models\AccountPayable;
 use App\Models\AccountReceivable;
+use App\Models\BankStatementImport;
+use App\Models\BankStatementImportTransaction;
 use App\Models\Customer;
 use App\Models\JournalEntry;
 use App\Models\RecurringFinancialExpectation;
 use App\Models\RecurringFinancialOccurrence;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Services\Accounting\CreateBankImportEntry;
 use App\Services\Accounting\PostJournalEntry;
 use App\Services\Financial\CancelAccountPayable;
 use App\Services\Financial\ConfirmRecurringFinancialExpectation;
@@ -21,7 +24,9 @@ use App\Services\Financial\CreateRecurringAccountPayable;
 use App\Services\Financial\CreateRecurringAccountReceivable;
 use App\Services\Financial\CreateRecurringFinancialExpectation;
 use App\Services\Financial\EstimateRecurringFinancialExpectationAmount;
+use App\Services\Financial\LinkAccountPayableFromBankStatement;
 use App\Services\Financial\ListRecurringFinancialExpectationsForRange;
+use App\Services\Financial\OfxOperationTypePolicy;
 use App\Services\Financial\PayAccountPayable;
 use App\Services\Financial\ReverseAccountPayableSettlement;
 use App\Services\Financial\SkipRecurringFinancialExpectation;
@@ -183,6 +188,47 @@ it('preserves recurring history when a manual settlement is reversed', function 
     expect(collect($occurrence->fresh()->attributesToArray())->only($snapshotKeys)->all())->toBe($snapshot)
         ->and($occurrence->accountPayable->fresh()->status)->toBe('pending')
         ->and($occurrence->accountPayable->settlementReversals()->count())->toBe(1)
+        ->and(RecurringFinancialOccurrence::query()->count())->toBe(1)
+        ->and(app(ListRecurringFinancialExpectationsForRange::class)->execute(
+            $context['wallet'], 'payable', CarbonImmutable::parse('2026-08-01'), CarbonImmutable::parse('2026-08-31'),
+        ))->toBeEmpty();
+});
+
+it('preserves recurring history when a bank settlement is unlinked', function () {
+    $context = recurringResolutionContext();
+    $expectation = recurringExpectation(['context' => $context, 'amountMode' => 'fixed', 'expectedAmountCents' => 25_000]);
+    $occurrence = app(ConfirmRecurringFinancialExpectation::class)->execute(
+        $context['wallet'], $expectation, CarbonImmutable::parse('2026-08-01'), 25_000,
+    );
+    $snapshotKeys = ['status', 'period_date', 'due_date', 'expected_amount_cents', 'actual_amount_cents', 'account_payable_id'];
+    $snapshot = collect($occurrence->fresh()->attributesToArray())->only($snapshotKeys)->all();
+    $bank = FinancialTestHelper::bankAccount($context['wallet'], '1.1.2.992', 'Banco recurring bank reversal');
+    $import = BankStatementImport::query()->create([
+        'wallet_id' => $context['wallet']->id, 'bank_account_id' => $bank->id, 'source' => 'ofx',
+        'original_filename' => 'recurring-bank.ofx', 'file_hash' => hash('sha256', 'recurring-bank'), 'status' => 'completed',
+    ]);
+    $entry = app(CreateBankImportEntry::class)->handle(
+        $context['wallet'], $bank->chart_of_account_id, 25_000, 'out', '2026-08-15',
+        'Recurring bank settlement', 'ofx', 'recurring-bank-settlement', false,
+    );
+    $bankLine = $entry->lines->firstWhere('chart_of_account_id', $bank->chart_of_account_id);
+    BankStatementImportTransaction::query()->create([
+        'bank_statement_import_id' => $import->id, 'wallet_id' => $context['wallet']->id, 'bank_account_id' => $bank->id,
+        'journal_entry_id' => $entry->id, 'journal_line_id' => $bankLine->id, 'external_id' => 'RECURRING-BANK',
+        'transaction_hash' => hash('sha256', 'recurring-bank-audit'), 'posted_at' => '2026-08-15',
+        'description' => 'Recurring bank settlement', 'amount_cents' => 25_000, 'direction' => 'out',
+        'operation_type' => OfxOperationTypePolicy::PAYMENT, 'status' => 'imported', 'resolution' => 'created',
+    ]);
+    app(LinkAccountPayableFromBankStatement::class)->execute(
+        $context['wallet'], $bank, $entry, $occurrence->accountPayable,
+    );
+
+    app(ReverseAccountPayableSettlement::class)->execute(
+        $context['wallet'], $occurrence->accountPayable, User::query()->findOrFail($context['wallet']->user_id), 'Vínculo bancário corrigido',
+    );
+
+    expect(collect($occurrence->fresh()->attributesToArray())->only($snapshotKeys)->all())->toBe($snapshot)
+        ->and($occurrence->accountPayable->fresh()->status)->toBe('pending')
         ->and(RecurringFinancialOccurrence::query()->count())->toBe(1)
         ->and(app(ListRecurringFinancialExpectationsForRange::class)->execute(
             $context['wallet'], 'payable', CarbonImmutable::parse('2026-08-01'), CarbonImmutable::parse('2026-08-31'),

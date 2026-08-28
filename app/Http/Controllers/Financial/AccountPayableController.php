@@ -255,6 +255,8 @@ class AccountPayableController extends Controller
             'cancelledBy:id,name',
             'cancellationJournalEntry:id,entry_date,status,reversal_of_journal_entry_id',
             'settlementReversals.reversalJournalEntry:id,entry_date,status,reversal_of_journal_entry_id',
+            'settlementReversals.classificationAdjustmentJournalEntry:id,entry_date,status',
+            'settlementReversals.bankStatementImportTransaction:id,journal_entry_id,journal_line_id,external_id',
             'settlementReversals.bankAccount:id,name',
             'settlementReversals.reversedBy:id,name',
         ]);
